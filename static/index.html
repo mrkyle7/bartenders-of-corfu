@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bartenders of Corfu</title>
+    <script src="/static/script.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <main>
+    <h1>Welcome to Bartenders of Corfu</h1>
+    <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender!</p>
+    <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
+    <ul id="gameList" aria-live="polite"></ul>
+    <div class="cocktail-glass" aria-hidden="true">
+        <div class="glass-top"></div>
+        <div class="glass-stem"></div>
+        <div class="glass-base"></div>
+    </div>
+    </main>
+    <script>
+        listGames();
+    </script>
+</body>
+</html>
