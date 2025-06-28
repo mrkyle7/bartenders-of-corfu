@@ -12,15 +12,18 @@
 
 <body>
     <main>
-    <h1>Welcome to Bartenders of Corfu</h1>
-    <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender, before you get too drunk!</p>
-    <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
-    <ul id="gameList" aria-live="polite"></ul>
-    <div class="cocktail-glass" aria-hidden="true">
-        <div class="glass-top"></div>
-        <div class="glass-stem"></div>
-        <div class="glass-base"></div>
-    </div>
+        <img src="/static/bartenders.png" alt="Illustration of bartenders mixing cocktails" class="bartender-image"
+            role="img" aria-describedby="bartender-desc">
+        <h1>Welcome to Bartenders of Corfu</h1>
+        <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender, before you get too drunk!
+        </p>
+        <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
+        <ul id="gameList" aria-live="polite"></ul>
+        <div class="cocktail-glass" aria-hidden="true">
+            <div class="glass-top"></div>
+            <div class="glass-stem"></div>
+            <div class="glass-base"></div>
+        </div>
     </main>
     <script>
         window.addEventListener('load', () => {
