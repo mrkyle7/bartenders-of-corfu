@@ -66,50 +66,14 @@ button:focus {
     outline-offset: 2px;
 }
 
-.cocktail-glass {
-    width: 100px;
-    margin: 30px auto;
-    position: relative;
-}
-
-.glass-top {
-    width: 100px;
-    height: 60px;
-    background: linear-gradient(to right, #e6c200, #ffd700);
-    border-radius: 50% / 30%;
-    position: absolute;
-    top: 0;
-    border: 2px solid #8B4513;
-    box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
-}
-
-.glass-top::before {
-    content: '';
-    position: absolute;
-    width: 30px;
-    height: 15px;
-    background: rgba(255, 255, 255, 0.5);
+.bartender-image {
+    display: block;
+    margin: 30px auto 20px auto;
+    width: 120px;
+    height: 120px;
     border-radius: 50%;
-    top: 5px;
-    left: 35px;
-}
-
-.glass-stem {
-    width: 10px;
-    height: 50px;
-    background: #8B4513;
-    position: absolute;
-    top: 50px;
-    left: 45px;
-}
-
-.glass-base {
-    width: 60px;
-    height: 10px;
-    background: #8B4513;
-    position: absolute;
-    top: 100px;
-    left: 20px;
-    border-radius: 50% / 20%;
+    object-fit: cover;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+    border: 4px solid #d4a017;
+    background: #fffbe6;
 }

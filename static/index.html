@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bartenders of Corfu</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="/static/script.js"></script>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
+
 <body>
     <main>
     <h1>Welcome to Bartenders of Corfu</h1>
@@ -20,7 +23,25 @@
     </div>
     </main>
     <script>
+        window.addEventListener('load', () => {
+
+            performance.getEntriesByType('resource')
+                .filter(entry => ['script', 'link'].includes(entry.initiatorType))
+                .forEach(entry => {
+                    console.log(`${entry.name} took ${entry.duration.toFixed(2)} ms`);
+                });
+
+            const lastRequest = performance.getEntriesByType('resource')
+                .filter(r => !r.name.includes('favicon') && !r.name.includes('analytics')) // optional filtering
+                .reduce((latest, entry) => {
+                    return entry.responseEnd > (latest?.responseEnd || 0) ? entry : latest;
+                }, null);
+
+            const trueEnd = lastRequest?.responseEnd || 0;
+            console.log(`Last network activity at: ${trueEnd.toFixed(2)} ms`);
+        });
         listGames();
     </script>
 </body>
+
 </html>

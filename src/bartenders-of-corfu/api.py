@@ -22,6 +22,7 @@ async def health():
 @app.get("/v1/games")
 async def list_games():
     games = gameManager.list_games()
+    print(f"Listing {len(games)} games")
     return JSONResponse(content={"games": [game.to_dict() for game in games]})
 
 @app.post("/v1/games")

@@ -1,0 +1,20 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    develop:
+      watch:
+        - path: src/bartenders-of-corfu
+          action: rebuild 
+          target: /app/src/bartenders-of-corfu
+        - path: static
+          action: sync
+          target: /app/static
+        - path: requirements.txt
+          action: rebuild
+          target: /app/requirements.txt

@@ -1,8 +1,0 @@
-[project]
-name = "bartenders-of-corfu"
-version = "0.1.0"
-description = "Bartenders of Corfu is the best game about making drinks before you get too drunk ever made"
-
-[dependencies]
-fastapi = "0.115.12"
-uvicorn = "0.34.3"

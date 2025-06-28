@@ -4,9 +4,13 @@ Python implementation of the best game ever made (about making cocktails and get
 
 # Start it up
 
-Get python
+Get Docker.
 
-Run server.py
+Run 
+
+```
+docker compose watch
+```
 
 # Testing
 
