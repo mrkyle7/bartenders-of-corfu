@@ -3,12 +3,22 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from gameManager import GameManager
+from starlette.middleware.base import BaseHTTPMiddleware
 
 app = FastAPI()
 gameManager = GameManager()
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# HSTS Middleware
+class HSTSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        return response
+
+app.add_middleware(HSTSMiddleware)
 
 @app.get("/")
 async def root():
