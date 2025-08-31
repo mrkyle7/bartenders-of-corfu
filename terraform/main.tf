@@ -137,6 +137,15 @@ resource "google_compute_firewall" "allow_http" {
   target_tags   = ["web"]
 }
 
+resource "google_dns_record_set" "cheetahmoongames" {
+  project = var.project_name
+  name         = "cheetahmoongames.com."
+  type         = "A"
+  ttl          = 300
+  managed_zone = "cheetahmoongames-com"
+  rrdatas      = [google_compute_instance.k3s.network_interface[0].access_config[0].nat_ip]
+}
+
 resource "google_storage_bucket" "k3s-storage" {
   name     = var.bucket_name
   location = var.region
