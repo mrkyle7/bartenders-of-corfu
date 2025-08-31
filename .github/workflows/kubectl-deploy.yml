@@ -66,13 +66,26 @@ jobs:
           KUBECONFIG: kubeconfig
         run: kubectl get nodes
       
+      - name: Check if artifact-read secret exists
+        env:
+          KUBECONFIG: kubeconfig
+        id: check_secret
+        run: |
+          if kubectl get secret artifact-read >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Download registry key
+        if: steps.check_secret.outputs.exists == 'false'
         run: |
           gcloud iam service-accounts keys create registry_key.json \
             --iam-account=k3s-server@bartenders-464918.iam.gserviceaccount.com \
             --project=bartenders-464918
 
       - name: Create Docker registry secret
+        if: steps.check_secret.outputs.exists == 'false'
         env:
           KUBECONFIG: kubeconfig
         run: |
@@ -93,7 +106,7 @@ jobs:
           KUBECONFIG: kubeconfig
         run: kubectl apply -f k3s/bartenders.rendered.yml
 
-      - name: apply nodeport
+      - name: apply nginx
         env:
           KUBECONFIG: kubeconfig
-        run: kubectl apply -f k3s/nodeport.yml
+        run: kubectl apply -f k3s/nginx.yml

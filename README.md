@@ -44,7 +44,7 @@ docker run --privileged --name k3s-server -d \
 
 `kubectl apply -f bartenders.rendered.yml`
 
-`kubectl apply -f k3s/nodeport.yml`
+`kubectl apply -f k3s/nginx.yml`
 
 `kubectl get pods`
 
