@@ -14,6 +14,47 @@ Run
 docker compose watch
 ```
 
+# local k3s
+
+`docker network create k3s-net`
+
+```
+docker run --privileged --name k3s-server -d \
+  -p 6443:6443 -p 80:80 -p 443:443 -p 30800:30800 \
+  -v k3s-data:/var/lib/rancher/k3s \
+  --hostname k3s-server \
+  --network k3s-net \
+  rancher/k3s:v1.29.1-k3s1 server \
+  --node-name k3s-server 
+```
+
+`docker cp k3s-registries.yaml k3s-server:/etc/rancher/k3s/registries.yaml`
+
+`docker cp k3s-server:/etc/rancher/k3s/k3s.yaml k3s.yaml`
+
+`export KUBECONFIG=k3s.yaml`
+
+`docker run --name registry -d -p 5000:5000 --network k3s-net --hostname docker-registry --restart=always registry:latest`
+
+`docker build . -t localhost:5000/bartenders`
+
+`docker push localhost:5000/bartenders`
+
+`kubectl create -f k3s/bartenders.yml`
+
+`kubectl create -f k3s/nodeport.yml`
+
+
+`kubectl get pods`
+
+access on http://localhost:30800
+
+
+# restart nginx
+
+`kubectl scale deployment my-nginx --replicas=0; kubectl scale deployment my-nginx --replicas=2;`
+
+
 # Testing
 
 Coming soon...

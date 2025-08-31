@@ -8,3 +8,8 @@ __pycache__/
 *.egg
 .venv/
 .idea/
+k3s.yaml
+terraform/.terraform
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.lock.hcl
