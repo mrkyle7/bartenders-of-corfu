@@ -102,4 +102,8 @@ gcloud iam service-accounts add-iam-policy-binding k3s-server@bartenders-464918.
   --project=bartenders-464918 \
   --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
+
+gcloud projects add-iam-policy-binding bartenders-464918 \
+  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountKeyAdmin"
 ```

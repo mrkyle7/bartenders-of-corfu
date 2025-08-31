@@ -88,7 +88,12 @@ jobs:
           export IMAGE_TAG=${{ github.sha }}
           envsubst < k3s/bartenders.yml > k3s/bartenders.rendered.yml
 
-      - name: Apply deployment
+      - name: deploy bartenders
         env:
           KUBECONFIG: kubeconfig
         run: kubectl apply -f k3s/bartenders.rendered.yml
+
+      - name: apply nodeport
+        env:
+          KUBECONFIG: kubeconfig
+        run: kubectl apply -f k3s/nodeport.yml
