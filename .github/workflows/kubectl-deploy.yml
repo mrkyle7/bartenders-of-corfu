@@ -65,3 +65,30 @@ jobs:
         env:
           KUBECONFIG: kubeconfig
         run: kubectl get nodes
+      
+      - name: Download registry key
+        run: |
+          gcloud iam service-accounts keys create registry_key.json \
+            --iam-account=k3s-server@bartenders-464918.iam.gserviceaccount.com \
+            --project=bartenders-464918
+
+      - name: Create Docker registry secret
+        env:
+          KUBECONFIG: kubeconfig
+        run: |
+          kubectl create secret docker-registry artifact-read \
+            --docker-server=us-east1-docker.pkg.dev \
+            --docker-username=_json_key \
+            --docker-password="$(cat registry_key.json)" \
+            --docker-email=k3s-server@bartenders-464918.iam.gserviceaccount.com \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Render deployment manifest
+        run: |
+          export IMAGE_TAG=${{ github.sha }}
+          envsubst < k3s/bartenders.yml > k3s/bartenders.rendered.yml
+
+      - name: Apply deployment
+        env:
+          KUBECONFIG: kubeconfig
+        run: kubectl apply -f k3s/bartenders.rendered.yml

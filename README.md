@@ -20,7 +20,7 @@ docker compose watch
 
 ```
 docker run --privileged --name k3s-server -d \
-  -p 6443:6443 -p 80:80 -p 443:443 -p 30800:30800 \
+  -p 6443:6443 -p 80:80 -p 443:443 -p 30080:30080 \
   -v k3s-data:/var/lib/rancher/k3s \
   --hostname k3s-server \
   --network k3s-net \
@@ -36,14 +36,15 @@ docker run --privileged --name k3s-server -d \
 
 `docker run --name registry -d -p 5000:5000 --network k3s-net --hostname docker-registry --restart=always registry:latest`
 
-`docker build . -t localhost:5000/bartenders`
+`docker build . -t localhost:5000/bartenders-464918/docker-us/bartenders:latest`
 
-`docker push localhost:5000/bartenders`
+`docker push localhost:5000/bartenders-464918/docker-us/bartenders`
 
-`kubectl create -f k3s/bartenders.yml`
+`export IMAGE_TAG=latest ; envsubst < k3s/bartenders.yml > bartenders.rendered.yml` 
 
-`kubectl create -f k3s/nodeport.yml`
+`kubectl apply -f bartenders.rendered.yml`
 
+`kubectl apply -f k3s/nodeport.yml`
 
 `kubectl get pods`
 
@@ -94,6 +95,11 @@ gcloud projects add-iam-policy-binding bartenders-464918 \
   --role="roles/compute.instanceAdmin.v1"
 
 gcloud projects add-iam-policy-binding bartenders-464918 \
+  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+
+gcloud iam service-accounts add-iam-policy-binding k3s-server@bartenders-464918.iam.gserviceaccount.com \
+  --project=bartenders-464918 \
   --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
 ```

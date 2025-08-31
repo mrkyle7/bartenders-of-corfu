@@ -1,4 +1,4 @@
 mirrors:
-  localhost:5000:
+  us-east1-docker.pkg.dev:
     endpoint:
       - "http://docker-registry:5000"

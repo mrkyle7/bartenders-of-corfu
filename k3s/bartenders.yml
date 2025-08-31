@@ -1,13 +1,24 @@
-  apiVersion: v1
-  kind: Pod
-  metadata:
-    name: bartenders
-    labels:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bartenders
+  labels:
+    app: bartenders
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
       app: bartenders
-  spec:
-    containers:
-      - name: bartenders
-        image: localhost:5000/bartenders:latest
-        ports:
-          - containerPort: 8000
-        imagePullPolicy: IfNotPresent
+  template:
+    metadata:
+      labels:
+        app: bartenders
+    spec:
+      imagePullSecrets:
+        - name: artifact-read
+      containers:
+        - name: bartenders
+          image: us-east1-docker.pkg.dev/bartenders-464918/docker-us/bartenders:${IMAGE_TAG}
+          ports:
+            - containerPort: 8000
+          imagePullPolicy: IfNotPresent
