@@ -58,3 +58,42 @@ access on http://localhost:30800
 # Testing
 
 Coming soon...
+
+# manual setup commands
+
+Set up github auth
+
+```
+gcloud iam workload-identity-pools create "github-pool" \
+  --location="global" \
+  --display-name="GitHub Actions Pool"
+
+gcloud iam workload-identity-pools providers create-oidc github-provider \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub Actions OIDC Provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="attribute.repository == 'mrkyle7/bartenders-of-corfu'" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+gcloud iam service-accounts add-iam-policy-binding github-terraform@bartenders-464918.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/987774112216/locations/global/workloadIdentityPools/github-pool/attribute.repository/mrkyle7/bartenders-of-corfu"
+
+gcloud projects add-iam-policy-binding bartenders-464918 \                                                                                  
+  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+
+gcloud artifacts repositories add-iam-policy-binding docker \
+  --location=us-east1 \
+  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+
+gcloud projects add-iam-policy-binding bartenders-464918 \     
+  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
+  --role="roles/compute.instanceAdmin.v1"
+
+gcloud projects add-iam-policy-binding bartenders-464918 \
+  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+```

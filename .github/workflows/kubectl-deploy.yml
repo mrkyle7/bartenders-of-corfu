@@ -49,7 +49,7 @@ jobs:
             --zone=us-east1-d \
             --project=bartenders-464918 \
             --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
-          sed -i "s/127.0.0.1/$VM_IP/" kubeconfig
+          sed -i "s/0.0.0.0/$VM_IP/" kubeconfig
 
       - name: Test kubectl access
         env:
