@@ -36,14 +36,22 @@ jobs:
       - name: Run gcloud command
         run: gcloud info
 
-      - name: Fetch kubeconfig from VM
+      - name: Copy kubeconfig to /tmp
         run: |
           gcloud compute ssh k3s-vm-1 \
             --zone=us-east1-d \
             --project=bartenders-464918 \
             --ssh-flag="-T" \
             --quiet \
-            --command="sudo cat /etc/rancher/k3s/k3s.yaml" > kubeconfig
+            --command="sudo cp /etc/rancher/k3s/k3s.yaml /tmp/k3s.yaml && sudo chmod 644 /tmp/k3s.yaml"
+
+      - name: Fetch kubeconfig from VM
+        run: |
+          gcloud compute scp \
+            --zone=us-east1-d \
+            --project=bartenders-464918 \
+            --quiet \
+            k3s-vm-1:/tmp/k3s.yaml kubeconfig
 
       - name: Patch kubeconfig server address
         run: |
