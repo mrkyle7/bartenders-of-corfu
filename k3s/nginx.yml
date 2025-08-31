@@ -58,6 +58,5 @@ spec:
     - port: 80
       protocol: TCP
       targetPort: 80
-      nodePort: 30080
   selector:
     run: my-nginx
