@@ -41,6 +41,8 @@ jobs:
           gcloud compute ssh k3s-vm-1 \
             --zone=us-east1-d \
             --project=bartenders-464918 \
+            --ssh-flag="-T" \
+            --quiet \
             --command="sudo cat /etc/rancher/k3s/k3s.yaml" > kubeconfig
 
       - name: Patch kubeconfig server address
