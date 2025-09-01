@@ -14,3 +14,4 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/.terraform.lock.hcl
 bartenders.rendered.yml
+k3s-rendered/

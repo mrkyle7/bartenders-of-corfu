@@ -99,14 +99,11 @@ jobs:
       - name: Render deployment manifest
         run: |
           export IMAGE_TAG=${{ github.sha }}
-          envsubst < k3s/bartenders.yml > k3s/bartenders.rendered.yml
+          mkdir -p k3s-rendered
+          cp k3s/nginx.yml k3s-rendered/nginx.yml
+          envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml
 
       - name: deploy bartenders
         env:
           KUBECONFIG: kubeconfig
-        run: kubectl apply -f k3s/bartenders.rendered.yml
-
-      - name: apply nginx
-        env:
-          KUBECONFIG: kubeconfig
-        run: kubectl apply -f k3s/nginx.yml
+        run: kubectl apply -f k3s-rendered --prune -l app=bartenders

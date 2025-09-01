@@ -40,13 +40,13 @@ docker run --privileged --name k3s-server -d \
 
 `docker push localhost:5000/bartenders-464918/docker-us/bartenders`
 
-`export IMAGE_TAG=latest ; envsubst < k3s/bartenders.yml > bartenders.rendered.yml` 
+```
+export IMAGE_TAG=latest ; envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml 
+cp k3s/nginx.yml k3s-rendered/
+kubectl apply -f k3s-rendered/ --prune -l app=bartenders
 
-`kubectl apply -f bartenders.rendered.yml`
-
-`kubectl apply -f k3s/nginx.yml`
-
-`kubectl get pods`
+kubectl get pods
+```
 
 access on http://localhost:30800
 

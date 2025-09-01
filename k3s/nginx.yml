@@ -2,6 +2,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nginx-config
+  labels:
+    app: bartenders
 data:
   default.conf: |
     server {
@@ -9,7 +11,7 @@ data:
       server_name cheetahmoongames.com;
 
       location / {
-        proxy_pass http://web-service:8000;
+        proxy_pass http://bartenders-web:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -23,6 +25,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: my-nginx
+  labels:
+    app: bartenders
 spec:
   selector:
     matchLabels:
@@ -52,11 +56,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: my-nginx
+  labels:
+    app: bartenders
 spec:
   type: LoadBalancer
   ports:
     - port: 80
       protocol: TCP
       targetPort: 80
+      nodePort: 30080
   selector:
     run: my-nginx
