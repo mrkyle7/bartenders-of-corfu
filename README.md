@@ -6,47 +6,34 @@ Python implementation of the best game ever made (about making cocktails and get
 
 # Start it up
 
-Get Docker.
+If you want a pure python experience:
 
-Run 
+First get venv working:
 
 ```
-docker compose watch
+python -m venv venv .
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
+
+Then you can 
+
+```
+source .venv/bin/activate
+uvicorn app.api:app --reload --log-config=log_conf.yaml
+```
+
+access on http://localhost:8000
 
 # local k3s
 
-`docker network create k3s-net`
+To test locally how this is run on GCP...
 
-```
-docker run --privileged --name k3s-server -d \
-  -p 6443:6443 -p 80:80 -p 443:443 -p 30080:30080 \
-  -v k3s-data:/var/lib/rancher/k3s \
-  --hostname k3s-server \
-  --network k3s-net \
-  rancher/k3s:v1.29.1-k3s1 server \
-  --node-name k3s-server 
-```
+Run `k-apply.sh` to build and push changes to local k3s
 
-`docker cp k3s-registries.yaml k3s-server:/etc/rancher/k3s/registries.yaml`
+Note: you need docker installed first. 
 
-`docker cp k3s-server:/etc/rancher/k3s/k3s.yaml k3s.yaml`
-
-`export KUBECONFIG=k3s.yaml`
-
-`docker run --name registry -d -p 5000:5000 --network k3s-net --hostname docker-registry --restart=always registry:latest`
-
-`docker build . -t localhost:5000/bartenders-464918/docker-us/bartenders:latest`
-
-`docker push localhost:5000/bartenders-464918/docker-us/bartenders`
-
-```
-export IMAGE_TAG=latest ; envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml 
-cp k3s/nginx.yml k3s-rendered/
-kubectl apply -f k3s-rendered/ --prune -l app=bartenders
-
-kubectl get pods
-```
+Note2: only tested on Mac, YMMV.
 
 access on http://localhost:30800
 
@@ -58,7 +45,7 @@ access on http://localhost:30800
 
 # Testing
 
-Coming soon...
+Run `python -m unittest discover tests`
 
 # manual setup commands
 

@@ -1,9 +1,10 @@
 name: Build and Push to Artifact Registry
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_run:
+    workflows: [Test]
+    types:
+      - completed
 
 permissions:
   contents: read

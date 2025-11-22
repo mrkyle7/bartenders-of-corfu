@@ -107,3 +107,16 @@ jobs:
         env:
           KUBECONFIG: kubeconfig
         run: kubectl apply -f k3s-rendered --prune -l app=bartenders
+
+      - name: Verify deployment
+        env:
+          KUBECONFIG: kubeconfig
+        run: |
+          kubectl rollout status deployment/bartenders --timeout=120s
+          DEPLOYED_TAG="$(kubectl get pods -l app=bartenders -o=jsonpath='{$.items[0].spec.containers[0].image}' | cut -d : -f 2)"
+          echo "Deployed image tag: $DEPLOYED_TAG"
+          if [ "$DEPLOYED_TAG" != "${{ github.sha }}" ]; then
+            echo "Error: Deployed tag does not match expected tag."
+            exit 1
+          fi
+          echo "Success: Deployed tag matches expected tag."

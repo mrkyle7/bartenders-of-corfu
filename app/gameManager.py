@@ -1,5 +1,5 @@
 from uuid import UUID
-from game import Game
+from app.game import Game
 
 
 class GameManager:

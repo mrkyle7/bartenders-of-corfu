@@ -1,12 +1,17 @@
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from gameManager import GameManager
+from app.gameManager import GameManager
+from app.UserManager import UserManager
 from starlette.middleware.base import BaseHTTPMiddleware
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 gameManager = GameManager()
+userManager = UserManager()
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -32,10 +37,17 @@ async def health():
 @app.get("/v1/games")
 async def list_games():
     games = gameManager.list_games()
-    print(f"Listing {len(games)} games")
+    logger.info("Listing %d games", len(games))
     return JSONResponse(content={"games": [game.to_dict() for game in games]})
 
 @app.post("/v1/games")
 async def new_game():
     id = gameManager.new_game()
+    logger.info("Created new game with ID %s", id)
     return JSONResponse(content={"id": str(id)})
+
+@app.get("/v1/users")
+async def list_users():
+    users = userManager.list_users()
+    logger.info("Listing %d users", len(users))
+    return JSONResponse(content={"users": [user.to_dict() for user in users]})
