@@ -1,3 +1,21 @@
+async function setUserHeader() {
+    const response = await fetch('/userDetails')
+    if (!response.ok) {
+        showLogin()
+    } else {
+        const user = await response.json()
+        setUser(user)
+    }
+}
+
+function showLogin(){
+    document.getElementById('user-header').innerHTML = '<a href="/login">Login</a>';
+}
+
+function setUser(user) {
+    document.getElementById('user-header').innerHTML = `Hello ${user.username}`;
+}
+
 // Function to create a new game
 async function createNewGame() {
     const response = await fetch('/v1/games', {

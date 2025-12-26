@@ -32,8 +32,12 @@ class TestUserManager(unittest.TestCase):
         """Test user manager duplicate user error handling."""
 
         self.user_manager.new_user("test_user", "john@gmail.com", "password123")
+       
         with self.assertRaises(UserManagerUserExistsException):
             self.user_manager.new_user("test_user", "different_email@gmail.com", "password123")
+
+        with self.assertRaises(UserManagerUserExistsException):
+            self.user_manager.new_user("test_user2", "john@gmail.com", "password123")
 
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ Note: you need docker installed first.
 
 Note2: only tested on Mac, YMMV.
 
-access on http://localhost:30800
+access on http://localhost:30080
 
 
 # restart nginx

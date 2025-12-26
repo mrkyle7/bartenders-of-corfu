@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 from uuid import UUID, uuid4
 import bcrypt
 
@@ -19,6 +18,7 @@ class User:
     Attributes:
         id (UUID): Unique identifier for the user
         name (str): User's display name
+        _email_hash (bytes): Securely hashed email - used for linking other authentication methods without storing plaintext email
         _password_hash (bytes): Securely hashed password
     """
 
@@ -28,6 +28,7 @@ class User:
         
         Args:
             name (str): The user's name (3-50 characters, alphanumeric and spaces)
+            email (str): The user's email
             password (str): The user's password (minimum 8 characters)
             
         Raises:
@@ -35,7 +36,7 @@ class User:
         """
         self.id: UUID = uuid4()
         self.name: str = self._validate_name(name)
-        self.email: str = self._validate_email(email)
+        self._email_hash: bytes = self._hash_email(email)
         self._password_hash: bytes = self._hash_password(password)
     
     def _validate_name(self, name: str) -> str:
@@ -149,21 +150,39 @@ class User:
         salt = bcrypt.gensalt()
         return bcrypt.hashpw(validated_password.encode('utf-8'), salt)
     
-    def verify_password(self, password: str) -> bool:
+    
+    def _hash_email(self, email: str) -> bytes:
         """
-        Verify a password against the stored hash.
+        Hash an email using bcrypt.
         
         Args:
-            password (str): The plain text password to verify
+            email (str): The plain text email to hash
             
         Returns:
-            bool: True if password matches, False otherwise
+            bytes: The hashed email
+            
+        Raises:
+            UserValidationError: If email validation fails
         """
-        if not isinstance(password, str):
+        validated_email = self._validate_email(email)
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(validated_email.encode('utf-8'), salt)
+    
+    def verify_secret(self, secret: str, hash: bytes) -> bool:
+        """
+        Verify a secret string (password or email) against the stored hash.
+        
+        Args:
+            secret (str): The plaintext secret to verify
+            
+        Returns:
+            bool: True if secret matches, False otherwise
+        """
+        if not isinstance(secret, str):
             return False
         
         try:
-            return bcrypt.checkpw(password.encode('utf-8'), self._password_hash)
+            return bcrypt.checkpw(secret.encode('utf-8'), hash)
         except (ValueError, TypeError):
             return False
     
@@ -181,8 +200,8 @@ class User:
         Raises:
             UserValidationError: If new password validation fails
         """
-        if not self.verify_password(old_password):
-            return False
+        if not self.verify_secret(old_password, self._password_hash):
+            raise UserValidationError("Incorrect password")
         
         self._password_hash = self._hash_password(new_password)
         return True
@@ -238,6 +257,7 @@ class User:
         
         if include_sensitive:
             result['password_hash'] = self._password_hash.decode('utf-8')
+            result['email_hash'] = self._email_hash.decode('utf-8')
         
         return result
     
@@ -268,5 +288,10 @@ class User:
             user._password_hash = data['password_hash'].encode('utf-8')
         else:
             raise KeyError("password_hash is required for user deserialization")
+        
+        if 'email_hash' in data:
+            user._email_hash = data['email_hash'].encode('utf-8')
+        else:
+            raise KeyError("email_hash is required for user deserialization")
         
         return user

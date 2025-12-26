@@ -13,7 +13,7 @@ fi
 if ! docker ps --format '{{.Names}}' | grep -qw k3s-server; then
     echo "starting k3s-server container"
     docker run --privileged --name k3s-server -d \
-    -p 6443:6443 -p 80:80 -p 443:443 -p 30080:30080 \
+    -p 6443:6443 -p 80:80 -p 443:443 -p 30080:30080 -p 9080:80\
     -v k3s-data:/var/lib/rancher/k3s \
     --hostname k3s-server \
     --network k3s-net \

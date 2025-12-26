@@ -17,9 +17,9 @@ class TestUser(unittest.TestCase):
         user = User("TestUser123", "abc@abc.com", "password123")
 
         self.assertEqual(user.name, "TestUser123")
-        self.assertEqual(user.email, "abc@abc.com")
+        self.assertTrue(user.verify_secret("abc@abc.com", user._email_hash))
+        self.assertTrue(user.verify_secret("password123", user._password_hash))
         self.assertTrue(hasattr(user, 'id'))
-        self.assertTrue(hasattr(user, '_password_hash'))
 
 
     def test_password_validation(self):
@@ -57,7 +57,7 @@ class TestUser(unittest.TestCase):
 
         # Test valid email
         user = User("TestUser", "abc@abc.com", "mypassword123")
-        self.assertEqual(user.email, "abc@abc.com", "Should verify valid email")
+        self.assertTrue(user.verify_secret("abc@abc.com", user._email_hash), "Should verify valid email")
 
         # Test invalid email formats
         invalid_emails = ["plainaddress", "@missingusername.com", "username@.com"]
@@ -71,13 +71,13 @@ class TestUser(unittest.TestCase):
         user = User("TestUser", "abc@abc.com", "mypassword123")
 
         # Test correct password
-        self.assertTrue(user.verify_password("mypassword123"), "Should verify correct password")    
+        self.assertTrue(user.verify_secret("mypassword123", user._password_hash), "Should verify correct password")    
         
         # Test incorrect password
-        self.assertFalse(user.verify_password("wrongpassword"), "Should reject incorrect password")
+        self.assertFalse(user.verify_secret("wrongpassword", user._password_hash), "Should reject incorrect password")
     
         # Test invalid input types
-        self.assertFalse(user.verify_password(123), "Should reject non-string input")
+        self.assertFalse(user.verify_secret(123, user._password_hash), "Should reject non-string input")
 
 
     def test_password_change(self):
@@ -89,13 +89,14 @@ class TestUser(unittest.TestCase):
         self.assertTrue(user.change_password("oldpassword123", "newpassword456"), "Password change should succeed with correct old password")
         
         # Verify old password no longer works
-        self.assertFalse(user.verify_password("oldpassword123"), "Old password should not work")
+        self.assertFalse(user.verify_secret("oldpassword123", user._password_hash), "Old password should not work")
 
         # Verify new password works
-        self.assertTrue(user.verify_password("newpassword456"), "New password should work")
+        self.assertTrue(user.verify_secret("newpassword456", user._password_hash), "New password should work")
 
         # Test failed password change with wrong old password
-        self.assertFalse(user.change_password("wrongpassword", "anotherpassword789"), "Password change should fail with incorrect old password")
+        with self.assertRaises(UserValidationError):
+            user.change_password("wrongpassword", "anotherpassword789")
 
 
     def test_user_equality(self):
@@ -126,11 +127,11 @@ class TestUser(unittest.TestCase):
         
         # Test to_dict with sensitive data
         sensitive_dict = original_user.to_dict(include_sensitive=True)
-        expected_sensitive_keys = {'id', 'name', 'password_hash'}
+        expected_sensitive_keys = {'id', 'name', 'password_hash', 'email_hash'}
         self.assertEqual(set(sensitive_dict.keys()), expected_sensitive_keys, f"Expected keys {expected_sensitive_keys}, got {set(sensitive_dict.keys())}")
         
         # Test from_dict
         restored_user = User.from_dict(sensitive_dict)
         self.assertEqual(restored_user.id, original_user.id, "Restored user should have same ID")
         self.assertEqual(restored_user.name, original_user.name, "Restored user should have same name")
-        self.assertTrue(restored_user.verify_password("password123"), "Restored user should verify original password")
+        self.assertTrue(restored_user.verify_secret("password123", restored_user._password_hash), "Restored user should verify original password")
