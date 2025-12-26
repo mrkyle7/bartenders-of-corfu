@@ -93,7 +93,7 @@ async def register(user: UserCreate):
         logger.info("Registered new user with ID %s", getattr(created, "id", "<unknown>"))
         response = JSONResponse(content=created.to_dict(), status_code=201, headers={"Location": "/"})
         token = jwt_handler.sign(created.name)
-        response.set_cookie(key="userjwt", value=token, httponly=True, secure=True, samesite="Strict")
+        response.set_cookie(key="userjwt", value=token, httponly=True, secure=False, samesite="Strict")
         return response
     except Exception as e:
         logger.error("Error registering user: %s", str(e))
@@ -111,7 +111,7 @@ async def login(userLogin: UserLogin):
             token = jwt_handler.sign(user.name)
             logger.info("User %s logged in successfully", user)
             response = JSONResponse(content={"token": token}, status_code=200, headers={"Location": "/"})
-            response.set_cookie(key="userjwt", value=token, httponly=True, secure=True, samesite="Strict")
+            response.set_cookie(key="userjwt", value=token, httponly=True, secure=False, samesite="Strict")
             return response
         else:
             logger.warning("Authentication failed for user %s", userLogin.username)
