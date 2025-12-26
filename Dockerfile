@@ -1,5 +1,5 @@
 # Multi-stage build for installing dependencies
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 LABEL Maintainer="Kyle and Dan"
 
