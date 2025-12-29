@@ -100,7 +100,6 @@ jobs:
         run: |
           export IMAGE_TAG=${{ github.sha }}
           mkdir -p k3s-rendered
-          cp k3s/nginx.yml k3s-rendered/nginx.yml
           envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml
 
       - name: deploy bartenders

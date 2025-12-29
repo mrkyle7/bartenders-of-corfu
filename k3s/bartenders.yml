@@ -81,3 +81,13 @@ spec:
             name: bartenders-web
             port:
               number: 8000
+  - host: localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: bartenders-web
+            port:
+              number: 8000
