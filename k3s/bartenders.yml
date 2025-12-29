@@ -93,7 +93,7 @@ metadata:
     environment: gcp
   annotations:
     kubernetes.io/ingress.class: "traefik"
-    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    cert-manager.io/issuer: "letsencrypt-staging"
 spec:
   tls:
   - hosts:
@@ -120,20 +120,7 @@ metadata:
     environment: local
 spec:
   selfSigned: {}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: selfsigned-cert
-  labels:
-    app: bartenders
-    environment: local
-spec:
-  dnsNames:
-    - localhost
-  secretName: cheetahmoongames-tls
-  issuerRef:
-    name: test-selfsigned
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
