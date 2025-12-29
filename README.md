@@ -39,13 +39,16 @@ Note: you need docker installed first.
 
 Note2: only tested on Mac, YMMV.
 
-access on http://localhost:30080
+access on https://localhost
 
+# creating the GCP stuff with terraform
 
-# restart nginx
-
-`kubectl scale deployment my-nginx --replicas=0; kubectl scale deployment my-nginx --replicas=2;`
-
+```
+cd terraform
+terraform init
+terraform plan
+terraform apply
+```
 
 # Testing
 

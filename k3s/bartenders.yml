@@ -64,6 +64,26 @@ spec:
     app.kubernetes.io/name: traefik
 ---
 
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app: bartenders
+    environment: gcp
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: kylejharrison@gmail.com
+    profile: tlsserver
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          name: ingress-gcp
+---
+
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -73,7 +93,7 @@ metadata:
     environment: gcp
   annotations:
     kubernetes.io/ingress.class: "traefik"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
 spec:
   tls:
   - hosts:
@@ -124,6 +144,7 @@ metadata:
     environment: local
   annotations:
     kubernetes.io/ingress.class: "traefik"
+    cert-manager.io/issuer: test-selfsigned
 spec:
   tls:
   - hosts:
