@@ -29,7 +29,6 @@ docker cp k3s-registries.yaml k3s-server:/etc/rancher/k3s/registries.yaml
 docker cp k3s-server:/etc/rancher/k3s/k3s.yaml k3s.yaml
 export KUBECONFIG=k3s.yaml
 export IMAGE_TAG=$TAG ; envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml
-cp k3s/nginx.yml k3s-rendered/
 kubectl apply -f k3s-rendered/ --prune -l app=bartenders
 kubectl rollout status deployment/bartenders --timeout=120s
 
