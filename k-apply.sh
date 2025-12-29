@@ -30,7 +30,7 @@ docker cp k3s-server:/etc/rancher/k3s/k3s.yaml k3s.yaml
 export KUBECONFIG=k3s.yaml
 export IMAGE_TAG=$TAG ; envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
-kubectl apply -f k3s-rendered/ --prune -l app=bartenders -l environment=local
+kubectl apply -f k3s-rendered/ --prune -l 'app=bartenders,environment in (all,local)'
 kubectl rollout status deployment/bartenders --timeout=120s
 
 DEPLOYED_TAG="$(kubectl get pods -l app=bartenders -o=jsonpath='{$.items[0].spec.containers[0].image}' | cut -d : -f 2)"

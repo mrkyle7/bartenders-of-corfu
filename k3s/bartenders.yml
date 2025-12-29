@@ -4,8 +4,7 @@ metadata:
   name: bartenders
   labels:
     app: bartenders
-    environment: gcp
-    environment: local
+    environment: all
 spec:
   replicas: 1
   selector:
@@ -31,8 +30,7 @@ metadata:
   name: bartenders-web
   labels:
     app: bartenders
-    environment: gcp
-    environment: local
+    environment: all
 spec:
   type: ClusterIP
   ports:
@@ -48,8 +46,7 @@ metadata:
   namespace: kube-system
   labels:
     app: bartenders
-    environment: gcp
-    environment: local
+    environment: all
 spec:
   type: NodePort
   ports:

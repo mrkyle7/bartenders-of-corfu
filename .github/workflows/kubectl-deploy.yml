@@ -110,7 +110,8 @@ jobs:
       - name: deploy bartenders
         env:
           KUBECONFIG: kubeconfig
-        run: kubectl apply -f k3s-rendered --prune -l app=bartenders -l environment=gcp
+        run: |
+          kubectl apply -f k3s-rendered --prune -l 'app=bartenders,environment in (all,gcp)'
 
       - name: Verify deployment
         env:
