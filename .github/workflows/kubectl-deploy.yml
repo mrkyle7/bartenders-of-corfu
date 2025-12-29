@@ -102,10 +102,15 @@ jobs:
           mkdir -p k3s-rendered
           envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml
 
+      - name: deploy cert manager
+        env:
+          KUBECONFIG: kubeconfig
+        run: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
+
       - name: deploy bartenders
         env:
           KUBECONFIG: kubeconfig
-        run: kubectl apply -f k3s-rendered --prune -l app=bartenders
+        run: kubectl apply -f k3s-rendered --prune -l app=bartenders -l environment=gcp
 
       - name: Verify deployment
         env:
@@ -119,3 +124,6 @@ jobs:
             exit 1
           fi
           echo "Success: Deployed tag matches expected tag."
+          kubectl get pods
+          kubectl get svc
+          kubectl get ingress

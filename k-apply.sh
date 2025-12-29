@@ -13,7 +13,7 @@ fi
 if ! docker ps --format '{{.Names}}' | grep -qw k3s-server; then
     echo "starting k3s-server container"
     docker run --privileged --name k3s-server -d \
-    -p 6443:6443 -p 80:80 -p 443:443 -p 30080:30080 -p 9080:80\
+    -p 6443:6443 -p 80:80 -p 443:443 -p 8443:443 -p 8080:80\
     -v k3s-data:/var/lib/rancher/k3s \
     --hostname k3s-server \
     --network k3s-net \
@@ -29,7 +29,8 @@ docker cp k3s-registries.yaml k3s-server:/etc/rancher/k3s/registries.yaml
 docker cp k3s-server:/etc/rancher/k3s/k3s.yaml k3s.yaml
 export KUBECONFIG=k3s.yaml
 export IMAGE_TAG=$TAG ; envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml
-kubectl apply -f k3s-rendered/ --prune -l app=bartenders
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
+kubectl apply -f k3s-rendered/ --prune -l app=bartenders -l environment=local
 kubectl rollout status deployment/bartenders --timeout=120s
 
 DEPLOYED_TAG="$(kubectl get pods -l app=bartenders -o=jsonpath='{$.items[0].spec.containers[0].image}' | cut -d : -f 2)"
@@ -40,5 +41,7 @@ else
   echo "Success: Deployed tag matches expected tag."
 fi
 kubectl get pods
+kubectl get svc
+kubectl get ingress
 sleep 2
 kubectl logs -l app=bartenders --tail=20

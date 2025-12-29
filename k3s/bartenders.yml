@@ -4,6 +4,8 @@ metadata:
   name: bartenders
   labels:
     app: bartenders
+    environment: gcp
+    environment: local
 spec:
   replicas: 1
   selector:
@@ -29,6 +31,8 @@ metadata:
   name: bartenders-web
   labels:
     app: bartenders
+    environment: gcp
+    environment: local
 spec:
   type: ClusterIP
   ports:
@@ -44,6 +48,8 @@ metadata:
   namespace: kube-system
   labels:
     app: bartenders
+    environment: gcp
+    environment: local
 spec:
   type: NodePort
   ports:
@@ -64,12 +70,18 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mysite-nginx-ingress
+  name: ingress-gcp
   labels:
     app: bartenders
+    environment: gcp
   annotations:
     kubernetes.io/ingress.class: "traefik"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
+  tls:
+  - hosts:
+    - cheetahmoongames.com
+    secretName: cheetahmoongames-tls
   rules:
   - host: cheetahmoongames.com
     http:
@@ -81,6 +93,46 @@ spec:
             name: bartenders-web
             port:
               number: 8000
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: test-selfsigned
+  labels:
+    app: bartenders
+    environment: local
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: selfsigned-cert
+  labels:
+    app: bartenders
+    environment: local
+spec:
+  dnsNames:
+    - localhost
+  secretName: cheetahmoongames-tls
+  issuerRef:
+    name: test-selfsigned
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-local
+  labels:
+    app: bartenders
+    environment: local
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+spec:
+  tls:
+  - hosts:
+    - localhost
+    secretName: cheetahmoongames-tls
+  rules:
   - host: localhost
     http:
       paths:
