@@ -33,5 +33,6 @@ jobs:
 
     - name: Run tests
       run: |
-        source .env.local
+        export SUPABASE_URL=http://localhost:54321
+        export SUPABASE_KEY=$(supabase status -o json | jq '.SECRET_KEY')
         python -m unittest discover tests
