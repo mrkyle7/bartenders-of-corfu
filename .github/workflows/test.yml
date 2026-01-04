@@ -16,10 +16,6 @@ jobs:
     - uses: supabase/setup-cli@v1
       with:
         version: latest
-     
-    - run: |
-        supabase db start
-        supabase db reset
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -33,6 +29,9 @@ jobs:
 
     - name: Run tests
       run: |
+        supabase db start
+        supabase db reset
+        supabase status
         export SUPABASE_URL=$(supabase status -o json | jq -r '.API_URL')
         export SUPABASE_KEY=$(supabase status -o json | jq -r '.SECRET_KEY')
         python -m unittest discover tests
