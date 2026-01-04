@@ -95,6 +95,17 @@ jobs:
             --docker-password="$(cat registry_key.json)" \
             --docker-email=k3s-server@bartenders-464918.iam.gserviceaccount.com \
             --dry-run=client -o yaml | kubectl apply -f -
+              
+      - name: Create SUPABASE Secrets
+        env:
+          KUBECONFIG: kubeconfig
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          kubectl create secret generic supabase \
+            --from-literal=supabase-url="${SUPABASE_URL}" \
+            --from-literal=supabase-key="${SUPABASE_KEY}" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Render deployment manifest
         run: |

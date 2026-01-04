@@ -7,6 +7,16 @@ class UserValidationError(Exception):
     """Raised when user input validation fails."""
     pass
 
+class UserShort:
+    def __init__(self, username: str, id: str):
+        self.username = username
+        self.id = UUID(id)
+    
+    def to_dict(self) -> dict:
+        return {
+                "username": self.username,
+                "id": str(self.id)
+                }
 
 class User:
     """
@@ -17,17 +27,17 @@ class User:
     
     Attributes:
         id (UUID): Unique identifier for the user
-        name (str): User's display name
-        _email_hash (bytes): Securely hashed email - used for linking other authentication methods without storing plaintext email
+        username (str): User's display name
+        email (str): User's email
         _password_hash (bytes): Securely hashed password
     """
 
-    def __init__(self, name: str, email: str, password: str):
+    def __init__(self, username: str, email: str, password: str):
         """
         Initialize a new User instance.
         
         Args:
-            name (str): The user's name (3-50 characters, alphanumeric and spaces)
+            username (str): The user's name (3-50 characters, alphanumeric and spaces)
             email (str): The user's email
             password (str): The user's password (minimum 8 characters)
             
@@ -35,8 +45,8 @@ class User:
             UserValidationError: If name or password validation fails
         """
         self.id: UUID = uuid4()
-        self.name: str = self._validate_name(name)
-        self._email_hash: bytes = self._hash_email(email)
+        self.username: str = self._validate_name(username)
+        self.email: str = self._validate_email(email)
         self._password_hash: bytes = self._hash_password(password)
     
     def _validate_name(self, name: str) -> str:
@@ -150,24 +160,6 @@ class User:
         salt = bcrypt.gensalt()
         return bcrypt.hashpw(validated_password.encode('utf-8'), salt)
     
-    
-    def _hash_email(self, email: str) -> bytes:
-        """
-        Hash an email using bcrypt.
-        
-        Args:
-            email (str): The plain text email to hash
-            
-        Returns:
-            bytes: The hashed email
-            
-        Raises:
-            UserValidationError: If email validation fails
-        """
-        validated_email = self._validate_email(email)
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(validated_email.encode('utf-8'), salt)
-    
     def verify_secret(self, secret: str, hash: bytes) -> bool:
         """
         Verify a secret string (password or email) against the stored hash.
@@ -215,7 +207,7 @@ class User:
         Returns:
             str: String representation of the user
         """
-        return f"User(id={self.id}, name='{self.name}')"
+        return f"User(id={self.id}, name='{self.username}')"
     
     def __eq__(self, other) -> bool:
         """
@@ -252,12 +244,12 @@ class User:
         """
         result = {
             'id': str(self.id),
-            'name': self.name
+            'username': self.username
         }
         
         if include_sensitive:
             result['password_hash'] = self._password_hash.decode('utf-8')
-            result['email_hash'] = self._email_hash.decode('utf-8')
+            result['email'] = self.email
         
         return result
     
@@ -282,16 +274,15 @@ class User:
         """
         user = cls.__new__(cls)  # Create instance without calling __init__
         user.id = UUID(data['id'])
-        user.name = data['name']
+        user.username = data['username']
+        user.email = data['email']
         
         if 'password_hash' in data:
-            user._password_hash = data['password_hash'].encode('utf-8')
+            if isinstance(data['password_hash'], bytes):
+                user._password_hash = data['password_hash']
+            else:
+                user._password_hash = data['password_hash'].encode('utf-8')
         else:
             raise KeyError("password_hash is required for user deserialization")
-        
-        if 'email_hash' in data:
-            user._email_hash = data['email_hash'].encode('utf-8')
-        else:
-            raise KeyError("email_hash is required for user deserialization")
-        
+         
         return user

@@ -9,6 +9,10 @@ body {
     background-attachment: fixed;
 }
 
+.hidden {
+    display: none !important;
+}
+
 header {
     position: absolute;
     top: 20px;
@@ -23,6 +27,10 @@ header a {
 
 header a:hover {
     text-decoration: underline;
+}
+
+#helloUser {
+    display: inline;
 }
 
 h1 {

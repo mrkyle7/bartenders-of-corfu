@@ -1,8 +1,15 @@
 set -e
 
+source .env
+
+if [ -z $SUPABASE_URL ] || [ -z $SUPABASE_KEY ] ; then
+    echo SUPABASE envs not set
+    exit 1
+fi
+
 if ! docker network ls --format '{{.Name}}' | grep -qw k3s-net; then
   echo "Creating docker network k3s-net"
-  docker network create k3s-net
+  docker network create -o 'com.docker.network.bridge.host_binding_ipv4=127.0.0.1' k3s-net 
 fi
 
 if ! docker ps --format '{{.Names}}' | grep -qw registry; then
@@ -26,9 +33,30 @@ echo "Using image tag: $TAG"
 docker build . -t localhost:5000/bartenders-464918/docker-us/bartenders:$TAG
 docker push localhost:5000/bartenders-464918/docker-us/bartenders:$TAG
 docker cp k3s-registries.yaml k3s-server:/etc/rancher/k3s/registries.yaml
+# uncomment if k3s-server was rebuilt
+docker restart k3s-server
 docker cp k3s-server:/etc/rancher/k3s/k3s.yaml k3s.yaml
 export KUBECONFIG=k3s.yaml
 export IMAGE_TAG=$TAG ; envsubst < k3s/bartenders.yml > k3s-rendered/bartenders.rendered.yml
+# Wait for Kubernetes API to be ready (timeout 60s)
+echo "Waiting for Kubernetes API..."
+RETRIES=60
+until kubectl get --raw=/readyz >/dev/null 2>&1 || [ $RETRIES -le 0 ]; do
+  echo "Waiting for API... ($RETRIES)"
+  sleep 1
+  RETRIES=$((RETRIES-1))
+done
+if [ $RETRIES -le 0 ]; then
+  echo "Timed out waiting for Kubernetes API"
+  exit 1
+fi
+
+
+echo "Updating supabase secret"
+kubectl create secret generic supabase \
+  --from-literal=supabase-url="${SUPABASE_URL}" \
+  --from-literal=supabase-key="${SUPABASE_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
 kubectl apply -f k3s-rendered/ --prune -l 'app=bartenders,environment in (all,local)'
 kubectl rollout status deployment/bartenders --timeout=120s

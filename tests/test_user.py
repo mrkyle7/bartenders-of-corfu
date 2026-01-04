@@ -16,8 +16,8 @@ class TestUser(unittest.TestCase):
 
         user = User("TestUser123", "abc@abc.com", "password123")
 
-        self.assertEqual(user.name, "TestUser123")
-        self.assertTrue(user.verify_secret("abc@abc.com", user._email_hash))
+        self.assertEqual(user.username, "TestUser123")
+        self.assertEqual(user.email, "abc@abc.com")
         self.assertTrue(user.verify_secret("password123", user._password_hash))
         self.assertTrue(hasattr(user, 'id'))
 
@@ -57,7 +57,7 @@ class TestUser(unittest.TestCase):
 
         # Test valid email
         user = User("TestUser", "abc@abc.com", "mypassword123")
-        self.assertTrue(user.verify_secret("abc@abc.com", user._email_hash), "Should verify valid email")
+        self.assertEqual(user.email, "abc@abc.com", "Should verify valid email")
 
         # Test invalid email formats
         invalid_emails = ["plainaddress", "@missingusername.com", "username@.com"]
@@ -122,16 +122,16 @@ class TestUser(unittest.TestCase):
         
         # Test to_dict
         user_dict = original_user.to_dict()
-        expected_keys = {'id', 'name'}
+        expected_keys = {'id', 'username'}
         self.assertEqual(set(user_dict.keys()), expected_keys, f"Expected keys {expected_keys}, got {set(user_dict.keys())}")
         
         # Test to_dict with sensitive data
         sensitive_dict = original_user.to_dict(include_sensitive=True)
-        expected_sensitive_keys = {'id', 'name', 'password_hash', 'email_hash'}
+        expected_sensitive_keys = {'id', 'username', 'password_hash', 'email'}
         self.assertEqual(set(sensitive_dict.keys()), expected_sensitive_keys, f"Expected keys {expected_sensitive_keys}, got {set(sensitive_dict.keys())}")
         
         # Test from_dict
         restored_user = User.from_dict(sensitive_dict)
         self.assertEqual(restored_user.id, original_user.id, "Restored user should have same ID")
-        self.assertEqual(restored_user.name, original_user.name, "Restored user should have same name")
+        self.assertEqual(restored_user.username, original_user.username, "Restored user should have same name")
         self.assertTrue(restored_user.verify_secret("password123", restored_user._password_hash), "Restored user should verify original password")

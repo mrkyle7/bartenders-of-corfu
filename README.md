@@ -10,7 +10,7 @@ Python implementation of the best game ever made (about making cocktails and get
 
 # Start it up
 
-If you want a pure python experience:
+If you want a pure python experience (note this may not work now since supabase...)
 
 First get venv working:
 
@@ -32,6 +32,22 @@ access on http://localhost:8000
 # local k3s
 
 To test locally how this is run on GCP...
+
+First run supabase locally using the [supabase cli](https://supabase.com/docs/guides/local-development/cli/getting-started)
+
+```
+supabase start --network-id k3s-net
+```
+
+Apply Migrations 
+
+`supabase migration new ...`
+
+```
+supabase db reset --network-id k3s-net
+```
+
+Copy .env_example to .env with the supabase secret key
 
 Run `k-apply.sh` to build and push changes to local k3s
 
@@ -101,3 +117,10 @@ gcloud projects add-iam-policy-binding bartenders-464918 \
   --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountKeyAdmin"
 ```
+
+
+# Useful docker/k3s stuff
+
+Shell in k3s for testing stuff
+
+`kubectl run dns-test --image=busybox --restart=Never --rm -it -- sh`

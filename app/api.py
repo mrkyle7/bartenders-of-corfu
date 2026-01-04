@@ -8,6 +8,7 @@ from app.UserManager import UserManager
 from app.JWTHandler import JWTHandler
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
+import traceback, os
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,47 @@ async def list_games():
     return JSONResponse(content={"games": [game.to_dict() for game in games]})
 
 @app.post("/v1/games")
-async def new_game():
-    id = gameManager.new_game()
-    logger.info("Created new game with ID %s", id)
-    return JSONResponse(content={"id": str(id)})
+async def new_game(request: Request):
+    token = request.cookies.get("userjwt")
+    if token is None:
+        return JSONResponse(status_code=401, content={"error": "Please log in to create a game"})
+    try:
+        user = jwt_handler.verify(token)
+        if user:
+            id = gameManager.new_game(user.id)
+            logger.info(f"{user.username} created new game with ID {id}")
+            return JSONResponse(content={"id": str(id)})
+        else:
+            logger.warning("Invalid or expired token")
+            response = JSONResponse(content={"error": "Invalid or expired token"}, status_code=401)
+            response.delete_cookie(key="userjwt")
+            return response
+    except Exception as e:
+        return JSONResponse(status_code=401, content={"error": "Please log in to create a game"})
+
+@app.post("/v1/games/{game_id}/join")
+async def join_game(game_id: str, request: Request):
+    token = request.cookies.get("userjwt")
+    if token is None:
+        return JSONResponse(status_code=401, content={"error": "Please log in to join a game"})
+    try:
+        user = jwt_handler.verify(token)
+        if user:
+            game = gameManager.get_game_by_id(game_id)
+            if game:
+                game.add_player(user.id)
+                logger.info(f"{user.username} joined game with ID {game_id}")
+                return JSONResponse(content={"message": "Joined game successfully"})
+            else:
+                return JSONResponse(status_code=404, content={"error": "Game not found"})
+        else:
+            logger.warning("Invalid or expired token")
+            response = JSONResponse(content={"error": "Invalid or expired token"}, status_code=401)
+            response.delete_cookie(key="userjwt")
+            return response
+    except Exception as e:
+        logger.error("Error joining game: %s", str(e))
+        return JSONResponse(status_code=400, content={"error": str(e)})
 
 @app.get("/v1/users")
 async def list_users():
@@ -72,14 +110,14 @@ async def list_users():
     return JSONResponse(content={"users": [user.to_dict() for user in users]})
 
 class UserCreate(BaseModel):
-    name: str
+    username: str
     email: str
     password: str
 
 @app.post("/v1/users")
 async def new_user(user: UserCreate):
     try:
-        created = userManager.new_user(user.name, user.email, user.password)
+        created = userManager.new_user(user.username, user.email, user.password)
         logger.info("Created new user with ID %s", getattr(created, "id", "<unknown>"))
         return JSONResponse(content=created.to_dict(), status_code=201)
     except Exception as e:
@@ -89,28 +127,40 @@ async def new_user(user: UserCreate):
 @app.post("/register")
 async def register(user: UserCreate):
     try:
-        created = userManager.new_user(user.name, user.email, user.password)
+        created = userManager.new_user(user.username, user.email, user.password)
         logger.info("Registered new user with ID %s", getattr(created, "id", "<unknown>"))
         response = JSONResponse(content=created.to_dict(), status_code=201, headers={"Location": "/"})
-        token = jwt_handler.sign(created.name)
+        token = jwt_handler.sign(created.username)
         response.set_cookie(key="userjwt", value=token, httponly=True, secure=False, samesite="Strict")
         return response
     except Exception as e:
-        logger.error("Error registering user: %s", str(e))
+        logger.exception("Error registering user")
+        # If DEBUG is enabled, include the stack trace in the JSON response for debugging
+        if os.getenv("DEBUG", "false").lower() in ("1", "true", "yes"):
+            tb = traceback.format_exc()
+            return JSONResponse(content={"error": str(e), "traceback": tb}, status_code=400)
         return JSONResponse(content={"error": str(e)}, status_code=400)
 
 class UserLogin(BaseModel):
     username: str
     password: str
 
+
+@app.post("/logout")
+async def logout():
+    response = JSONResponse(content={"message": "Logged out"}, status_code=200)
+    response.delete_cookie(key="userjwt")
+    logger.info("User logged out")
+    return response
+
 @app.post("/login")
 async def login(userLogin: UserLogin):
     try:
         user = userManager.authenticate_user(userLogin.username, userLogin.password)
         if user:
-            token = jwt_handler.sign(user.name)
+            token = jwt_handler.sign(user)
             logger.info("User %s logged in successfully", user)
-            response = JSONResponse(content={"token": token}, status_code=200, headers={"Location": "/"})
+            response = JSONResponse(content=user.to_dict(), status_code=200, headers={"Location": "/"})
             response.set_cookie(key="userjwt", value=token, httponly=True, secure=False, samesite="Strict")
             return response
         else:
@@ -124,10 +174,10 @@ async def login(userLogin: UserLogin):
 async def user_details(request: Request):
     try:
         token = request.cookies.get("userjwt")
-        username = jwt_handler.verify(token)
-        if username:
-            logger.info("Token verified for user %s", username)
-            return JSONResponse(content={"username": username}, status_code=200)
+        user = jwt_handler.verify(token)
+        if user:
+            logger.info("Token verified for user %s", user)
+            return JSONResponse(content=user.to_dict(), status_code=200)
         else:
             logger.warning("Invalid or expired token")
             response = JSONResponse(content={"error": "Invalid or expired token"}, status_code=401)
@@ -135,4 +185,6 @@ async def user_details(request: Request):
             return response
     except Exception as e:
         logger.error("Error verifying token: %s", str(e))
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        response = JSONResponse(content={"error": str(e)}, status_code=400)
+        response.delete_cookie(key="userjwt")
+        return response

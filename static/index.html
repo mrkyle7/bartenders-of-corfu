@@ -11,7 +11,7 @@
 </head>
 
 <body>
-    <header id="user-header"></header>
+    <header id="user-header"><p id="helloUser"></p><a class="hidden" id="logoutLink" href="/logout">Logout</a><a class="hidden" id="loginLink" href="/login">Login</a></header>
     <main>
         <img src="/static/bartenders.png" alt="Illustration of bartenders mixing cocktails" class="bartender-image"
             role="img" aria-describedby="bartender-desc">
@@ -45,6 +45,7 @@
             const trueEnd = lastRequest?.responseEnd || 0;
             console.log(`Last network activity at: ${trueEnd.toFixed(2)} ms`);
         });
+        setLogOutLink();
         listGames();
         setUserHeader();
     </script>
