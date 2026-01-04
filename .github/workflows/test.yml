@@ -33,6 +33,6 @@ jobs:
 
     - name: Run tests
       run: |
-        export SUPABASE_URL=http://127.0.0.1:54321
+        export SUPABASE_URL=$(supabase status -o json | jq -r '.API_URL')
         export SUPABASE_KEY=$(supabase status -o json | jq -r '.SECRET_KEY')
         python -m unittest discover tests
