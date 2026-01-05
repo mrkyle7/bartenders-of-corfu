@@ -11,13 +11,12 @@ class UserManager:
     def authenticate_user(self, username: str, password: str) -> User | None:
         """Authenticate a user by their username and password. Returns the User if successful, else None."""
         user = self.get_user_by_username(username)
-        if user.verify_secret(password, user._password_hash):
+        if user and user.verify_secret(password, user._password_hash):
             return user
         return None
     
     def get_user_by_username(self, username: str) -> User | None:
         user: User = db.get_user_by_username(username)
-        logging.info(f"Got {user.username} from DB")
         return user
 
     def new_user(self, name, email, password) -> User:

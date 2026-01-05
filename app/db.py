@@ -31,6 +31,7 @@ class Db:
             .eq('username', username)
             .execute()
         )
+        logging.debug(f"user_by_username response from db {response}")
         if len(response.data) == 1:
             logging.info(f"Got user {response.data[0].get('username')}")
             return User.from_dict(

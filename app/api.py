@@ -130,7 +130,7 @@ async def register(user: UserCreate):
         created = userManager.new_user(user.username, user.email, user.password)
         logger.info("Registered new user with ID %s", getattr(created, "id", "<unknown>"))
         response = JSONResponse(content=created.to_dict(), status_code=201, headers={"Location": "/"})
-        token = jwt_handler.sign(created.username)
+        token = jwt_handler.sign(created)
         response.set_cookie(key="userjwt", value=token, httponly=True, secure=False, samesite="Strict")
         return response
     except Exception as e:

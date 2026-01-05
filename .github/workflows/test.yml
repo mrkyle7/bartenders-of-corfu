@@ -29,7 +29,8 @@ jobs:
 
     - name: Run tests
       run: |
-        supabase db start
+        supabase start
+        supabase status
         supabase db reset
         supabase status
         export SUPABASE_URL=$(supabase status -o json | jq -r '.API_URL')
