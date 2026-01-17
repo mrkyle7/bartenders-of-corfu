@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   kubectl-deploy:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     env:
@@ -129,13 +130,39 @@ jobs:
           KUBECONFIG: kubeconfig
         run: |
           kubectl rollout status deployment/bartenders --timeout=120s
-          DEPLOYED_TAG="$(kubectl get pods -l app=bartenders -o=jsonpath='{$.items[0].spec.containers[0].image}' | cut -d : -f 2)"
-          echo "Deployed image tag: $DEPLOYED_TAG"
-          if [ "$DEPLOYED_TAG" != "${{ github.sha }}" ]; then
-            echo "Error: Deployed tag does not match expected tag."
+
+          # Check the deployment spec directly (source of truth)
+          DEPLOYMENT_IMAGE="$(kubectl get deployment bartenders -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          EXPECTED_IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+          echo "Deployment spec image: $DEPLOYMENT_IMAGE"
+          echo "Expected image: $EXPECTED_IMAGE"
+
+          if [ "$DEPLOYMENT_IMAGE" != "$EXPECTED_IMAGE" ]; then
+            echo "Error: Deployment spec has incorrect image. Expected: $EXPECTED_IMAGE, Found: $DEPLOYMENT_IMAGE"
             exit 1
           fi
-          echo "Success: Deployed tag matches expected tag."
+
+          echo "Success: Deployment spec has the correct image tag."
+
+          # Wait for all pods to be running with the correct image
+          echo "Waiting for pods to be ready with correct image..."
+          for i in {1..30}; do
+            READY_PODS=$(kubectl get pods -l app=bartenders --field-selector=status.phase=Running -o jsonpath='{.items[*].spec.containers[0].image}' | tr ' ' '\n' | grep -c "$EXPECTED_IMAGE" || true)
+            TOTAL_PODS=$(kubectl get pods -l app=bartenders --field-selector=status.phase=Running -o jsonpath='{.items[*].spec.containers[0].image}' | wc -w)
+
+            if [ "$READY_PODS" -eq "$TOTAL_PODS" ] && [ "$TOTAL_PODS" -gt 0 ]; then
+              echo "Success: All $TOTAL_PODS running pods have the correct image."
+              kubectl get pods
+              kubectl get svc
+              kubectl get ingress
+              exit 0
+            fi
+
+            echo "Waiting... ($READY_PODS/$TOTAL_PODS pods ready with correct image)"
+            sleep 5
+          done
+
+          echo "Error: Timeout waiting for all pods to have the correct image"
           kubectl get pods
-          kubectl get svc
-          kubectl get ingress
+          exit 1

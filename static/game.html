@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Bartenders of Corfu</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+
+<body>
+    <main>
+        <h1>Game: <p id="gameId"></p></h1>
+        <h2>Players</h2>
+        <ul id="playerList"></ul>
+    </main>
+    <script>
+        async function load() {
+            const sp = new URLSearchParams(window.location.search);
+            const gameResp = await fetch(`/v1/games/${sp.get("id")}`);
+            if (gameResp.status == 401 || gameResp.status == 403) {
+                window.alert("You're not a member of this of this game!");
+                window.location.href = "/";
+            }
+            if (gameResp.ok) {
+                const game = await gameResp.json();
+                document.getElementById("gameId").innerText = game.id;
+                const playerList = document.getElementById("playerList");
+                game.players.forEach(player => {
+                    const li = document.createElement('li');
+                    li.innerText = player.username;
+                    playerList.appendChild(li);
+                }); 
+            }
+        }
+        load()
+    </script>
+</body>
+
+</html>

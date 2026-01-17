@@ -50,6 +50,11 @@ async def login_page():
     login_path = os.path.join("static", "login.html")
     return FileResponse(login_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
+@app.get("/game")
+async def game_page():
+    login_path = os.path.join("static", "game.html")
+    return FileResponse(login_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
+
 @app.get("/health")
 async def health():
     return JSONResponse(content={"isAvailable": True})
@@ -59,6 +64,29 @@ async def list_games():
     games = gameManager.list_games()
     logger.info("Listing %d games", len(games))
     return JSONResponse(content={"games": [game.to_dict() for game in games]})
+
+@app.get("/v1/games/{game_id}")
+async def get_game(game_id: str, request: Request):
+    token = request.cookies.get("userjwt")
+    if token is None:
+        return JSONResponse(status_code=401, content={"error": "Please log in to view a game"})
+    try:
+        user = jwt_handler.verify(token)
+        if user:
+            game = gameManager.get_game_by_id(game_id)
+            if user.id not in game.players:
+                return JSONResponse(status_code=403, content={"error": "User is not a member of this game"})
+            else:
+                logger.info(f"{user.username} get game info for ID {game_id}")
+                return JSONResponse(content=game.to_dict())
+        else:
+            logger.warning("Invalid or expired token")
+            response = JSONResponse(content={"error": "Invalid or expired token"}, status_code=401)
+            response.delete_cookie(key="userjwt")
+            return response
+    except Exception as e:
+        logger.exception("Failed to validate user on get game")
+        return JSONResponse(status_code=401, content={"error": "Please re-login in to view a game"})
 
 @app.post("/v1/games")
 async def new_game(request: Request):

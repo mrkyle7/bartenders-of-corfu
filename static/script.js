@@ -1,9 +1,11 @@
+let user;
+
 async function setUserHeader() {
     const response = await fetch('/userDetails')
     if (!response.ok) {
         showLogin()
     } else {
-        const user = await response.json()
+        user = await response.json()
         setUser(user)
     }
 }
@@ -42,11 +44,18 @@ async function listGames() {
     gameList.innerHTML = '';
     data.games.forEach(game => {
         const li = document.createElement('li');
-        li.textContent = `${game.host.username}'s Game: ${game.id}, players: ${game.players.map(p=>p.username).join(', ')}`;
-        const joinButton = document.createElement('button');
-        joinButton.textContent = 'Join Game';
-        joinButton.onclick = () => joinGame(game.id);
-        li.appendChild(joinButton);
+        li.textContent = `${game.host.username}'s Game: ${game.id}, players: ${game.players.map(p => p.username).join(', ')}`;
+         if (game.players.some(p => p.id === user.id)) {
+            const goToGameButton = document.createElement('button');
+            goToGameButton.textContent = 'Go to Game';
+            goToGameButton.onclick = () => window.location.href = `/game?id=${game.id}`;
+            li.appendChild(goToGameButton);
+        } else {
+            const joinButton = document.createElement('button');
+            joinButton.textContent = 'Join Game';
+            joinButton.onclick = () => joinGame(game.id);
+            li.appendChild(joinButton);
+        }
         gameList.appendChild(li);
     });
 }
