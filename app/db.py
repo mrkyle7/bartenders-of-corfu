@@ -5,6 +5,7 @@ from supabase import create_client, Client
 from app.user import User
 from app.utils import bytesToHexString, hexStringToBytes
 
+
 class Db:
     url: str = os.environ.get("SUPABASE_URL")
     key: str = os.environ.get("SUPABASE_KEY")
@@ -18,7 +19,8 @@ class Db:
         response = (
             self.supabase.table('users')
             .insert(
-                {"id": str(user.id), "username": user.username, "email": user.email, "password": password_value}
+                {"id": str(user.id), "username": user.username,
+                 "email": user.email, "password": password_value}
             )
             .execute()
         )
@@ -41,10 +43,10 @@ class Db:
                     "email": response.data[0].get('email'),
                     "password_hash": hexStringToBytes(response.data[0].get('password'))
                 }
-                )
+            )
         else:
             return None
-        
+
     def get_user_by_id(self, id: UUID) -> User | None:
         response = (
             self.supabase.table('users')
@@ -61,10 +63,10 @@ class Db:
                     "email": response.data[0].get('email'),
                     "password_hash": hexStringToBytes(response.data[0].get('password'))
                 }
-                )
+            )
         else:
             return None
-        
+
     def get_users_by_ids(self, ids: set[UUID]) -> list[User]:
         response = (
             self.supabase.table('users')
@@ -73,16 +75,16 @@ class Db:
             .execute()
         )
 
-        return [ User.from_dict(
+        return [User.from_dict(
             {
                 "id": user.get('id'),
                 "username": user.get('username'),
                 "email": user.get('email'),
                 "password_hash": hexStringToBytes(user.get('password'))
             }
-            ) for user in response.data
+        ) for user in response.data
         ]
-        
+
     def get_users(self) -> list[User]:
         response = (
             self.supabase.table('users')
@@ -90,14 +92,38 @@ class Db:
             .limit(100)
             .execute()
         )
-        return [ User.from_dict(
-                {
-                    "id": user.get('id'),
-                    "username": user.get('username'),
-                    "email": user.get('email'),
-                    "password_hash": hexStringToBytes(user.get('password'))
-                }
-                ) for user in response.data ]
+        return [User.from_dict(
+            {
+                "id": user.get('id'),
+                "username": user.get('username'),
+                "email": user.get('email'),
+                "password_hash": hexStringToBytes(user.get('password'))
+            }
+        ) for user in response.data]
+
+    def get_public_key(self, kid: str) -> bytes | None:
+        response = (
+            self.supabase.table('public_keys')
+            .select('public_key')
+            .eq('kid', str(kid))
+            .eq('valid', True)
+            .execute()
+        )
+        if len(response.data) == 1:
+            return hexStringToBytes(response.data[0].get('public_key'))
+        else:
+            return None
         
+    def add_public_key(self, kid: UUID, public_key: bytes) -> bool:
+        response = (
+            self.supabase.table('public_keys')
+            .insert(
+                {"kid": str(kid),
+                 "public_key": bytesToHexString(public_key)}
+            )
+            .execute()
+        )
+        return len(response.data) == 1
+
 
 db = Db()

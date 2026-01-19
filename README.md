@@ -43,6 +43,12 @@ Apply Migrations
 
 `supabase migration new ...`
 
+Apply migrations
+
+`supabase migration up`
+
+reset all data
+
 ```
 supabase db reset --network-id k3s-net
 ```

@@ -7,33 +7,33 @@
     <title>Login - Bartenders of Corfu</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/game.js"></script>
 </head>
 
 <body>
-    <main>
-        <h1>Game: <p id="gameId"></p></h1>
-        <h2>Players</h2>
-        <ul id="playerList"></ul>
-    </main>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+    <link rel="stylesheet" href="/static/styles.css" />
+
+    <div class="page">
+        <header>
+            <img src="/static/bartenders.png" alt="Illustration of bartenders mixing cocktails" class="bartender-image"
+                role="img" aria-describedby="bartender-desc" />
+            <div class="game-meta">
+                <div>Game: <span id="gameId"></span></div>
+                <div>Players: <span id="playerList"></span></div>
+            </div>
+        </header>
+        <main>
+            <h2>Welcome!</h2>
+        </main>
+        <footer>
+            <a href="/docs" target="_blank">API</a> |
+            <a href="https://github.com/mrkyle7/bartenders-of-corfu" target="_blank">Source</a>
+            |
+            <a href="https://github.com/mrkyle7/bartenders-of-corfu/issues" target="_blank">Support</a>
+        </footer>
+    </div>
     <script>
-        async function load() {
-            const sp = new URLSearchParams(window.location.search);
-            const gameResp = await fetch(`/v1/games/${sp.get("id")}`);
-            if (gameResp.status == 401 || gameResp.status == 403) {
-                window.alert("You're not a member of this of this game!");
-                window.location.href = "/";
-            }
-            if (gameResp.ok) {
-                const game = await gameResp.json();
-                document.getElementById("gameId").innerText = game.id;
-                const playerList = document.getElementById("playerList");
-                game.players.forEach(player => {
-                    const li = document.createElement('li');
-                    li.innerText = player.username;
-                    playerList.appendChild(li);
-                }); 
-            }
-        }
         load()
     </script>
 </body>
