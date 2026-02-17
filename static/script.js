@@ -42,10 +42,18 @@ async function listGames() {
     const data = await response.json();
     const gameList = document.getElementById('gameList');
     gameList.innerHTML = '';
-    data.games.forEach(game => {
+    data.games.forEach(async game => {
         const li = document.createElement('li');
-        li.textContent = `${game.host.username}'s Game: ${game.id}, players: ${game.players.map(p => p.username).join(', ')}`;
-         if (game.players.some(p => p.id === user.id)) {
+        let host = 'Unknown';
+        try {
+            const userResp = await fetch(`/v1/users/${game.host}`)
+            const user = await userResp.json()
+            host = user.username
+        } catch (e) {
+            console.error(e)
+        }
+        li.textContent = `${host}'s Game: ${game.id}, players: ${game.players.join(', ')}`;
+        if (game.players.some(p => p === user.id)) {
             const goToGameButton = document.createElement('button');
             goToGameButton.textContent = 'Go to Game';
             goToGameButton.onclick = () => window.location.href = `/game?id=${game.id}`;

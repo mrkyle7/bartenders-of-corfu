@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 from app.db import db
 
-from app.user import User, UserShort
+from app.user import User, TokenUser
 
 
 class JWTHandler:
@@ -51,7 +51,7 @@ class JWTHandler:
         token = jwt.encode(payload, self.private_key, algorithm=self.algorithm)
         return token
 
-    def verify(self, token: str) -> Optional[UserShort]:
+    def verify(self, token: str) -> Optional[TokenUser]:
         """Verify a JWT token and return the username (sub), or None if invalid/expired."""
         try:
             details = jwt.decode(token, options={"verify_signature": False})
@@ -64,9 +64,16 @@ class JWTHandler:
             self.public_keys[kid] = public_key
             payload = jwt.decode(token, public_key,
                                  algorithms=[self.algorithm])
-            return UserShort(payload.get("sub"), payload.get("id"))
+            return TokenUser(payload.get("sub"), payload.get("id"))
         except jwt.ExpiredSignatureError:
             return None
         except jwt.InvalidTokenError:
             return None
-        
+
+    def get_public_key_pem(self) -> str:
+        """Extract and return the public key in PEM format."""
+        public_pem = self.public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return public_pem.decode()

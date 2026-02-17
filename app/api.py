@@ -1,14 +1,17 @@
 import os
 import logging
+from uuid import UUID
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from app.gameManager import GameManager
+from app.GameManager import GameManager
 from app.UserManager import UserManager
 from app.JWTHandler import JWTHandler
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 import traceback, os
+
+from app.user import TokenUser
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +76,7 @@ async def get_game(game_id: str, request: Request):
     try:
         user = jwt_handler.verify(token)
         if user:
-            game = gameManager.get_game_by_id(game_id)
+            game = gameManager.get_game_by_id(UUID(game_id))
             if user.id not in game.players:
                 return JSONResponse(status_code=403, content={"error": "User is not a member of this game"})
             else:
@@ -94,33 +97,40 @@ async def new_game(request: Request):
     if token is None:
         return JSONResponse(status_code=401, content={"error": "Please log in to create a game"})
     try:
-        user = jwt_handler.verify(token)
-        if user:
-            id = gameManager.new_game(user.id)
-            logger.info(f"{user.username} created new game with ID {id}")
-            return JSONResponse(content={"id": str(id)})
+        token_user: TokenUser = jwt_handler.verify(token)
+        if token_user:
+            # Get the full user object from the database
+            user = userManager.get_user(token_user.id)
+            if user:
+                game_id = gameManager.new_game(user)
+                logger.info(f"{user.username} created new game with ID {game_id}")
+                return JSONResponse(content={"id": str(game_id)})
+            else:
+                return JSONResponse(status_code=401, content={"error": "User not found"})
         else:
             logger.warning("Invalid or expired token")
             response = JSONResponse(content={"error": "Invalid or expired token"}, status_code=401)
             response.delete_cookie(key="userjwt")
             return response
-    except Exception as e:
-        return JSONResponse(status_code=401, content={"error": "Please log in to create a game"})
+    except Exception:
+        logger.exception("Error creating game")
+        return JSONResponse(status_code=500, content={"error": "Failed to create game"})
 
 @app.post("/v1/games/{game_id}/join")
 async def join_game(game_id: str, request: Request):
+    from uuid import UUID
     token = request.cookies.get("userjwt")
     if token is None:
         return JSONResponse(status_code=401, content={"error": "Please log in to join a game"})
     try:
-        user = jwt_handler.verify(token)
-        if user:
-            game = gameManager.get_game_by_id(game_id)
-            if game:
-                game.add_player(user.id)
-                logger.info(f"{user.username} joined game with ID {game_id}")
+        user_short = jwt_handler.verify(token)
+        if user_short:
+            try: 
+                gameManager.add_player(user_short.id, UUID(game_id))
+                logger.info(f"{user_short.username} joined game with ID {game_id}")
                 return JSONResponse(content={"message": "Joined game successfully"})
-            else:
+            except Exception:
+                logging.exception("Failed to add user to game")
                 return JSONResponse(status_code=404, content={"error": "Game not found"})
         else:
             logger.warning("Invalid or expired token")
@@ -128,14 +138,19 @@ async def join_game(game_id: str, request: Request):
             response.delete_cookie(key="userjwt")
             return response
     except Exception as e:
-        logger.error("Error joining game: %s", str(e))
-        return JSONResponse(status_code=400, content={"error": str(e)})
+        logger.exception("Error joining game")
+        return JSONResponse(status_code=400, content={"error": "Failed to join game"})
 
 @app.get("/v1/users")
 async def list_users():
     users = userManager.list_users()
     logger.info("Listing %d users", len(users))
     return JSONResponse(content={"users": [user.to_dict() for user in users]})
+
+@app.get("/v1/users/{user_id}")
+async def get_user(user_id: str):
+    user = userManager.get_user(UUID(user_id))
+    return JSONResponse(content=user.to_dict())
 
 class UserCreate(BaseModel):
     username: str

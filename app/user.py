@@ -7,7 +7,7 @@ class UserValidationError(Exception):
     """Raised when user input validation fails."""
     pass
 
-class UserShort:
+class TokenUser:
     def __init__(self, username: str, id: str):
         self.username = username
         self.id = UUID(id)

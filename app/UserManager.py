@@ -18,6 +18,10 @@ class UserManager:
     def get_user_by_username(self, username: str) -> User | None:
         user: User = db.get_user_by_username(username)
         return user
+    
+    def get_user(self, id: UUID) -> User | None:
+        user: User = db.get_user_by_id(id)
+        return user
 
     def new_user(self, name, email, password) -> User:
         new_user: User = User(name, email, password)
