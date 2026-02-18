@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import jwt
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src', 'bartenders-of-corfu'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 from app.user import User
 from app.JWTHandler import JWTHandler

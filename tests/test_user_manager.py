@@ -4,7 +4,7 @@ import os
 import time
 
 # Add the app directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src', 'bartenders-of-corfu'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 
 from app.UserManager import UserManager, UserManagerUserExistsException

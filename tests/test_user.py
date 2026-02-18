@@ -5,7 +5,7 @@ import os
 import unittest
 
 # Add the src directory to the path so we can import the user module
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src', 'bartenders-of-corfu'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 from app.user import User, UserValidationError
 
