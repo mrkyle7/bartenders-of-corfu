@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from app.GameManager import GameManager
+from app.gameManager import GameManager
 from app.UserManager import UserManager
 from app.JWTHandler import JWTHandler
 from starlette.middleware.base import BaseHTTPMiddleware
