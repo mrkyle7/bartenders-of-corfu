@@ -2,7 +2,7 @@ import os
 import logging
 from uuid import UUID
 from supabase import create_client, Client
-from app.Game import Game, Status
+from app.game import Game, Status
 from app.GameState import GameState
 from app.Ingredient import Ingredient
 from app.PlayerState import PlayerState
