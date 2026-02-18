@@ -5,10 +5,10 @@ import os
 import unittest
 from uuid import uuid4
 
-from app.Game import Game
-
 # Add the src directory to the path so we can import the user module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src', 'bartenders-of-corfu'))
+
+from app.Game import Game
 
 class TestGame(unittest.TestCase):
 

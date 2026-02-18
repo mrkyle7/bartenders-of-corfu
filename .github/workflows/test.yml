@@ -31,9 +31,4 @@ jobs:
       run: |
         supabase start
         supabase status
-        supabase db reset
-        supabase status
-        export SUPABASE_URL=$(supabase status -o json | jq -r '.API_URL')
-        export SUPABASE_KEY=$(supabase status -o json | jq -r '.SECRET_KEY')
-        export PYTHONPATH=$(pwd)
-        python -m unittest discover tests
+        ./run-tests.sh

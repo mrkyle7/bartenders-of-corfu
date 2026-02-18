@@ -6,14 +6,15 @@ from uuid import uuid4
 
 import jwt
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src', 'bartenders-of-corfu'))
+
 from app.user import User
 from app.JWTHandler import JWTHandler
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 
 
-# Add the app directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 
 
 class TestJWTHandler(unittest.TestCase):

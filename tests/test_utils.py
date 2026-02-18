@@ -7,11 +7,10 @@ import unittest
 
 import bcrypt
 
-from app.utils import bytesToHexString, hexStringToBytes
-
 # Add the src directory to the path so we can import the user module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src', 'bartenders-of-corfu'))
 
+from app.utils import bytesToHexString, hexStringToBytes
 
 class TestUser(unittest.TestCase):
 
