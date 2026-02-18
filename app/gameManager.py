@@ -1,7 +1,7 @@
 import logging
 from uuid import UUID
 from app.db import db
-from app.Game import Game
+from app.game import Game
 from app.user import User
 
 
