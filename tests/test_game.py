@@ -9,7 +9,7 @@ from uuid import uuid4
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 
-from app.Game import Game
+from app.game import Game
 
 class TestGame(unittest.TestCase):
 
