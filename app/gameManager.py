@@ -6,9 +6,8 @@ from app.user import User
 
 
 class GameManager:
-
     def new_game(self, host: User) -> UUID:
-        """Create a new game for the host user and return the game ID""" 
+        """Create a new game for the host user and return the game ID"""
         game = Game.new_game(host.id)
         try:
             db.create_game(game)
@@ -16,7 +15,7 @@ class GameManager:
         except Exception as e:
             logging.exception("DB error when creating game")
             raise e
-        
+
     def add_player(self, player_id: UUID, game_id: UUID):
         db.add_player_to_game(game_id, player_id)
 

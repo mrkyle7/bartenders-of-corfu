@@ -4,17 +4,15 @@ import sys
 import os
 import unittest
 import time
-import json
 
 # Add the app directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
 from fastapi.testclient import TestClient
 from app.api import app
 
 
 class TestAPI(unittest.TestCase):
-
     def setUp(self):
         """Set up test client."""
         self.client = TestClient(app)
@@ -66,7 +64,7 @@ class TestAPI(unittest.TestCase):
         user_data = {
             "username": f"testuser{timestamp}",
             "email": f"test{timestamp}@example.com",
-            "password": "password123"
+            "password": "password123",
         }
         response = self.client.post("/register", json=user_data)
         self.assertEqual(response.status_code, 201)
@@ -85,7 +83,7 @@ class TestAPI(unittest.TestCase):
         self.test_game = data["id"]
         self.test_user = user_data["username"]
         self.jwt_token = jwt_token
-        
+
     def test_join_game_success(self):
         """Test successfully joining a game with real user."""
         # First create a real user
@@ -93,7 +91,7 @@ class TestAPI(unittest.TestCase):
         user_data = {
             "username": f"testuser{timestamp}",
             "email": f"test{timestamp}@example.com",
-            "password": "password123"
+            "password": "password123",
         }
         response = self.client.post("/register", json=user_data)
         host_id = response.json().get("id")
@@ -109,14 +107,14 @@ class TestAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("id", data)
         game_id = data.get("id")
-        
+
         # now create a user to join the game
-    
+
         timestamp = int(time.time() * 1000000)  # Microsecond precision
         user_data = {
             "username": f"testuser{timestamp}",
             "email": f"test{timestamp}@example.com",
-            "password": "password123"
+            "password": "password123",
         }
         response = self.client.post("/register", json=user_data)
         joinee_id = response.json().get("id")
@@ -125,20 +123,26 @@ class TestAPI(unittest.TestCase):
         # Get the JWT token from the response
         jwt_token = response.cookies.get("userjwt")
         self.assertIsNotNone(jwt_token)
-        
-        #try and join the game!
-        
+
+        # try and join the game!
+
         print(f"joining game {game_id}")
-        
-        response = self.client.post(f"/v1/games/{game_id}/join", cookies={"userjwt": jwt_token})
+
+        response = self.client.post(
+            f"/v1/games/{game_id}/join", cookies={"userjwt": jwt_token}
+        )
         self.assertEqual(response.status_code, 200)
-        
-        #now check the players are in the game
-        
-        response = self.client.get(f"/v1/games/{game_id}", cookies={"userjwt": jwt_token})
+
+        # now check the players are in the game
+
+        response = self.client.get(
+            f"/v1/games/{game_id}", cookies={"userjwt": jwt_token}
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertListEqual(sorted([host_id, joinee_id]), sorted(response.json().get("players")))
-        
+        self.assertListEqual(
+            sorted([host_id, joinee_id]), sorted(response.json().get("players"))
+        )
+
         # Store for cleanup
         self.test_game = game_id
         self.test_user = user_data["username"]
@@ -156,13 +160,15 @@ class TestAPI(unittest.TestCase):
         user_data = {
             "username": f"testuser{timestamp}",
             "email": f"test{timestamp}@example.com",
-            "password": "password123"
+            "password": "password123",
         }
         response = self.client.post("/register", json=user_data)
         self.assertEqual(response.status_code, 201)
         jwt_token = response.cookies.get("userjwt")
 
-        response = self.client.post("/v1/games/nonexistent-id/join", cookies={"userjwt": jwt_token})
+        response = self.client.post(
+            "/v1/games/nonexistent-id/join", cookies={"userjwt": jwt_token}
+        )
         self.assertEqual(response.status_code, 404)
         data = response.json()
         self.assertEqual(data["error"], "Game not found")
@@ -178,7 +184,7 @@ class TestAPI(unittest.TestCase):
         user_data = {
             "username": f"testuser{timestamp}",
             "email": f"test{timestamp}@example.com",
-            "password": "password123"
+            "password": "password123",
         }
 
         response = self.client.post("/v1/users", json=user_data)
@@ -191,7 +197,7 @@ class TestAPI(unittest.TestCase):
         user_data = {
             "username": "",  # Invalid empty username
             "email": "invalid-email",
-            "password": "short"
+            "password": "short",
         }
 
         response = self.client.post("/v1/users", json=user_data)
@@ -203,7 +209,7 @@ class TestAPI(unittest.TestCase):
         user_data = {
             "username": f"testuser{timestamp}",
             "email": f"test{timestamp}@example.com",
-            "password": "password123"
+            "password": "password123",
         }
 
         response = self.client.post("/register", json=user_data)
@@ -218,15 +224,12 @@ class TestAPI(unittest.TestCase):
         user_data = {
             "username": f"testuser{timestamp}",
             "email": f"test{timestamp}@example.com",
-            "password": "password123"
+            "password": "password123",
         }
         self.client.post("/register", json=user_data)
 
         # Now try to login
-        login_data = {
-            "username": user_data["username"],
-            "password": "password123"
-        }
+        login_data = {"username": user_data["username"], "password": "password123"}
 
         response = self.client.post("/login", json=login_data)
         self.assertEqual(response.status_code, 200)
@@ -235,10 +238,7 @@ class TestAPI(unittest.TestCase):
 
     def test_login_invalid_credentials(self):
         """Test login with invalid credentials."""
-        login_data = {
-            "username": "nonexistent",
-            "password": "wrongpassword"
-        }
+        login_data = {"username": "nonexistent", "password": "wrongpassword"}
 
         response = self.client.post("/login", json=login_data)
         self.assertEqual(response.status_code, 401)
@@ -266,5 +266,5 @@ class TestAPI(unittest.TestCase):
         self.assertIsInstance(data["users"], list)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -10,21 +10,11 @@ Python implementation of the best game ever made (about making cocktails and get
 
 # Start it up
 
-If you want a pure python experience (note this may not work now since supabase...)
-
-First get venv working:
+Note you'll need uv and supabase installed. [supabase cli](https://supabase.com/docs/guides/local-development/cli/getting-started)
 
 ```
-python -m venv venv .
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Then you can 
-
-```
-source .venv/bin/activate
-uvicorn app.api:app --reload --log-config=log_conf.yaml
+supabase start --network-id k3s-net
+./run-local.sh
 ```
 
 access on http://localhost:8000
@@ -39,7 +29,7 @@ First run supabase locally using the [supabase cli](https://supabase.com/docs/gu
 supabase start --network-id k3s-net
 ```
 
-Apply Migrations 
+To add migrations 
 
 `supabase migration new ...`
 
@@ -74,7 +64,7 @@ terraform apply
 
 # Testing
 
-Run `python -m unittest discover tests`
+Run `./run-tests.sh`
 
 # manual setup commands
 

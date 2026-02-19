@@ -1,24 +1,24 @@
-import logging
 from uuid import UUID
 from app.user import User
 from app.db import db
 
+
 class UserManagerUserExistsException(Exception):
     pass
 
-class UserManager:
 
+class UserManager:
     def authenticate_user(self, username: str, password: str) -> User | None:
         """Authenticate a user by their username and password. Returns the User if successful, else None."""
         user = self.get_user_by_username(username)
         if user and user.verify_secret(password, user._password_hash):
             return user
         return None
-    
+
     def get_user_by_username(self, username: str) -> User | None:
         user: User = db.get_user_by_username(username)
         return user
-    
+
     def get_user(self, id: UUID) -> User | None:
         user: User = db.get_user_by_id(id)
         return user
@@ -29,7 +29,9 @@ class UserManager:
             db.add_user(new_user)
         except Exception as e:
             if "duplicate key" in str(e):
-                raise UserManagerUserExistsException(f"User already exists by name or email")
+                raise UserManagerUserExistsException(
+                    "User already exists by name or email"
+                )
             else:
                 raise e
         return new_user

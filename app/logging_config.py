@@ -5,6 +5,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 logger = logging.getLogger("bartenders")
 
+
 def setup_logging():
     global logger
     # Create formatter

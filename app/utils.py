@@ -1,6 +1,7 @@
 def bytesToHexString(bytes: bytes):
-        return "\\x" + bytes.hex()
-    
+    return "\\x" + bytes.hex()
+
+
 def hexStringToBytes(hex_str: str) -> bytes:
     if hex_str is None:
         return b""

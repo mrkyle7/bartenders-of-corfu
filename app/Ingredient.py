@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from enum import Enum
 
+
 @dataclass(frozen=True)
-class IngredientProps():
+class IngredientProps:
     name: str
     alcohol: bool
     special: bool
-        
+
+
 class Ingredient(Enum):
     WHISKEY = IngredientProps("Whiskey", True, False)
     GIN = IngredientProps("Gin", True, False)

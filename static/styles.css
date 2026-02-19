@@ -181,3 +181,11 @@ input {
     color: #d4a017;
     font-weight: bold;
 }
+
+.table {
+    display: flex;
+}
+
+.playerSheet {
+    border: black
+}

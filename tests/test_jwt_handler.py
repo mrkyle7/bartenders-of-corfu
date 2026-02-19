@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import jwt
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
 from app.user import User
 from app.JWTHandler import JWTHandler
@@ -14,11 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 
 
-
-
-
 class TestJWTHandler(unittest.TestCase):
-
     def setUp(self):
         """Set up a fresh JWTHandler before each test."""
         self.jwt_handler = JWTHandler()
@@ -37,12 +33,10 @@ class TestJWTHandler(unittest.TestCase):
     def test_jwt_fails_with_wrong_key(self):
         """Test signing and verifying a JWT token is fail with a different key."""
         user = User("testuser", "test@abc.com", "Password123")
-        
+
         private_key = rsa.generate_private_key(
-                public_exponent=65537,
-                key_size=2048,
-                backend=default_backend()
-            )
+            public_exponent=65537, key_size=2048, backend=default_backend()
+        )
         now = datetime.now(timezone.utc)
         payload = {
             "sub": user.username,
@@ -51,7 +45,7 @@ class TestJWTHandler(unittest.TestCase):
             "exp": now + timedelta(hours=1),
             "kid": str(uuid4()),
         }
-        
+
         token = jwt.encode(payload, private_key, "RS256")
 
         decoded_payload = self.jwt_handler.verify(token)

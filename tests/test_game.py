@@ -6,18 +6,18 @@ import unittest
 from uuid import uuid4
 
 # Add the src directory to the path so we can import the user module
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
 
 from app.game import Game
 
-class TestGame(unittest.TestCase):
 
+class TestGame(unittest.TestCase):
     def test_game_creation(self):
         host = uuid4()
         players = set()
         players.add(host)
-        
+
         game = Game.new_game(host)
         self.assertSetEqual(game.players, players)
         self.assertListEqual(game.game_state.bag_contents, [])

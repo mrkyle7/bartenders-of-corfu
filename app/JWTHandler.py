@@ -11,30 +11,34 @@ from app.user import User, TokenUser
 
 
 class JWTHandler:
-    
-    
-    def __init__(self, private_key: Optional[str] = None, algorithm: str = "RS256", expiration_hours: int = 24 * 7):
+    def __init__(
+        self,
+        private_key: Optional[str] = None,
+        algorithm: str = "RS256",
+        expiration_hours: int = 24 * 7,
+    ):
         self.public_keys = {}
         if private_key:
             self.private_key = serialization.load_pem_private_key(
-                private_key.encode(),
-                password=None,
-                backend=default_backend()
+                private_key.encode(), password=None, backend=default_backend()
             )
         else:
             # Generate new RSA key pair
             self.private_key: rsa.RSAPrivateKey = rsa.generate_private_key(
-                public_exponent=65537,
-                key_size=2048,
-                backend=default_backend()
+                public_exponent=65537, key_size=2048, backend=default_backend()
             )
 
         self.public_key: rsa.RSAPublicKey = self.private_key.public_key()
         self.algorithm = algorithm
         self.expiration_hours = expiration_hours
         self.kid: UUID = uuid4()
-        db.add_public_key(self.kid, self.public_key.public_bytes(
-            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo))
+        db.add_public_key(
+            self.kid,
+            self.public_key.public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            ),
+        )
         self.public_keys[str(self.kid)] = self.public_key
 
     def sign(self, user: User) -> str:
@@ -56,14 +60,13 @@ class JWTHandler:
         try:
             details = jwt.decode(token, options={"verify_signature": False})
             kid = details.get("kid")
-            public_key=self.public_keys.get(kid)
+            public_key = self.public_keys.get(kid)
             if public_key is None:
                 public_key = db.get_public_key(UUID(kid))
                 if public_key is None:
                     raise jwt.InvalidTokenError
             self.public_keys[kid] = public_key
-            payload = jwt.decode(token, public_key,
-                                 algorithms=[self.algorithm])
+            payload = jwt.decode(token, public_key, algorithms=[self.algorithm])
             return TokenUser(payload.get("sub"), payload.get("id"))
         except jwt.ExpiredSignatureError:
             return None
@@ -74,6 +77,6 @@ class JWTHandler:
         """Extract and return the public key in PEM format."""
         public_pem = self.public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
         return public_pem.decode()
