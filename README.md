@@ -6,7 +6,7 @@
 
 [![Kubernetes Deployment](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/kubectl-deploy.yml/badge.svg)](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/kubectl-deploy.yml)
 
-Python implementation of the best game ever made (about making cocktails and getting drunk and also winning through spectacular kareoke)
+Python implementation of the best game ever made (about making cocktails and getting drunk and also winning through spectacular kareoke).
 
 # Start it up
 
