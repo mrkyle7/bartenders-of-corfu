@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 from supabase import create_client, Client
 from app.game import Game, Status
@@ -15,8 +16,42 @@ class Db:
     key: str = os.environ.get("SUPABASE_KEY")
     supabase: Client = create_client(url, key)
 
+    _USER_COLUMNS = (
+        "id",
+        "username",
+        "email",
+        "password",
+        "status",
+        "is_admin",
+        "created_at",
+        "password_changed_at",
+        "deactivated_at",
+        "deactivated_by",
+        "deleted_at",
+        "logged_out_at",
+    )
+
+    @staticmethod
+    def _row_to_user(row: dict) -> User:
+        password_bytes = hexStringToBytes(row.get("password")) or None
+        return User.from_dict(
+            {
+                "id": row.get("id"),
+                "username": row.get("username"),
+                "email": row.get("email"),
+                "password_hash": password_bytes,
+                "status": row.get("status", "active"),
+                "is_admin": row.get("is_admin", False),
+                "created_at": row.get("created_at"),
+                "password_changed_at": row.get("password_changed_at"),
+                "deactivated_at": row.get("deactivated_at"),
+                "deactivated_by": row.get("deactivated_by"),
+                "deleted_at": row.get("deleted_at"),
+                "logged_out_at": row.get("logged_out_at"),
+            }
+        )
+
     def add_user(self, user: User) -> bool:
-        # Convert bytes/bytearray password to Postgres bytea hex literal (e.g. "\\xDEADBEEF")
         password_value = bytesToHexString(user._password_hash)
         response = (
             self.supabase.table("users")
@@ -26,6 +61,8 @@ class Db:
                     "username": user.username,
                     "email": user.email,
                     "password": password_value,
+                    "status": user.status,
+                    "is_admin": user.is_admin,
                 }
             )
             .execute()
@@ -35,82 +72,118 @@ class Db:
     def get_user_by_username(self, username: str) -> User | None:
         response = (
             self.supabase.table("users")
-            .select("id", "username", "email", "password")
+            .select(*self._USER_COLUMNS)
             .eq("username", username)
             .execute()
         )
         logging.debug(f"user_by_username response from db {response}")
         if len(response.data) == 1:
-            logging.info(f"Got user {response.data[0].get('username')}")
-            return User.from_dict(
-                {
-                    "id": response.data[0].get("id"),
-                    "username": response.data[0].get("username"),
-                    "email": response.data[0].get("email"),
-                    "password_hash": hexStringToBytes(response.data[0].get("password")),
-                }
-            )
-        else:
-            return None
+            return self._row_to_user(response.data[0])
+        return None
 
     def get_user_by_id(self, id: UUID) -> User | None:
         response = (
             self.supabase.table("users")
-            .select("id", "username", "email", "password")
+            .select(*self._USER_COLUMNS)
             .eq("id", str(id))
             .execute()
         )
         if len(response.data) == 1:
-            logging.info(f"Got user {response.data[0].get('username')}")
-            return User.from_dict(
-                {
-                    "id": response.data[0].get("id"),
-                    "username": response.data[0].get("username"),
-                    "email": response.data[0].get("email"),
-                    "password_hash": hexStringToBytes(response.data[0].get("password")),
-                }
-            )
-        else:
-            return None
+            return self._row_to_user(response.data[0])
+        return None
 
     def get_users_by_ids(self, ids: set[UUID]) -> list[User]:
         response = (
             self.supabase.table("users")
-            .select("id", "username", "email", "password")
-            .in_("id", ids)
+            .select(*self._USER_COLUMNS)
+            .in_("id", [str(i) for i in ids])
             .execute()
         )
-
-        return [
-            User.from_dict(
-                {
-                    "id": user.get("id"),
-                    "username": user.get("username"),
-                    "email": user.get("email"),
-                    "password_hash": hexStringToBytes(user.get("password")),
-                }
-            )
-            for user in response.data
-        ]
+        return [self._row_to_user(row) for row in response.data]
 
     def get_users(self) -> list[User]:
         response = (
             self.supabase.table("users")
-            .select("id", "username", "email", "password")
+            .select(*self._USER_COLUMNS)
+            .neq("status", "deleted")
             .limit(1000)
             .execute()
         )
-        return [
-            User.from_dict(
+        return [self._row_to_user(row) for row in response.data]
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def delete_user(self, user_id: UUID) -> bool:
+        response = (
+            self.supabase.table("users")
+            .update(
                 {
-                    "id": user.get("id"),
-                    "username": user.get("username"),
-                    "email": user.get("email"),
-                    "password_hash": hexStringToBytes(user.get("password")),
+                    "status": "deleted",
+                    "username": None,
+                    "email": None,
+                    "password": None,
+                    "deleted_at": self._now(),
                 }
             )
-            for user in response.data
-        ]
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def deactivate_user(self, target_id: UUID, admin_id: UUID) -> bool:
+        response = (
+            self.supabase.table("users")
+            .update(
+                {
+                    "status": "deactivated",
+                    "deactivated_at": self._now(),
+                    "deactivated_by": str(admin_id),
+                }
+            )
+            .eq("id", str(target_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def reactivate_user(self, target_id: UUID) -> bool:
+        response = (
+            self.supabase.table("users")
+            .update(
+                {
+                    "status": "active",
+                    "deactivated_at": None,
+                    "deactivated_by": None,
+                }
+            )
+            .eq("id", str(target_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def logout_user(self, user_id: UUID) -> bool:
+        response = (
+            self.supabase.table("users")
+            .update({"logged_out_at": self._now()})
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def update_password(self, user_id: UUID, new_hash: bytes) -> bool:
+        response = (
+            self.supabase.table("users")
+            .update(
+                {
+                    "password": bytesToHexString(new_hash),
+                    "password_changed_at": "now()",
+                }
+            )
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
 
     def get_public_key(self, kid: str) -> bytes | None:
         response = (

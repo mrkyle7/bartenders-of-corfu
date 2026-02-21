@@ -1,0 +1,245 @@
+-- User Management
+-- Covers registration, authentication, session lifecycle, password changes,
+-- account deletion (by users) and account deactivation (by admins).
+
+config {
+    token_expiry: Duration = 7.days
+    username_min_length: Integer = 3
+    username_max_length: Integer = 50
+    password_min_length: Integer = 8
+    password_max_length: Integer = 128
+}
+
+-- A signing key used to issue and verify session tokens.
+entity PublicKey {
+    kid: UUID
+    public_key: Bytes
+    created_at: Timestamp
+    valid: Boolean
+}
+
+entity User {
+    id: UUID
+    status: active | deactivated | deleted
+    is_admin: Boolean
+
+    -- Nulled out on deletion to remove PII; ID is retained to preserve game history.
+    username: String?
+    email: String?
+    password_hash: Bytes?
+
+    created_at: Timestamp
+    password_changed_at: Timestamp?
+    deactivated_at: Timestamp?
+    deactivated_by: UUID?   -- ID of the admin who deactivated this account
+    deleted_at: Timestamp?
+    logged_out_at: Timestamp?   -- Set on logout; tokens issued at or before this are rejected.
+}
+
+-- Lightweight identity extracted from a verified session token.
+-- iat is the Unix timestamp at which the token was issued.
+value TokenUser {
+    id: UUID
+    username: String
+    iat: Timestamp
+}
+
+-- A session is the issued JWT cookie; modelled implicitly via token presence.
+-- No persistent session entity — the token is the session.
+
+-- ─── Rules ───────────────────────────────────────────────────────────────────
+
+rule RegisterUser {
+    when: RegisterUser(username, email, password)
+    requires: not exists User where username = username
+    requires: not exists User where email = email
+    requires: username.length >= config.username_min_length
+    requires: username.length <= config.username_max_length
+    requires: password.length >= config.password_min_length
+    requires: password.length <= config.password_max_length
+    requires: password contains_letter and password contains_digit
+    ensures: User.created(
+        id: new_uuid,
+        status: active,
+        is_admin: false,
+        username: username,
+        email: email,
+        password_hash: bcrypt(password),
+        created_at: now,
+        password_changed_at: now
+    )
+    ensures: SessionIssued(user: new User)
+    -- Session issuance is unconditional on registration; the token is always returned.
+}
+
+rule LoginUser {
+    when: LoginUser(username, password)
+    requires: user: User where username = username
+    requires: user.status = active
+    requires: bcrypt_verify(password, user.password_hash)
+    ensures: SessionIssued(user: user)
+}
+
+-- SessionIssued is chained by registration and login to produce a token cookie.
+-- The token embeds iat (issued-at timestamp) used for logout invalidation checks.
+rule SessionIssued {
+    when: SessionIssued(user)
+    ensures: token_cookie set with jwt(
+        sub: user.username,
+        id: user.id,
+        iat: now,
+        exp: now + config.token_expiry
+    )
+}
+
+rule LogoutUser {
+    -- Clears the cookie and records the logout time so the token cannot be replayed.
+    when: LogoutUser(requester: TokenUser)
+    requires: user: User where id = requester.id
+    ensures: user.logged_out_at = now
+    ensures: token_cookie cleared
+}
+
+-- Token validity check (applied on every authenticated request):
+-- A token is rejected if token.iat <= user.logged_out_at, even if cryptographically valid.
+-- This makes logout effective server-side without a token blacklist.
+
+rule ChangePassword {
+    when: ChangePassword(requester: TokenUser, old_password, new_password)
+    requires: u: User where id = requester.id and status = active
+    requires: bcrypt_verify(old_password, u.password_hash)
+    requires: new_password.length >= config.password_min_length
+    requires: new_password.length <= config.password_max_length
+    requires: new_password contains_letter and new_password contains_digit
+    ensures: u.password_hash = bcrypt(new_password)
+    ensures: u.password_changed_at = now
+}
+
+rule DeleteAccount {
+    -- Users delete their own account. PII is removed; the ID is kept so that
+    -- game history (which references user IDs) remains intact.
+    when: DeleteAccount(requester: TokenUser)
+    requires: user: User where id = requester.id and status = active
+    ensures: user.status = deleted
+    ensures: user.username = null
+    ensures: user.email = null
+    ensures: user.password_hash = null
+    ensures: user.deleted_at = now
+}
+
+rule DeactivateAccount {
+    -- Admins deactivate accounts. Credentials are preserved; the user cannot log in.
+    when: DeactivateAccount(admin: TokenUser, target_id: UUID)
+    requires: admin_user: User where id = admin.id and is_admin = true
+    requires: target: User where id = target_id and status = active
+    ensures: target.status = deactivated
+    ensures: target.deactivated_at = now
+    ensures: target.deactivated_by = admin.id
+}
+
+rule ReactivateAccount {
+    -- Admins restore a deactivated account to active. Deactivation metadata is cleared.
+    when: ReactivateAccount(admin: TokenUser, target_id: UUID)
+    requires: admin_user: User where id = admin.id and is_admin = true
+    requires: target: User where id = target_id and status = deactivated
+    ensures: target.status = active
+    ensures: target.deactivated_at = null
+    ensures: target.deactivated_by = null
+}
+
+-- ─── Surfaces ────────────────────────────────────────────────────────────────
+
+actor Visitor {
+    identified_by: anonymous
+}
+
+actor AuthenticatedUser {
+    identified_by: token_cookie -> TokenUser
+        where token.iat > (User where id = token.id).logged_out_at ?? epoch
+}
+
+actor Admin {
+    identified_by: token_cookie -> TokenUser
+        where token.iat > (User where id = token.id).logged_out_at ?? epoch
+        and (User where id = token.id).is_admin = true
+}
+
+surface Registration {
+    facing visitor: Visitor
+
+    provides:
+        RegisterUser(username, email, password)
+
+    guarantee: registration always issues a session token; the client may use it or discard it
+    guarantee: duplicate username or email is rejected
+}
+
+surface Login {
+    facing visitor: Visitor
+
+    provides:
+        LoginUser(username, password)
+
+    guarantee: deactivated and deleted accounts cannot log in
+    guarantee: invalid credentials are rejected with no detail on which field failed
+    guidance: brute-force protection is an operational concern outside this spec
+}
+
+surface Logout {
+    facing user: AuthenticatedUser
+
+    provides:
+        LogoutUser(user)
+
+    guarantee: token cookie is cleared regardless of token validity
+    guarantee: the token is server-side invalidated — replaying it on any subsequent request yields 401
+}
+
+surface UserDetail {
+    facing user: AuthenticatedUser
+
+    context subject: User where id = user.id
+
+    exposes:
+        subject.id
+        subject.username
+        subject.email
+        subject.created_at
+        subject.status
+
+    provides:
+        ChangePassword(user, old_password, new_password)
+            when subject.status = active
+        DeleteAccount(user)
+            when subject.status = active
+}
+
+surface UserList {
+    -- Requires authentication; listing users is not a public operation.
+    facing user: AuthenticatedUser
+
+    exposes:
+        for u in Users where status != deleted:
+            u.id
+            u.username
+            u.status
+}
+
+surface AdminUserManagement {
+    facing admin: Admin
+
+    exposes:
+        for u in Users where status != deleted:
+            u.id
+            u.username
+            u.email
+            u.status
+            u.deactivated_at
+            u.deactivated_by
+
+    provides:
+        DeactivateAccount(admin, target_id)
+            when target.status = active
+        ReactivateAccount(admin, target_id)
+            when target.status = deactivated
+}

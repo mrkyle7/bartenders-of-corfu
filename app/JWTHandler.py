@@ -48,6 +48,7 @@ class JWTHandler:
             "sub": user.username,
             "id": str(user.id),
             "iat": now,
+            "iat_us": now.timestamp(),  # microsecond-precision float for invalidation checks
             "exp": now + timedelta(hours=self.expiration_hours),
             "kid": str(self.kid),
         }
@@ -67,7 +68,13 @@ class JWTHandler:
                     raise jwt.InvalidTokenError
             self.public_keys[kid] = public_key
             payload = jwt.decode(token, public_key, algorithms=[self.algorithm])
-            return TokenUser(payload.get("sub"), payload.get("id"))
+            iat_us = payload.get("iat_us")
+            iat = (
+                datetime.fromtimestamp(iat_us, tz=timezone.utc)
+                if iat_us is not None
+                else None
+            )
+            return TokenUser(payload.get("sub"), payload.get("id"), iat=iat)
         except jwt.ExpiredSignatureError:
             return None
         except jwt.InvalidTokenError:

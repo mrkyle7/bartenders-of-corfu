@@ -1,5 +1,7 @@
 import re
+from datetime import datetime
 from uuid import UUID, uuid4
+from typing import Optional
 import bcrypt
 
 
@@ -10,58 +12,31 @@ class UserValidationError(Exception):
 
 
 class TokenUser:
-    def __init__(self, username: str, id: str):
+    def __init__(self, username: str, id: str, iat: Optional[datetime] = None):
         self.username = username
         self.id = UUID(id)
+        self.iat = iat  # UTC datetime when the token was issued
 
     def to_dict(self) -> dict:
         return {"username": self.username, "id": str(self.id)}
 
 
 class User:
-    """
-    Represents a user in the Bartenders of Corfu application.
-
-    This class handles user creation with secure password hashing,
-    input validation, and provides methods for password verification.
-
-    Attributes:
-        id (UUID): Unique identifier for the user
-        username (str): User's display name
-        email (str): User's email
-        _password_hash (bytes): Securely hashed password
-    """
-
     def __init__(self, username: str, email: str, password: str):
-        """
-        Initialize a new User instance.
-
-        Args:
-            username (str): The user's name (3-50 characters, alphanumeric and spaces)
-            email (str): The user's email
-            password (str): The user's password (minimum 8 characters)
-
-        Raises:
-            UserValidationError: If name or password validation fails
-        """
         self.id: UUID = uuid4()
-        self.username: str = self._validate_name(username)
-        self.email: str = self._validate_email(email)
-        self._password_hash: bytes = self._hash_password(password)
+        self.status: str = "active"
+        self.is_admin: bool = False
+        self.username: Optional[str] = self._validate_name(username)
+        self.email: Optional[str] = self._validate_email(email)
+        self._password_hash: Optional[bytes] = self._hash_password(password)
+        self.created_at: Optional[str] = None
+        self.password_changed_at: Optional[str] = None
+        self.deactivated_at: Optional[str] = None
+        self.deactivated_by: Optional[UUID] = None
+        self.deleted_at: Optional[str] = None
+        self.logged_out_at: Optional[str] = None
 
     def _validate_name(self, name: str) -> str:
-        """
-        Validate the user's name.
-
-        Args:
-            name (str): The name to validate
-
-        Returns:
-            str: The validated name (stripped of leading/trailing whitespace)
-
-        Raises:
-            UserValidationError: If name validation fails
-        """
         if not isinstance(name, str):
             raise UserValidationError("Name must be a string")
 
@@ -76,7 +51,6 @@ class User:
         if len(name) > 50:
             raise UserValidationError("Name cannot exceed 50 characters")
 
-        # Allow alphanumeric characters, spaces, hyphens, and underscores
         if not re.match(r"^[a-zA-Z0-9\s\-_]+$", name):
             raise UserValidationError(
                 "Name can only contain letters, numbers, spaces, hyphens, and underscores"
@@ -85,18 +59,6 @@ class User:
         return name
 
     def _validate_email(self, email: str) -> str:
-        """
-        Validate the user's email address.
-
-        Args:
-            email (str): The email address to validate
-
-        Returns:
-            str: The validated email address
-
-        Raises:
-            UserValidationError: If email validation fails
-        """
         if not isinstance(email, str):
             raise UserValidationError("Email must be a string")
 
@@ -105,7 +67,6 @@ class User:
         if not email:
             raise UserValidationError("Email cannot be empty")
 
-        # Basic email format validation
         email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
         if not re.match(email_regex, email):
             raise UserValidationError("Invalid email format")
@@ -113,18 +74,6 @@ class User:
         return email
 
     def _validate_password(self, password: str) -> str:
-        """
-        Validate the user's password.
-
-        Args:
-            password (str): The password to validate
-
-        Returns:
-            str: The validated password
-
-        Raises:
-            UserValidationError: If password validation fails
-        """
         if not isinstance(password, str):
             raise UserValidationError("Password must be a string")
 
@@ -134,7 +83,6 @@ class User:
         if len(password) > 128:
             raise UserValidationError("Password cannot exceed 128 characters")
 
-        # Check for at least one letter and one number
         if not re.search(r"[a-zA-Z]", password):
             raise UserValidationError("Password must contain at least one letter")
 
@@ -144,54 +92,21 @@ class User:
         return password
 
     def _hash_password(self, password: str) -> bytes:
-        """
-        Hash a password using bcrypt.
-
-        Args:
-            password (str): The plain text password to hash
-
-        Returns:
-            bytes: The hashed password
-
-        Raises:
-            UserValidationError: If password validation fails
-        """
         validated_password = self._validate_password(password)
         salt = bcrypt.gensalt()
         return bcrypt.hashpw(validated_password.encode("utf-8"), salt)
 
-    def verify_secret(self, secret: str, hash: bytes) -> bool:
-        """
-        Verify a secret string (password or email) against the stored hash.
-
-        Args:
-            secret (str): The plaintext secret to verify
-
-        Returns:
-            bool: True if secret matches, False otherwise
-        """
+    def verify_secret(self, secret: str, hash: Optional[bytes]) -> bool:
         if not isinstance(secret, str):
             return False
-
+        if not hash:
+            return False
         try:
             return bcrypt.checkpw(secret.encode("utf-8"), hash)
         except (ValueError, TypeError):
             return False
 
     def change_password(self, old_password: str, new_password: str) -> bool:
-        """
-        Change the user's password.
-
-        Args:
-            old_password (str): The current password
-            new_password (str): The new password
-
-        Returns:
-            bool: True if password was changed successfully, False if old password is incorrect
-
-        Raises:
-            UserValidationError: If new password validation fails
-        """
         if not self.verify_secret(old_password, self._password_hash):
             raise UserValidationError("Incorrect password")
 
@@ -199,87 +114,58 @@ class User:
         return True
 
     def __repr__(self) -> str:
-        """
-        Return a string representation of the User.
-
-        Note: Password hash is intentionally excluded for security.
-
-        Returns:
-            str: String representation of the user
-        """
-        return f"User(id={self.id}, name='{self.username}')"
+        return f"User(id={self.id}, name='{self.username}', status='{self.status}')"
 
     def __eq__(self, other) -> bool:
-        """
-        Check equality with another User instance.
-
-        Args:
-            other: The object to compare with
-
-        Returns:
-            bool: True if users have the same name and email
-        """
         if not isinstance(other, User):
             return False
         return self.id == other.id
 
     def __hash__(self) -> int:
-        """
-        Return hash of the user based on ID.
-
-        Returns:
-            int: Hash value
-        """
         return hash(self.id)
 
     def to_dict(self, include_sensitive: bool = False) -> dict:
-        """
-        Convert user to dictionary representation.
-
-        Args:
-            include_sensitive (bool): Whether to include sensitive data (password hash)
-
-        Returns:
-            dict: Dictionary representation of the user
-        """
-        result = {"id": str(self.id), "username": self.username}
+        result: dict = {
+            "id": str(self.id),
+            "username": self.username,
+            "status": self.status,
+        }
 
         if include_sensitive:
-            result["password_hash"] = self._password_hash.decode("utf-8")
             result["email"] = self.email
+            result["is_admin"] = self.is_admin
+            result["created_at"] = self.created_at
+            result["deactivated_at"] = self.deactivated_at
+            result["deactivated_by"] = (
+                str(self.deactivated_by) if self.deactivated_by else None
+            )
 
         return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "User":
-        """
-        Create a User instance from dictionary data.
-
-        This method is useful for deserializing user data from storage.
-        Note: This bypasses normal validation and should only be used
-        with trusted data from storage.
-
-        Args:
-            data (dict): Dictionary containing user data
-
-        Returns:
-            User: New User instance
-
-        Raises:
-            KeyError: If required keys are missing
-            ValueError: If data format is invalid
-        """
-        user = cls.__new__(cls)  # Create instance without calling __init__
+        user = cls.__new__(cls)
         user.id = UUID(data["id"])
-        user.username = data["username"]
-        user.email = data["email"]
+        user.status = data.get("status", "active")
+        user.is_admin = data.get("is_admin", False)
+        user.username = data.get("username")
+        user.email = data.get("email")
+        user.created_at = data.get("created_at")
+        user.password_changed_at = data.get("password_changed_at")
+        user.deactivated_at = data.get("deactivated_at")
+        user.deactivated_by = (
+            UUID(data["deactivated_by"]) if data.get("deactivated_by") else None
+        )
+        user.deleted_at = data.get("deleted_at")
+        user.logged_out_at = data.get("logged_out_at")
 
-        if "password_hash" in data:
-            if isinstance(data["password_hash"], bytes):
-                user._password_hash = data["password_hash"]
+        password_hash = data.get("password_hash")
+        if password_hash:
+            if isinstance(password_hash, bytes):
+                user._password_hash = password_hash
             else:
-                user._password_hash = data["password_hash"].encode("utf-8")
+                user._password_hash = password_hash.encode("utf-8")
         else:
-            raise KeyError("password_hash is required for user deserialization")
+            user._password_hash = None
 
         return user

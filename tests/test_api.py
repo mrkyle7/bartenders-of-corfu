@@ -258,8 +258,21 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_list_users(self):
-        """Test listing users."""
+        """Test listing users requires auth and returns a list."""
+        # Unauthenticated
         response = self.client.get("/v1/users")
+        self.assertEqual(response.status_code, 401)
+
+        # Authenticated
+        timestamp = int(time.time() * 1000000)
+        user_data = {
+            "username": f"listuser{timestamp}",
+            "email": f"listuser{timestamp}@example.com",
+            "password": "password123",
+        }
+        reg = self.client.post("/register", json=user_data)
+        token = reg.cookies.get("userjwt")
+        response = self.client.get("/v1/users", cookies={"userjwt": token})
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("users", data)

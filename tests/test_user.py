@@ -134,26 +134,38 @@ class TestUser(unittest.TestCase):
 
         original_user = User("TestUser", "abc@abc.com", "password123")
 
-        # Test to_dict
+        # Test to_dict (public view)
         user_dict = original_user.to_dict()
-        expected_keys = {"id", "username"}
+        expected_keys = {"id", "username", "status"}
         self.assertEqual(
             set(user_dict.keys()),
             expected_keys,
             f"Expected keys {expected_keys}, got {set(user_dict.keys())}",
         )
+        self.assertEqual(user_dict["status"], "active")
 
         # Test to_dict with sensitive data
         sensitive_dict = original_user.to_dict(include_sensitive=True)
-        expected_sensitive_keys = {"id", "username", "password_hash", "email"}
+        expected_sensitive_keys = {
+            "id", "username", "status", "email", "is_admin",
+            "created_at", "deactivated_at", "deactivated_by",
+        }
         self.assertEqual(
             set(sensitive_dict.keys()),
             expected_sensitive_keys,
             f"Expected keys {expected_sensitive_keys}, got {set(sensitive_dict.keys())}",
         )
 
-        # Test from_dict
-        restored_user = User.from_dict(sensitive_dict)
+        # Test from_dict round-trip
+        data = {
+            "id": str(original_user.id),
+            "username": original_user.username,
+            "email": original_user.email,
+            "password_hash": original_user._password_hash,
+            "status": "active",
+            "is_admin": False,
+        }
+        restored_user = User.from_dict(data)
         self.assertEqual(
             restored_user.id, original_user.id, "Restored user should have same ID"
         )
@@ -166,3 +178,21 @@ class TestUser(unittest.TestCase):
             restored_user.verify_secret("password123", restored_user._password_hash),
             "Restored user should verify original password",
         )
+
+    def test_deleted_user_from_dict(self):
+        """Deleted users have no username, email or password hash."""
+        from uuid import uuid4
+
+        data = {"id": str(uuid4()), "status": "deleted", "is_admin": False}
+        user = User.from_dict(data)
+        self.assertEqual(user.status, "deleted")
+        self.assertIsNone(user.username)
+        self.assertIsNone(user.email)
+        self.assertIsNone(user._password_hash)
+        self.assertFalse(user.verify_secret("anything", user._password_hash))
+
+    def test_new_user_defaults(self):
+        """Newly created users are active and not admins."""
+        user = User("ValidUser", "u@example.com", "password1")
+        self.assertEqual(user.status, "active")
+        self.assertFalse(user.is_admin)
