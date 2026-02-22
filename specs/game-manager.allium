@@ -107,6 +107,7 @@ surface GameList {
 surface GameRoom {
     -- Only members of the game may access room details.
     -- Non-members and unauthenticated visitors are rejected.
+    -- implemented by: ui-frontend/GamePage (provides: RemovePlayer)
     facing viewer: auth/AuthenticatedUser
 
     context game: Game where viewer.id in game.players

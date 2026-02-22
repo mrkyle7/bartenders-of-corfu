@@ -106,6 +106,7 @@ class Db:
             self.supabase.table("users")
             .select(*self._USER_COLUMNS)
             .neq("status", "deleted")
+            .order("created_at", desc=True)
             .limit(1000)
             .execute()
         )
@@ -277,6 +278,7 @@ class Db:
         response = (
             self.supabase.table("games")
             .select("id", "host", "players", "status", "latest_state", "created_at")
+            .order("created_at", desc=True)
             .limit(100)
             .execute()
         )

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Bartenders of Corfu</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/script.js"></script>
+    <script src="/static/admin.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/admin.css">
+</head>
+
+<body>
+    <header class="user-header"><a href="/">Home</a> | <span id="helloUser"></span><a class="hidden" id="logoutLink"
+            href="/logout">Logout</a><a class="hidden" id="loginLink" href="/login">Login</a><a class="hidden"
+            id="adminLink" href="/admin">Admin</a></header>
+    <main>
+        <h1>Admin: User Management</h1>
+        <p id="adminError" role="alert" aria-live="polite" class="hidden error-msg"></p>
+        <div id="userTableContainer">
+            <table id="userTable" aria-label="User list">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Status</th>
+                        <th>Deactivated At</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody"></tbody>
+            </table>
+        </div>
+    </main>
+    <footer>
+        <p>
+            <a href="/">Home</a> |
+            <a href="/docs" target="_blank">API</a> |
+            <a href="https://github.com/mrkyle7/bartenders-of-corfu" target="_blank">Source</a>
+        </p>
+    </footer>
+    <script>
+        setLogOutLink();
+        adminInit();
+    </script>
+</body>
+
+</html>

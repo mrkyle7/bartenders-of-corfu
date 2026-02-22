@@ -1,0 +1,70 @@
+#userTableContainer {
+    max-width: 700px;
+    margin: 0 auto;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    overflow-x: auto;
+}
+
+#userTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 1em;
+    text-align: left;
+}
+
+#userTable th {
+    border-bottom: 2px solid #d4a017;
+    padding: 8px 12px;
+    color: #6b3a0f;
+    font-weight: bold;
+}
+
+#userTable td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e8d5b0;
+}
+
+#userTable tr:last-child td {
+    border-bottom: none;
+}
+
+#userTable tr:hover td {
+    background: rgba(212, 160, 23, 0.08);
+}
+
+.status-active {
+    color: #166534;
+    font-weight: bold;
+}
+
+.status-deactivated {
+    color: #b91c1c;
+    font-weight: bold;
+}
+
+.deactivate-btn {
+    display: inline;
+    margin: 0;
+    padding: 4px 10px;
+    font-size: 0.85em;
+    background: #b91c1c;
+}
+
+.deactivate-btn:hover {
+    background: #991b1b;
+}
+
+.reactivate-btn {
+    display: inline;
+    margin: 0;
+    padding: 4px 10px;
+    font-size: 0.85em;
+    background: #166534;
+}
+
+.reactivate-btn:hover {
+    background: #14532d;
+}

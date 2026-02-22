@@ -53,14 +53,17 @@ surface HomePage {
         JoinGame(game_id)
             when visitor is authenticated
             and visitor.id not in game.players
+            and not game.is_full
         JoinGame(game_id) redirects to LoginPage
             when visitor is unauthenticated
+            and not game.is_full
         GoToGame(game_id)
             when visitor is authenticated
             and visitor.id in game.players
         auth/LogoutUser(visitor)
             when visitor is authenticated
 
+    guarantee: full games (players.count = config.max_players) display "Game Full" in place of any join action
     guarantee: game list is publicly visible; no authentication required to view it
     guarantee: game list shows player usernames, not raw UUIDs
     guarantee: CreateGame and JoinGame redirect to LoginPage when visitor is unauthenticated
@@ -109,12 +112,20 @@ surface GamePage {
         for p in game.players:
             p.username          -- resolved from each player UUID
 
+    provides:
+        games/RemovePlayer(viewer, game.id, target_id)
+            when viewer.id = game.host
+            and target_id in game.players
+            and target_id != viewer.id
+
     guarantee: a 401 or 403 response triggers an alert and redirects to HomePage
     guarantee: all operation failures display a clear, non-technical error message inline
     guarantee: layout is responsive and usable on mobile and desktop viewports
     guarantee: WCAG 2.1 AA compliant — keyboard navigable, screen-reader labelled, sufficient contrast
     guarantee: visual design is polished and consistent with the Bartenders of Corfu theme
     guarantee: initial game state renders within an acceptable time on a standard connection
+    guarantee: the host sees a 'Remove' action next to each non-host player; non-hosts see no such action
+    guarantee: a successful remove refreshes the player list inline without a full page reload
     guidance: in-game interactions (ingredient actions, state updates) should respond within 200 ms
 
     related:

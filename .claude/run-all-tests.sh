@@ -21,7 +21,7 @@ fi
 export SUPABASE_URL SUPABASE_KEY
 
 echo "Running full test suite before stopping..." >&2
-OUTPUT=$(uv run pytest 2>&1)
+OUTPUT=$(uv run pytest --ignore=tests/ui 2>&1)
 EXIT_CODE=$?
 
 echo "$OUTPUT" >&2

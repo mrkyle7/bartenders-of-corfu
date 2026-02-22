@@ -11,7 +11,8 @@
 </head>
 
 <body>
-    <header class="user-header"><span id="helloUser"></span><a class="hidden" id="logoutLink"
+    <header class="user-header"><span id="helloUser"></span><a class="hidden" id="adminLink"
+            href="/admin">Admin</a><a class="hidden" id="logoutLink"
             href="/logout">Logout</a><a class="hidden" id="loginLink" href="/login">Login</a></header>
     <main>
         <img src="/static/bartenders.png" alt="Illustration of bartenders mixing cocktails" class="bartender-image"
@@ -20,6 +21,7 @@
         <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender, before you get too drunk!
         </p>
         <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
+        <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <ul id="gameList" aria-live="polite"></ul>
     </main>
     <footer>
@@ -48,8 +50,7 @@
             console.log(`Last network activity at: ${trueEnd.toFixed(2)} ms`);
         });
         setLogOutLink();
-        setUserHeader();
-        listGames();
+        init();
     </script>
 </body>
 

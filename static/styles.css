@@ -41,6 +41,19 @@ main {
     top: 20px;
     right: 20px;
     font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 600px) {
+    .user-header {
+        position: static;
+        justify-content: center;
+        flex-wrap: wrap;
+        padding: 10px 8px 0;
+        font-size: 0.95em;
+    }
 }
 
 #helloUser {
@@ -111,11 +124,48 @@ ul {
 }
 
 li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     text-align: left;
     margin: 10px 0;
     font-size: 1.1em;
     border-left: 3px solid #d4a017;
     padding-left: 10px;
+}
+
+.game-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.game-title {
+    font-weight: bold;
+    color: #4a2c0e;
+    margin-bottom: 2px;
+}
+
+.game-players {
+    font-size: 0.9em;
+    color: #6b3a0f;
+    margin-bottom: 2px;
+}
+
+.game-status {
+    font-size: 0.8em;
+    font-style: italic;
+    color: #8a5c2e;
+    opacity: 0.85;
+}
+
+.game-action {
+    flex-shrink: 0;
+}
+
+.game-action button {
+    display: inline-block;
+    margin: 0;
 }
 
 button {
@@ -188,4 +238,64 @@ input {
 
 .playerSheet {
     border: black
+}
+
+.error-msg {
+    color: #b91c1c;
+    font-weight: bold;
+    padding: 8px;
+    text-align: center;
+}
+
+.remove-player-btn {
+    display: inline;
+    margin: 0 0 0 6px;
+    padding: 2px 8px;
+    font-size: 0.8em;
+    background: #b91c1c;
+}
+
+.remove-player-btn:hover {
+    background: #991b1b;
+}
+
+.player-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 4px;
+}
+
+.loading-placeholder {
+    justify-content: center;
+    border-left: none;
+    font-style: italic;
+    color: #8a5c2e;
+    opacity: 0.8;
+}
+
+.spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #d4a017;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.game-full-label {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 0.85em;
+    font-style: italic;
+    color: #6b3a0f;
+    opacity: 0.7;
 }

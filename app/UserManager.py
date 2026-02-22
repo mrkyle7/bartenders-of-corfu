@@ -42,6 +42,12 @@ class UserManager:
         """Returns all non-deleted users."""
         return db.get_users()
 
+    def get_users_by_ids(self, ids: set[UUID]) -> list[User]:
+        """Returns users matching the given IDs (single batch query)."""
+        if not ids:
+            return []
+        return db.get_users_by_ids(ids)
+
     def logout_user(self, user_id: UUID) -> None:
         """Record the logout time so the issued token is server-side invalidated."""
         db.logout_user(user_id)

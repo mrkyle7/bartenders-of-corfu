@@ -135,6 +135,19 @@ async def game_page():
     )
 
 
+@app.get("/admin")
+async def admin_page():
+    admin_path = os.path.join("static", "admin.html")
+    return FileResponse(
+        admin_path,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
 @app.get("/health")
 async def health():
     return JSONResponse(content={"isAvailable": True})
@@ -143,8 +156,25 @@ async def health():
 @app.get("/v1/games")
 async def list_games():
     games = gameManager.list_games()
+
+    # Collect all user IDs across every game and resolve in a single DB query
+    all_ids: set[UUID] = set()
+    for game in games:
+        all_ids.add(game.host)
+        all_ids.update(game.players)
+    user_lookup: dict[UUID, str] = {
+        u.id: (u.username or "Unknown")
+        for u in userManager.get_users_by_ids(all_ids)
+    }
+
+    def enrich(game) -> dict:
+        d = game.to_dict()
+        d["host_username"] = user_lookup.get(game.host, "Unknown")
+        d["player_usernames"] = [user_lookup.get(pid, "Unknown") for pid in game.players]
+        return d
+
     logger.info("Listing %d games", len(games))
-    return JSONResponse(content={"games": [game.to_dict() for game in games]})
+    return JSONResponse(content={"games": [enrich(game) for game in games]})
 
 
 @app.get("/v1/games/{game_id}")
