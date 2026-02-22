@@ -4,8 +4,6 @@ import json
 import os
 import subprocess
 
-import pytest
-
 
 def pytest_configure(config):
     """Set Supabase env vars before any app module is collected/imported."""

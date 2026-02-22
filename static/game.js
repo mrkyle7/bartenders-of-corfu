@@ -19,7 +19,7 @@ function renderPlayers(players, game, me) {
         const nameSpan = document.createElement('span');
         nameSpan.textContent = player.username;
         entry.appendChild(nameSpan);
-        if (me && me.id === game.host && player.id !== game.host) {
+        if (me && me.id === game.host && player.id !== game.host && game.status === 'NEW') {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'remove-player-btn';
             removeBtn.dataset.playerId = player.id;
@@ -28,6 +28,48 @@ function renderPlayers(players, game, me) {
             entry.appendChild(removeBtn);
         }
         playerList.appendChild(entry);
+    }
+}
+
+function renderGameControls(game, me) {
+    const controls = document.getElementById("gameControls");
+    controls.innerHTML = '';
+
+    if (game.status === 'STARTED') {
+        const label = document.createElement('span');
+        label.className = 'game-status-label';
+        label.textContent = 'Game in progress';
+        controls.appendChild(label);
+        return;
+    }
+
+    if (game.status === 'ENDED') {
+        const label = document.createElement('span');
+        label.className = 'game-status-label';
+        label.textContent = 'Game over';
+        controls.appendChild(label);
+        return;
+    }
+
+    // status === 'NEW'
+    if (me && me.id === game.host) {
+        if (game.players.length >= 2) {
+            const btn = document.createElement('button');
+            btn.id = 'startGameBtn';
+            btn.textContent = 'Start Game';
+            btn.onclick = () => startGame(game.id);
+            controls.appendChild(btn);
+        } else {
+            const label = document.createElement('span');
+            label.className = 'game-status-label';
+            label.textContent = 'Waiting for players to join\u2026';
+            controls.appendChild(label);
+        }
+    } else {
+        const label = document.createElement('span');
+        label.className = 'game-status-label';
+        label.textContent = 'Waiting for host to start\u2026';
+        controls.appendChild(label);
     }
 }
 
@@ -72,6 +114,7 @@ async function load() {
     });
     const players = await Promise.all(userPromises);
     renderPlayers(players, game, me);
+    renderGameControls(game, me);
 }
 
 async function removePlayer(gameId, playerId) {
@@ -84,5 +127,19 @@ async function removePlayer(gameId, playerId) {
     } else {
         const data = await resp.json().catch(() => ({}));
         showGameError(data.error || 'Failed to remove player. Please try again.');
+    }
+}
+
+async function startGame(gameId) {
+    clearGameError();
+    const btn = document.getElementById('startGameBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting\u2026'; }
+    const resp = await fetch(`/v1/games/${gameId}/start`, { method: 'POST' });
+    if (resp.ok) {
+        await load();
+    } else {
+        if (btn) { btn.disabled = false; btn.textContent = 'Start Game'; }
+        const data = await resp.json().catch(() => ({}));
+        showGameError(data.error || 'Failed to start game. Please try again.');
     }
 }

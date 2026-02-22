@@ -15,7 +15,11 @@ class UserManager:
     def authenticate_user(self, username: str, password: str) -> User | None:
         """Authenticate a user. Returns User only if credentials are valid and account is active."""
         user = self.get_user_by_username(username)
-        if user and user.status == "active" and user.verify_secret(password, user._password_hash):
+        if (
+            user
+            and user.status == "active"
+            and user.verify_secret(password, user._password_hash)
+        ):
             return user
         return None
 
@@ -52,7 +56,9 @@ class UserManager:
         """Record the logout time so the issued token is server-side invalidated."""
         db.logout_user(user_id)
 
-    def change_password(self, user_id: UUID, old_password: str, new_password: str) -> None:
+    def change_password(
+        self, user_id: UUID, old_password: str, new_password: str
+    ) -> None:
         """Change a user's password. Raises UserValidationError if old password is wrong."""
         user = db.get_user_by_id(user_id)
         if not user or user.status != "active":

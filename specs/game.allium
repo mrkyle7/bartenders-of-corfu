@@ -1,0 +1,431 @@
+-- game.allium
+-- Rules engine for Bartenders of Corfu.
+-- Distilled from: Game Rules.md
+--
+-- Covers: ingredients, cups, player state, turn actions, drink validation,
+--         scoring, win/loss conditions, and the cocktail menu.
+-- Does NOT cover: card effects (deferred).
+
+use "./game-manager.allium" as session
+
+-- ─── Config ───────────────────────────────────────────────────────────────────
+
+config {
+    base_take_count: Integer = 3          -- ingredients taken per turn before drunk modifier
+    max_drunk_level: Integer = 5          -- drunk_level above this → hospitalised
+    initial_bladder_capacity: Integer = 8
+    min_bladder_capacity: Integer = 4
+    initial_toilet_tokens: Integer = 4    -- tokens available to place; wees are unlimited
+    initial_cup_count: Integer = 2
+    max_cup_ingredients: Integer = 5      -- spirits and mixers only; specials are always separate
+    open_display_size: Integer = 5
+    score_to_win: Integer = 40
+    karaoke_cards_to_win: Integer = 3     -- claiming this many karaoke cards = instant win
+    min_drunk_to_refresh: Integer = 3     -- drunk level required to refresh a card row
+    karaoke_card_total: Integer = 5       -- total karaoke cards in the game
+}
+
+-- ─── Ingredients ──────────────────────────────────────────────────────────────
+-- Specials are always placed on the player mat when drawn; they cannot be drunk
+-- directly and do not count toward the cup ingredient limit.
+
+entity Ingredient {
+    kind: Spirit | Mixer | Special
+}
+
+variant Spirit : Ingredient {
+    spirit_type: whisky | rum | vodka | gin | tequila
+}
+
+variant Mixer : Ingredient {
+    mixer_type: cola | soda_water | tonic_water | cranberry
+}
+
+variant Special : Ingredient {
+    -- Resolved by rolling the special die when drawn from the bag.
+    -- "nothing" is never stored; the token is returned to the bag immediately.
+    special_type: bitters | cointreau | lemon | sugar | vermouth
+}
+
+-- ─── Cocktail menu ────────────────────────────────────────────────────────────
+-- A cup matches a recipe when:
+--   (a) the cup's spirit/mixer contents match the recipe's required spirits and
+--       mixers exactly (no substitutions, no extras), AND
+--   (b) the player's declared specials from their mat match the recipe's
+--       required specials exactly.
+--
+-- Specials are declared at sell time; they live on the player mat and do not
+-- physically enter the cup.
+--
+-- Name              Spirits               Mixers        Specials            Pts
+-- Mojito            2×rum                 1×soda_water  1×sugar              10
+-- Old Fashioned     3×whisky              —             1×bitters            10
+-- Margarita         2×tequila             —             1×cointreau,         10
+--                                                        1×lemon
+-- Cosmopolitan      1×vodka               1×cranberry   1×cointreau,         10
+--                                                        1×lemon
+-- Gin Martini       3×gin                 —             1×vermouth           10
+-- Vodka Martini     3×vodka               —             1×vermouth           10
+-- Tom Collins       1×gin                 1×soda_water  1×lemon, 1×sugar     10
+-- Manhattan         2×whisky              —             1×vermouth,          10
+--                                                        1×bitters
+-- Long Island       1×gin, 1×vodka,       1×cola        1×sugar, 1×lemon     15
+--   Iced Tea        1×tequila, 1×rum
+
+-- ─── Per-player state ─────────────────────────────────────────────────────────
+
+entity PlayerState {
+    game: session/Game
+    player_id: UUID                          -- a member of session/Game.players
+
+    score: Integer
+    drunk_level: Integer                     -- 0 = sober
+    bladder: List<Ingredient>                -- drunk ingredients not yet excreted
+    bladder_capacity: Integer                -- starts at config.initial_bladder_capacity
+    toilet_tokens: Integer                   -- starts at config.initial_toilet_tokens
+    cups: List<Cup>                          -- exactly config.initial_cup_count cups
+    special_ingredients: List<Special>       -- resolved specials sitting on the player mat
+    cards: List<Card>                        -- permanently claimed ability cards
+    karaoke_cards_claimed: Integer           -- count of karaoke cards held
+    status: active | hospitalised | wet      -- wet = bladder overflow; hospitalised = drunk out
+
+    -- Derived
+    take_limit: drunk_level + config.base_take_count
+    is_eliminated: status in {hospitalised, wet}
+    bladder_used: bladder.count
+}
+
+entity Cup {
+    owner: PlayerState
+    ingredients: List<Ingredient>            -- spirits and mixers only; max config.max_cup_ingredients
+
+    -- Derived
+    spirits: ingredients where kind = Spirit
+    mixers: ingredients where kind = Mixer
+    spirit_count: spirits.count
+    is_full: ingredients.count >= config.max_cup_ingredients
+    is_empty: ingredients.count = 0
+}
+
+-- ─── Board state ──────────────────────────────────────────────────────────────
+
+entity BoardState {
+    game: session/Game
+    ingredient_bag: List<Ingredient>
+    open_display: List<Ingredient>           -- up to config.open_display_size; may be fewer if bag empty
+    card_rows: List<CardRow>                 -- exactly 3 rows; each holds up to 3 cards
+    active_player_id: UUID                   -- whose turn it is
+
+    -- Derived
+    available_ingredients: ingredient_bag + open_display
+}
+
+entity CardRow {
+    board: BoardState
+    position: Integer                        -- 1, 2, or 3
+    cards: List<Card>                        -- 0–3 cards; karaoke cards are never discarded from a row
+}
+
+entity Card {
+    is_karaoke: Boolean
+    cost: List<IngredientRequirement>        -- bladder contents required to claim
+    deferred effect: CardEffect              -- see: cards.allium (not yet written)
+}
+
+value IngredientRequirement {
+    kind: Spirit | Mixer | Special
+    count: Integer
+}
+
+-- ─── Drink scoring ────────────────────────────────────────────────────────────
+-- Categories are checked in order; first match wins.
+--
+-- 1. Long Island Iced Tea  exact recipe match (4 spirits allowed)    → 15 pts
+-- 2. Any other cocktail    exact recipe match                        → 10 pts
+-- 3. Tequila Slammer       exactly 2×tequila, no mixers, no specials →  3 pts
+-- 4. Double spirit drink   2 spirits (same type), ≥1 valid mixer,
+--                          all mixers valid for that spirit type      →  3 pts
+-- 5. Single spirit drink   1 spirit, ≥1 valid mixer,
+--                          all mixers valid for that spirit type      →  1 pt
+--
+-- A cup with 0 spirits, or with any mixer incompatible with its spirit, is not sellable.
+-- Non-cocktail drinks may not contain more than 2 spirit ingredients.
+-- Cocktails are exempt from the 2-spirit cap.
+-- Exact match for cocktails: no extra spirits, mixers, or specials beyond the recipe.
+--
+-- Valid spirit↔mixer pairings:
+--   vodka   → cola, soda_water, tonic_water, cranberry
+--   rum     → cola
+--   whisky  → cola, soda_water
+--   gin     → tonic_water
+--   tequila → (slammer only; no valid mixer pairings)
+
+-- ─── Turn actions ─────────────────────────────────────────────────────────────
+-- On each turn an active player takes exactly ONE of the following actions.
+
+rule TakeIngredients {
+    when: TakeIngredients(player, chosen)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: board.available_ingredients.count >= player.take_limit
+        -- if fewer than take_limit ingredients exist across bag + display,
+        -- this action is unavailable; player must choose another action
+    requires: chosen.count = player.take_limit
+    requires: chosen drawn from board.open_display ∪ board.ingredient_bag in any order
+    -- The player takes ingredients in one or more batches until take_limit is reached.
+    -- Each batch may be any size (e.g. take 3 from the bag at once).
+    -- All ingredients in a batch must be assigned (PlaceIngredientInCup,
+    -- DrinkIngredient, or DrawSpecialIngredient) before the next batch may be taken.
+    -- No ingredient may be returned to the bag or held undecided across batches.
+    ensures: chosen ingredients removed from their source
+    ensures: ReplenishDisplay(board)
+}
+
+rule PlaceIngredientInCup {
+    when: PlaceIngredientInCup(player, ingredient, cup)
+    requires: cup.owner.player_id = player.player_id
+    requires: not cup.is_full
+    requires: ingredient.kind in {Spirit, Mixer}
+    ensures: cup.ingredients = cup.ingredients + [ingredient]
+}
+
+rule DrawSpecialIngredient {
+    -- Called when a player draws a Special token during TakeIngredients.
+    -- The die is rolled immediately to resolve the ingredient type.
+    when: DrawSpecialIngredient(player)
+    if rolled_result != nothing:
+        ensures: player.special_ingredients = player.special_ingredients + [Special(rolled_result)]
+    if rolled_result = nothing:
+        ensures: the special token is returned to board.ingredient_bag
+    -- Specials may never be drunk directly; they always go to the player mat.
+}
+
+rule DrinkIngredient {
+    -- Called during TakeIngredients or DrinkCup for each spirit or mixer consumed.
+    when: DrinkIngredient(player, ingredient)
+    requires: player.status = active
+    requires: ingredient.kind in {Spirit, Mixer}
+    if ingredient.kind = Spirit:
+        ensures: player.drunk_level = player.drunk_level + 1
+    if ingredient.kind = Mixer:
+        ensures: player.drunk_level = max(0, player.drunk_level - 1)
+    ensures: player.bladder = player.bladder + [ingredient]
+    ensures: CheckElimination(player)
+}
+
+rule CheckElimination {
+    when: CheckElimination(player)
+    if player.drunk_level > config.max_drunk_level:
+        ensures: player.status = hospitalised
+    if player.bladder.count > player.bladder_capacity:
+        ensures: player.status = wet
+    -- Eliminated players take no further turns; the game continues for others.
+}
+
+rule SellCup {
+    when: SellCup(player, cup, declared_specials)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: cup.owner.player_id = player.player_id
+    requires: declared_specials ⊆ player.special_ingredients
+    requires: (cup, declared_specials) is a valid sellable drink
+        -- exact recipe match for cocktails; spirit+mixer matrix for standard drinks
+    let points = drink_points(cup, declared_specials)
+    ensures: player.score = player.score + points
+    ensures: player.special_ingredients = player.special_ingredients - declared_specials
+    let sold_ingredients = cup.ingredients (before sale)
+    ensures: cup.ingredients = []
+    ensures: board.ingredient_bag = board.ingredient_bag + sold_ingredients + declared_specials
+    ensures: CheckVictory(player)
+}
+
+rule DrinkCup {
+    -- Player drinks the full contents of one of their cups.
+    -- Follows the same rules as DrinkIngredient for each ingredient in the cup.
+    when: DrinkCup(player, cup)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: cup.owner.player_id = player.player_id
+    requires: not cup.is_empty
+    for ingredient in cup.ingredients:
+        ensures: DrinkIngredient(player, ingredient)
+    ensures: cup.ingredients = []
+    -- Drunk cup ingredients go to the bladder (not the bag).
+    -- When the player later GoesForAWee, these are excreted and returned to the bag.
+}
+
+rule GoForAWee {
+    when: GoForAWee(player)
+    requires: player.status = active
+    requires: it is player's turn
+    -- Bladder ingredients (including those from DrinkCup) are returned to the bag.
+    let excreted = player.bladder
+    ensures: player.bladder = []
+    ensures: board.ingredient_bag = board.ingredient_bag + excreted
+    -- Sober up 1 level.
+    ensures: player.drunk_level = max(0, player.drunk_level - 1)
+    -- Breaking the seal: each wee places one toilet token, shrinking bladder capacity by 1.
+    -- Once all tokens are used (toilet_tokens = 0) capacity no longer changes,
+    -- but the player may still wee freely.
+    if player.toilet_tokens > 0:
+        ensures: player.toilet_tokens = player.toilet_tokens - 1
+        ensures: player.bladder_capacity = player.bladder_capacity - 1
+    -- Permitted even when bladder is empty.
+}
+
+rule ClaimCard {
+    when: ClaimCard(player, card)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: card in any row of board.card_rows
+    requires: for each req in card.cost:
+        player.bladder where kind = req.kind has count >= req.count
+    ensures: player.cards = player.cards + [card]
+    if card.is_karaoke:
+        ensures: player.karaoke_cards_claimed = player.karaoke_cards_claimed + 1
+    ensures: card removed from its CardRow
+        -- Slot stays empty if the deck is exhausted; no reshuffle occurs.
+    if deck has remaining cards:
+        ensures: ReplaceCard(board, card's row)
+    ensures: CheckVictory(player)
+}
+
+rule RefreshCardRow {
+    when: RefreshCardRow(player, row)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: player.drunk_level >= config.min_drunk_to_refresh
+    requires: row in board.card_rows
+    let non_karaoke = row.cards where not is_karaoke
+    ensures: non_karaoke removed from row
+    -- Karaoke cards remain in their position; they are never discarded from the display.
+    for slot in non_karaoke:
+        if deck has remaining cards:
+            ensures: ReplaceCard(board, row)
+        -- If deck is exhausted, the slot stays empty.
+}
+
+-- ─── Board maintenance ────────────────────────────────────────────────────────
+
+rule ReplenishDisplay {
+    when: ReplenishDisplay(board)
+    let deficit = config.open_display_size - board.open_display.count
+    requires: deficit > 0
+    let fill = min(deficit, board.ingredient_bag.count)
+    ensures: board.open_display refilled by fill ingredients drawn from board.ingredient_bag
+    -- Display may remain below config.open_display_size if the bag is empty.
+}
+
+rule ReplaceCard {
+    when: ReplaceCard(board, row)
+    requires: deck has remaining cards
+    ensures: a new card drawn from deck and added to row.cards
+}
+
+-- ─── Victory and elimination ──────────────────────────────────────────────────
+
+rule CheckVictory {
+    -- Called after SellCup or ClaimCard. The active player's win takes precedence;
+    -- if another player also meets a condition on the same turn, the active player wins.
+    when: CheckVictory(player)
+    requires: player.status = active
+    if player.score >= config.score_to_win:
+        ensures: session/Game.status = ended
+        ensures: session/Game.winner = player.player_id
+    if player.karaoke_cards_claimed >= config.karaoke_cards_to_win:
+        ensures: session/Game.status = ended
+        ensures: session/Game.winner = player.player_id
+}
+
+-- ─── Surfaces ─────────────────────────────────────────────────────────────────
+
+surface PlayerTurn {
+    facing player: session/auth/AuthenticatedUser
+
+    context state: PlayerState
+        where player_id = player.id
+        and game.status = started
+
+    exposes:
+        state.score
+        state.drunk_level
+        state.bladder.count
+        state.bladder_capacity
+        state.toilet_tokens
+        state.take_limit
+        state.status
+        state.karaoke_cards_claimed
+        for cup in state.cups:
+            cup.ingredients
+            cup.spirit_count
+            cup.is_full
+            cup.is_empty
+        for s in state.special_ingredients:
+            s.special_type
+        for card in state.cards:
+            card.is_karaoke
+            card.cost
+
+    provides:
+        TakeIngredients(player, chosen)
+            when state.status = active
+            and board.active_player_id = player.id
+            and board.available_ingredients.count >= state.take_limit
+        SellCup(player, cup, declared_specials)
+            when state.status = active
+            and board.active_player_id = player.id
+            and cup in state.cups
+        DrinkCup(player, cup)
+            when state.status = active
+            and board.active_player_id = player.id
+            and cup in state.cups
+            and not cup.is_empty
+        GoForAWee(player)
+            when state.status = active
+            and board.active_player_id = player.id
+        ClaimCard(player, card)
+            when state.status = active
+            and board.active_player_id = player.id
+        RefreshCardRow(player, row)
+            when state.status = active
+            and board.active_player_id = player.id
+            and state.drunk_level >= config.min_drunk_to_refresh
+
+    guarantee: exactly one action is taken per turn
+    guarantee: an eliminated player (hospitalised or wet) takes no further turns; the game continues for others
+    guarantee: cup ingredient count never exceeds config.max_cup_ingredients
+    guarantee: drunk_level never goes below 0
+    guarantee: bladder_capacity never goes below config.min_bladder_capacity
+    guarantee: specials are never placed in cups or drunk directly; they always go to the player mat
+    guarantee: TakeIngredients is unavailable when bag + display together hold fewer than take_limit ingredients
+}
+
+surface BoardView {
+    facing player: session/auth/AuthenticatedUser
+
+    context board: BoardState where game.status = started
+
+    exposes:
+        board.active_player_id
+        for i in board.open_display:
+            i.kind
+            i.spirit_type?
+            i.mixer_type?
+        board.ingredient_bag.count         -- bag size is public; specific contents are hidden
+        for row in board.card_rows:
+            row.position
+            for card in row.cards:
+                card.is_karaoke
+                card.cost
+
+    guarantee: bag contents are never revealed; only the count is visible
+    guarantee: open display contents are always visible to all players
+
+    related:
+        PlayerTurn(player)
+            when board.active_player_id = player.id
+}
+
+-- ─── Deferred ─────────────────────────────────────────────────────────────────
+
+deferred CardEffect.definitions    -- see: cards.allium (card set not yet enumerated)

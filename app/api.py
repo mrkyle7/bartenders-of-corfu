@@ -2,7 +2,7 @@ import os
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from app.gameManager import GameManager
@@ -14,6 +14,9 @@ from pydantic import BaseModel
 import traceback
 
 from app.user import TokenUser, UserValidationError
+from typing import Optional
+
+_VALID_STATUSES = {"NEW", "STARTED", "ENDED"}
 
 logger = logging.getLogger(__name__)
 
@@ -154,27 +157,57 @@ async def health():
 
 
 @app.get("/v1/games")
-async def list_games():
-    games = gameManager.list_games()
+async def list_games(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    status: Optional[str] = Query(default=None),
+    player_id: Optional[str] = Query(default=None),
+):
+    status_upper = status.upper() if status else None
+    if status_upper and status_upper not in _VALID_STATUSES:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": f"Invalid status. Must be one of: {', '.join(sorted(_VALID_STATUSES))}"
+            },
+        )
+    player_uuid: Optional[UUID] = None
+    if player_id:
+        try:
+            player_uuid = UUID(player_id)
+        except ValueError:
+            return JSONResponse(status_code=400, content={"error": "Invalid player_id"})
 
-    # Collect all user IDs across every game and resolve in a single DB query
+    games, total = gameManager.list_games(
+        page=page, page_size=page_size, status=status_upper, player_id=player_uuid
+    )
+
+    # Resolve usernames in a single batch query
     all_ids: set[UUID] = set()
     for game in games:
         all_ids.add(game.host)
         all_ids.update(game.players)
     user_lookup: dict[UUID, str] = {
-        u.id: (u.username or "Unknown")
-        for u in userManager.get_users_by_ids(all_ids)
+        u.id: (u.username or "Unknown") for u in userManager.get_users_by_ids(all_ids)
     }
 
     def enrich(game) -> dict:
         d = game.to_dict()
         d["host_username"] = user_lookup.get(game.host, "Unknown")
-        d["player_usernames"] = [user_lookup.get(pid, "Unknown") for pid in game.players]
+        d["player_usernames"] = [
+            user_lookup.get(pid, "Unknown") for pid in game.players
+        ]
         return d
 
-    logger.info("Listing %d games", len(games))
-    return JSONResponse(content={"games": [enrich(game) for game in games]})
+    logger.info("Listing %d games (page %d, total %d)", len(games), page, total)
+    return JSONResponse(
+        content={
+            "games": [enrich(game) for game in games],
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+        }
+    )
 
 
 @app.get("/v1/games/{game_id}")
@@ -240,6 +273,22 @@ async def join_game(game_id: str, request: Request):
     except Exception:
         logger.exception("Error joining game")
         return JSONResponse(status_code=500, content={"error": "Failed to join game"})
+
+
+@app.post("/v1/games/{game_id}/start")
+async def start_game(game_id: str, request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    try:
+        gameManager.start_game(token_user.id, UUID(game_id))
+        logger.info(f"{token_user.username} started game {game_id}")
+        return JSONResponse(content={"message": "Game started"})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error starting game")
+        return JSONResponse(status_code=500, content={"error": "Failed to start game"})
 
 
 @app.delete("/v1/games/{game_id}/players/{player_id}")

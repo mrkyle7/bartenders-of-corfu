@@ -51,6 +51,73 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("games", data)
+        self.assertIn("page", data)
+        self.assertIn("page_size", data)
+        self.assertIn("total", data)
+
+    def test_list_games_pagination_fields(self):
+        """Pagination metadata is returned correctly."""
+        response = self.client.get("/v1/games?page=1&page_size=5")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["page"], 1)
+        self.assertEqual(data["page_size"], 5)
+        self.assertIsInstance(data["total"], int)
+        self.assertLessEqual(len(data["games"]), 5)
+
+    def test_list_games_invalid_page_size(self):
+        """page_size > 100 is rejected."""
+        response = self.client.get("/v1/games?page_size=101")
+        self.assertEqual(response.status_code, 422)
+
+    def test_list_games_invalid_status(self):
+        """An unrecognised status value returns 400."""
+        response = self.client.get("/v1/games?status=BOGUS")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_list_games_valid_status_filter(self):
+        """status=NEW filter is accepted and returns only NEW games."""
+        response = self.client.get("/v1/games?status=NEW")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        for game in data["games"]:
+            self.assertEqual(game["status"], "NEW")
+
+    def test_list_games_status_case_insensitive(self):
+        """status filter accepts lowercase."""
+        response = self.client.get("/v1/games?status=new")
+        self.assertEqual(response.status_code, 200)
+
+    def test_list_games_invalid_player_id(self):
+        """A non-UUID player_id returns 400."""
+        response = self.client.get("/v1/games?player_id=not-a-uuid")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_list_games_player_id_filter(self):
+        """player_id filter returns only games containing that player."""
+        timestamp = int(time.time() * 1000000)
+        user_data = {
+            "username": f"filteruser{timestamp}",
+            "email": f"filteruser{timestamp}@example.com",
+            "password": "password123",
+        }
+        reg = self.client.post("/register", json=user_data)
+        self.assertEqual(reg.status_code, 201)
+        token = reg.cookies.get("userjwt")
+        user_id = reg.json()["id"]
+
+        # Create a game as this user
+        game_resp = self.client.post("/v1/games", cookies={"userjwt": token})
+        self.assertEqual(game_resp.status_code, 200)
+
+        # Filter by player_id — game must appear
+        response = self.client.get(f"/v1/games?player_id={user_id}")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        player_ids_in_results = [pid for g in data["games"] for pid in g["players"]]
+        self.assertIn(user_id, player_ids_in_results)
 
     def test_create_game_requires_auth(self):
         """Test creating a game requires authentication."""

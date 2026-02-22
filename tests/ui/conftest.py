@@ -25,6 +25,7 @@ BASE = f"http://127.0.0.1:{PORT}"
 # Live server fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def base_url():
     """Start a uvicorn server and yield the base URL."""
@@ -58,10 +59,15 @@ def base_url():
 # Raw HTTP helpers (no browser)
 # ---------------------------------------------------------------------------
 
+
 def _api_register(base_url: str, username: str) -> tuple[dict, str]:
     """Register a new user; returns (user_dict, jwt_token)."""
     body = json.dumps(
-        {"username": username, "email": f"{username}@test.invalid", "password": "Password1"}
+        {
+            "username": username,
+            "email": f"{username}@test.invalid",
+            "password": "Password1",
+        }
     ).encode()
     req = urllib.request.Request(
         f"{base_url}/register",
@@ -77,7 +83,7 @@ def _api_register(base_url: str, username: str) -> tuple[dict, str]:
         for part in cookie_header.split(";"):
             part = part.strip()
             if part.startswith("userjwt="):
-                jwt = part[len("userjwt="):]
+                jwt = part[len("userjwt=") :]
                 break
         return user, jwt
 
@@ -104,6 +110,7 @@ def _api_post(base_url: str, path: str, jwt: str, body: dict | None = None) -> d
 # ---------------------------------------------------------------------------
 # Browser-level fixtures
 # ---------------------------------------------------------------------------
+
 
 def _unique(prefix: str) -> str:
     return f"{prefix}_{time.time_ns()}"

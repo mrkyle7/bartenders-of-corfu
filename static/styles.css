@@ -290,6 +290,42 @@ input {
     to { transform: rotate(360deg); }
 }
 
+.game-section > h2 {
+    max-width: 630px;
+    margin: 16px auto 0;
+    text-align: left;
+    font-size: 1.2em;
+    color: #6b3a0f;
+    padding-left: 5px;
+    font-style: normal;
+}
+
+.game-section-empty {
+    justify-content: center;
+    border-left: none;
+    font-style: italic;
+    color: #8a5c2e;
+    opacity: 0.8;
+}
+
+.load-more-item {
+    justify-content: center;
+    border-left: none;
+}
+
+.load-more-btn {
+    display: inline-block;
+    margin: 2px auto;
+    padding: 6px 20px;
+    font-size: 0.9em;
+    background: #a0724a;
+    box-shadow: none;
+}
+
+.load-more-btn:hover {
+    background: #8a5c2e;
+}
+
 .game-full-label {
     display: inline-block;
     margin-left: 8px;

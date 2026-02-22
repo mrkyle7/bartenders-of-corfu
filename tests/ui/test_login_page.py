@@ -9,8 +9,6 @@ Covers:
   - duplicate registration shows inline error
 """
 
-import time
-import pytest
 from tests.ui.conftest import _api_register, _unique
 
 
@@ -48,9 +46,12 @@ def test_login_redirects_home(page, base_url):
 
 def test_invalid_login_inline_error(page, base_url):
     """Wrong password shows inline #message text; no alert() fires."""
-    page.on("dialog", lambda d: (_ for _ in ()).throw(
-        AssertionError(f"Unexpected alert: {d.message}")
-    ))
+    page.on(
+        "dialog",
+        lambda d: (_ for _ in ()).throw(
+            AssertionError(f"Unexpected alert: {d.message}")
+        ),
+    )
 
     page.goto(f"{base_url}/login")
     page.fill("#loginForm input[name='username']", "nobody")

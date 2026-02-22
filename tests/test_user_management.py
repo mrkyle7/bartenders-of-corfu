@@ -54,9 +54,7 @@ class TestUserListRequiresAuth(UserManagementTestCase):
         resp = self.client.get("/v1/users", cookies=self._auth(self._token(reg)))
         self.assertEqual(resp.status_code, 200)
         self.assertIn("users", resp.json())
-        self.assertTrue(
-            any(u["username"] == username for u in resp.json()["users"])
-        )
+        self.assertTrue(any(u["username"] == username for u in resp.json()["users"]))
 
     def test_user_list_excludes_deleted(self):
         username = _unique("deleteme")
@@ -68,9 +66,7 @@ class TestUserListRequiresAuth(UserManagementTestCase):
         # Use a different user to list
         other = _unique("other")
         other_reg = self._register(other, f"{other}@example.com")
-        resp = self.client.get(
-            "/v1/users", cookies=self._auth(self._token(other_reg))
-        )
+        resp = self.client.get("/v1/users", cookies=self._auth(self._token(other_reg)))
         self.assertEqual(resp.status_code, 200)
         usernames = [u["username"] for u in resp.json()["users"]]
         self.assertNotIn(username, usernames)
@@ -82,9 +78,7 @@ class TestUserListRequiresAuth(UserManagementTestCase):
 
         resp = self.client.get("/v1/users", cookies=self._auth(token))
         self.assertEqual(resp.status_code, 200)
-        user_entry = next(
-            u for u in resp.json()["users"] if u["username"] == username
-        )
+        user_entry = next(u for u in resp.json()["users"] if u["username"] == username)
         self.assertIn("status", user_entry)
         self.assertEqual(user_entry["status"], "active")
 
@@ -343,12 +337,14 @@ class TestAdminDeactivateReactivate(UserManagementTestCase):
         # Use a fresh client with no cookies so the request is truly unauthenticated
         fresh = TestClient(app)
         from uuid import uuid4
+
         resp = fresh.post(f"/v1/users/{uuid4()}/deactivate")
         self.assertEqual(resp.status_code, 401)
 
     def test_reactivate_requires_auth(self):
         fresh = TestClient(app)
         from uuid import uuid4
+
         resp = fresh.post(f"/v1/users/{uuid4()}/reactivate")
         self.assertEqual(resp.status_code, 401)
 

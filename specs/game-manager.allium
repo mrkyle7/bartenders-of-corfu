@@ -7,6 +7,9 @@ use "./user-management.allium" as auth
 
 config {
     max_players: Integer = 4
+    min_players_to_start: Integer = 2
+    list_page_size_default: Integer = 20
+    list_page_size_max: Integer = 100
 }
 
 entity Game {
@@ -54,11 +57,25 @@ rule JoinGame {
     -- the once-only constraint is per game, not per player globally.
 }
 
+rule StartGame {
+    -- Host-only action. Requires at least min_players_to_start players.
+    when: StartGame(requester: auth/TokenUser, game_id: UUID)
+    requires: game: Game where id = game_id
+    requires: requester.id = game.host
+    requires: game.status = new
+    requires: game.players.count >= config.min_players_to_start
+    ensures: game.status = started
+    -- game_state is initialised with a full ingredient bag, open display,
+    -- and player states for all joined players. See: game.allium.
+}
+
 rule RemovePlayer {
     -- Host-only action. The host cannot remove themselves.
+    -- Only permitted while the game is still in status new.
     when: RemovePlayer(requester: auth/TokenUser, game_id: UUID, target_id: UUID)
     requires: game: Game where id = game_id
     requires: requester.id = game.host
+    requires: game.status = new
     requires: target_id in game.players
     requires: target_id != game.host
     ensures: game.players = game.players - { target_id }
@@ -81,14 +98,24 @@ rule RemovePlayer {
 
 surface GameList {
     -- Public. No authentication required to browse available games.
+    -- Supports pagination and optional filtering.
     facing visitor: auth/Visitor
 
+    -- Query parameters accepted by this surface:
+    --   page        Integer ≥ 1; default 1
+    --   page_size   Integer 1–config.list_page_size_max; default config.list_page_size_default
+    --   status      Optional: new | started | ended — filter to a single status
+    --   player_id   Optional: UUID — filter to games that include this player
+
     exposes:
-        for g in Games:
+        for g in Games [filtered by status?, player_id?, ordered newest-first, paginated]:
             g.id
             g.host
             g.players
             g.status
+        page: Integer
+        page_size: Integer
+        total: Integer     -- total matching game count across all pages
 
     provides:
         CreateGame(visitor)
@@ -98,7 +125,10 @@ surface GameList {
             and game.is_joinable
             and visitor.id not in game.players
 
-    guarantee: all games are listed regardless of status
+    guarantee: results are ordered newest-first
+    guarantee: page_size is capped at config.list_page_size_max
+    guarantee: an invalid status value returns a 400 error
+    guarantee: an invalid player_id value returns a 400 error
     guarantee: a player who is already a member of a game cannot join it again
     guarantee: a full game (players.count = config.max_players) cannot be joined
     guarantee: a game that is not in status new cannot be joined
@@ -119,6 +149,10 @@ surface GameRoom {
         game.status
 
     provides:
+        StartGame(viewer, game.id)
+            when viewer.id = game.host
+            and game.status = new
+            and game.players.count >= config.min_players_to_start
         RemovePlayer(viewer, game.id, target_id)
             when viewer.id = game.host
             and target_id in game.players

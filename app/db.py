@@ -236,6 +236,12 @@ class Db:
                     drunk_level=ps_data["drunk_level"],
                     cup1=[Ingredient[ingredient] for ingredient in ps_data["cup1"]],
                     cup2=[Ingredient[ingredient] for ingredient in ps_data["cup2"]],
+                    bladder=[Ingredient[i] for i in ps_data.get("bladder", [])],
+                    bladder_capacity=ps_data.get("bladder_capacity", 8),
+                    toilet_tokens=ps_data.get("toilet_tokens", 4),
+                    special_ingredients=ps_data.get("special_ingredients", []),
+                    karaoke_cards_claimed=ps_data.get("karaoke_cards_claimed", 0),
+                    status=ps_data.get("status", "active"),
                 )
 
         game_state = GameState(
@@ -247,6 +253,7 @@ class Db:
             player_turn=UUID(state_data["player_turn"])
             if state_data.get("player_turn")
             else None,
+            open_display=[Ingredient[i] for i in state_data.get("open_display", [])],
         )
 
         return Game(
@@ -273,21 +280,56 @@ class Db:
 
         return None
 
-    def get_games(self) -> list[Game]:
-        """Get all games"""
+    def get_games(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        status: str | None = None,
+        player_id: UUID | None = None,
+    ) -> tuple[list[Game], int]:
+        """Get paginated games with optional filters. Returns (games, total_count)."""
+        offset = (page - 1) * page_size
+        query = (
+            self.supabase.table("games")
+            .select(
+                "id, host, players, status, latest_state, created_at",
+                count="exact",
+            )
+            .order("created_at", desc=True)
+        )
+        if status:
+            query = query.eq("status", status)
+        if player_id:
+            query = query.contains("players", [str(player_id)])
+        response = query.range(offset, offset + page_size - 1).execute()
+        games = [Db.game_response_to_game(g) for g in response.data]
+        total = response.count or 0
+        return games, total
+
+    def start_game(self, game_id: UUID, game_state: GameState) -> str:
+        """Start a game: atomically set status=STARTED and save new game_state.
+        Returns 'ok' | 'not_found' | 'not_new'"""
         response = (
             self.supabase.table("games")
-            .select("id", "host", "players", "status", "latest_state", "created_at")
-            .order("created_at", desc=True)
-            .limit(100)
+            .update(
+                {
+                    "status": "STARTED",
+                    "latest_state": game_state.to_dict(),
+                }
+            )
+            .eq("id", str(game_id))
+            .eq("status", "NEW")
             .execute()
         )
-
-        games = []
-        for game_data in response.data:
-            games.append(Db.game_response_to_game(game_data))
-
-        return games
+        if len(response.data) == 1:
+            return "ok"
+        # Distinguish not_found from not_new
+        check = (
+            self.supabase.table("games").select("id").eq("id", str(game_id)).execute()
+        )
+        if not check.data:
+            return "not_found"
+        return "not_new"
 
     def add_player_to_game(self, game_id: UUID, player_id: UUID) -> str:
         """Add a player to an existing game. Returns a text code: 'ok' | 'not_found' | 'not_new' | 'duplicate' | 'full'"""
@@ -296,11 +338,17 @@ class Db:
         ).execute()
         return response.data
 
-    def remove_player_from_game(self, game_id: UUID, requester_id: UUID, player_id: UUID) -> str:
+    def remove_player_from_game(
+        self, game_id: UUID, requester_id: UUID, player_id: UUID
+    ) -> str:
         """Remove a player from an existing game. Returns a text code: 'ok' | 'not_found' | 'not_host' | 'not_in_game' | 'is_host'"""
         response = self.supabase.rpc(
             "remove_player_from_game",
-            {"game_id": str(game_id), "requester_id": str(requester_id), "player_id": str(player_id)},
+            {
+                "game_id": str(game_id),
+                "requester_id": str(requester_id),
+                "player_id": str(player_id),
+            },
         ).execute()
         return response.data
 

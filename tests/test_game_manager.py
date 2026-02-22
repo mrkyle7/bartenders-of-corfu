@@ -43,6 +43,9 @@ class GameManagerTestCase(unittest.TestCase):
             f"/v1/games/{game_id}/players/{player_id}", cookies=self._auth(token)
         )
 
+    def _start_game(self, token: str, game_id: str):
+        return self.client.post(f"/v1/games/{game_id}/start", cookies=self._auth(token))
+
 
 class TestJoinGame(GameManagerTestCase):
     def test_join_game_success(self):
@@ -151,6 +154,13 @@ class TestRemovePlayer(GameManagerTestCase):
         resp = self.client.delete(f"/v1/games/{uuid4()}/players/{uuid4()}")
         self.assertEqual(resp.status_code, 401)
 
+    def test_cannot_remove_player_from_started_game(self):
+        host_token, _, game_id, _, player_id = self._setup_game_with_player()
+        self._start_game(host_token, game_id)
+        resp = self._remove_player(host_token, game_id, player_id)
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn("started", resp.json()["error"])
+
 
 class TestConcurrentPlayerOps(GameManagerTestCase):
     def test_concurrent_join_only_one_succeeds(self):
@@ -230,7 +240,115 @@ class TestConcurrentPlayerOps(GameManagerTestCase):
         resp = self.client.get(f"/v1/games/{game_id}", cookies=self._auth(host_token))
         self.assertEqual(resp.status_code, 200)
         remaining = resp.json()["players"]
-        self.assertEqual(len(remaining), 2, f"Expected 2 players remaining, got {len(remaining)}: {remaining}")
+        self.assertEqual(
+            len(remaining),
+            2,
+            f"Expected 2 players remaining, got {len(remaining)}: {remaining}",
+        )
+
+
+class TestStartGame(GameManagerTestCase):
+    def _setup_game_with_two_players(self):
+        """Create a game and add a second player. Returns (host_token, host_id, game_id, player_token, player_id)."""
+        host = _unique("host")
+        host_reg = self._register(host, f"{host}@example.com")
+        host_token = self._token(host_reg)
+        host_id = host_reg.json()["id"]
+        game_id = self._new_game(host_token)
+
+        player = _unique("player")
+        player_reg = self._register(player, f"{player}@example.com")
+        player_token = self._token(player_reg)
+        player_id = player_reg.json()["id"]
+        self._join_game(player_token, game_id)
+
+        return host_token, host_id, game_id, player_token, player_id
+
+    def test_host_can_start_game_with_two_players(self):
+        host_token, _, game_id, _, _ = self._setup_game_with_two_players()
+        resp = self._start_game(host_token, game_id)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_start_game_updates_status_to_started(self):
+        host_token, _, game_id, _, _ = self._setup_game_with_two_players()
+        self._start_game(host_token, game_id)
+        game_resp = self.client.get(
+            f"/v1/games/{game_id}", cookies=self._auth(host_token)
+        )
+        self.assertEqual(game_resp.json()["status"], "STARTED")
+
+    def test_start_game_initialises_game_state(self):
+        """Started game should have bag, open_display (5 items), and player states."""
+        host_token, host_id, game_id, _, player_id = self._setup_game_with_two_players()
+        self._start_game(host_token, game_id)
+        game_resp = self.client.get(
+            f"/v1/games/{game_id}", cookies=self._auth(host_token)
+        )
+        state = game_resp.json()["game_state"]
+        self.assertEqual(len(state["open_display"]), 5)
+        self.assertEqual(len(state["bag_contents"]), 40)  # 45 - 5 open
+        self.assertIn(host_id, state["player_states"])
+        self.assertIn(player_id, state["player_states"])
+        self.assertIsNotNone(state["player_turn"])
+
+    def test_start_game_player_state_has_correct_initial_values(self):
+        host_token, host_id, game_id, _, _ = self._setup_game_with_two_players()
+        self._start_game(host_token, game_id)
+        game_resp = self.client.get(
+            f"/v1/games/{game_id}", cookies=self._auth(host_token)
+        )
+        ps = game_resp.json()["game_state"]["player_states"][host_id]
+        self.assertEqual(ps["points"], 0)
+        self.assertEqual(ps["drunk_level"], 0)
+        self.assertEqual(ps["bladder_capacity"], 8)
+        self.assertEqual(ps["toilet_tokens"], 4)
+        self.assertEqual(ps["bladder"], [])
+        self.assertEqual(ps["special_ingredients"], [])
+        self.assertEqual(ps["karaoke_cards_claimed"], 0)
+        self.assertEqual(ps["status"], "active")
+
+    def test_non_host_cannot_start_game(self):
+        _, _, game_id, player_token, _ = self._setup_game_with_two_players()
+        resp = self._start_game(player_token, game_id)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_cannot_start_game_with_only_one_player(self):
+        host = _unique("solo")
+        host_reg = self._register(host, f"{host}@example.com")
+        host_token = self._token(host_reg)
+        game_id = self._new_game(host_token)
+        resp = self._start_game(host_token, game_id)
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn("2 players", resp.json()["error"])
+
+    def test_cannot_start_already_started_game(self):
+        host_token, _, game_id, _, _ = self._setup_game_with_two_players()
+        self._start_game(host_token, game_id)
+        resp = self._start_game(host_token, game_id)
+        self.assertEqual(resp.status_code, 409)
+
+    def test_start_game_requires_auth(self):
+        from uuid import uuid4
+
+        resp = self.client.post(f"/v1/games/{uuid4()}/start")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_start_nonexistent_game(self):
+        host = _unique("host")
+        host_reg = self._register(host, f"{host}@example.com")
+        host_token = self._token(host_reg)
+        from uuid import uuid4
+
+        resp = self._start_game(host_token, str(uuid4()))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_cannot_join_started_game(self):
+        host_token, _, game_id, _, _ = self._setup_game_with_two_players()
+        self._start_game(host_token, game_id)
+        newcomer = _unique("newcomer")
+        newcomer_reg = self._register(newcomer, f"{newcomer}@example.com")
+        resp = self._join_game(self._token(newcomer_reg), game_id)
+        self.assertEqual(resp.status_code, 409)
 
 
 if __name__ == "__main__":

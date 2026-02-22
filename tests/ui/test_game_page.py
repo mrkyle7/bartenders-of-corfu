@@ -11,7 +11,6 @@ Covers:
   - removing a player refreshes the player list inline
 """
 
-import pytest
 from tests.ui.conftest import _api_register, _api_post, _unique
 
 
@@ -22,6 +21,7 @@ def _game_url(base_url: str, game_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Access control
 # ---------------------------------------------------------------------------
+
 
 def test_unauthenticated_redirected(page, base_url, other_user_and_jwt):
     """No cookie: /game?id=... redirects to /."""
@@ -49,6 +49,7 @@ def test_non_member_redirected(page, base_url, new_user, other_user_and_jwt):
 # Content rendering
 # ---------------------------------------------------------------------------
 
+
 def test_player_usernames_shown(page, base_url, new_user, new_game):
     """Host username is rendered in #playerList (not a raw UUID)."""
     page.goto(_game_url(base_url, new_game))
@@ -58,12 +59,16 @@ def test_player_usernames_shown(page, base_url, new_user, new_game):
     assert new_user["username"] in text
     # UUID-like strings should NOT appear
     import re
-    assert not re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text)
+
+    assert not re.search(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text
+    )
 
 
 # ---------------------------------------------------------------------------
 # RemovePlayer button visibility
 # ---------------------------------------------------------------------------
+
 
 def test_host_sees_remove_buttons(page, base_url, new_user, new_game):
     """Host sees a .remove-player-btn next to each non-host player."""
@@ -80,16 +85,18 @@ def test_host_sees_remove_buttons(page, base_url, new_user, new_game):
     assert remove_btns.count() >= 1
 
 
-def test_non_host_no_remove_buttons(page, base_url, new_user, new_game, other_user_and_jwt):
+def test_non_host_no_remove_buttons(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
     """A non-host player sees no .remove-player-btn."""
     # other_user joins the game
     _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
 
     # Log in as other_user in the browser
     page.context.clear_cookies()
-    page.context.add_cookies([
-        {"name": "userjwt", "value": other_user_and_jwt["jwt"], "url": base_url}
-    ])
+    page.context.add_cookies(
+        [{"name": "userjwt", "value": other_user_and_jwt["jwt"], "url": base_url}]
+    )
 
     page.goto(_game_url(base_url, new_game))
     player_list = page.locator("#playerList")

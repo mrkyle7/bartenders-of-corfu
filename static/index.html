@@ -22,7 +22,14 @@
         </p>
         <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
-        <ul id="gameList" aria-live="polite"></ul>
+        <section class="game-section hidden" id="myGamesSection">
+            <h2>Your Games</h2>
+            <ul id="myGameList" aria-live="polite"></ul>
+        </section>
+        <section class="game-section" id="joinGamesSection">
+            <h2>Join a Game</h2>
+            <ul id="joinGameList" aria-live="polite"></ul>
+        </section>
     </main>
     <footer>
         <p>

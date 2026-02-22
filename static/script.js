@@ -2,6 +2,12 @@ let user;
 let listGamesInProgress = false;
 let initialLoadDone = false;
 
+const PAGE_SIZE = 20;
+let myGamesPage = 1;
+let myGamesTotal = 0;
+let joinGamesPage = 1;
+let joinGamesTotal = 0;
+
 async function setUserHeader() {
     const response = await fetch('/userDetails')
     if (!response.ok) {
@@ -55,7 +61,6 @@ function buildGameItem(game) {
     if (game.id) li.dataset.gameId = game.id;
     if (game.pending) li.dataset.pending = 'true';
 
-    // Info column
     const info = document.createElement('div');
     info.className = 'game-info';
 
@@ -81,7 +86,6 @@ function buildGameItem(game) {
 
     li.appendChild(info);
 
-    // Action column
     const action = document.createElement('div');
     action.className = 'game-action';
 
@@ -124,13 +128,101 @@ function buildGameItem(game) {
     return li;
 }
 
+function _emptyPlaceholder(text) {
+    const li = document.createElement('li');
+    li.className = 'game-section-empty';
+    li.textContent = text;
+    return li;
+}
+
+function _loadMoreItem(onClick) {
+    const li = document.createElement('li');
+    li.className = 'load-more-item';
+    const btn = document.createElement('button');
+    btn.className = 'load-more-btn';
+    btn.textContent = 'Load more';
+    btn.onclick = () => {
+        btn.disabled = true;
+        btn.textContent = 'Loading\u2026';
+        onClick();
+    };
+    li.appendChild(btn);
+    return li;
+}
+
+async function loadMyGames(page, append = false) {
+    if (!user) return;
+    const list = document.getElementById('myGameList');
+    const resp = await fetch(
+        `/v1/games?player_id=${encodeURIComponent(user.id)}&page=${page}&page_size=${PAGE_SIZE}`
+    );
+    if (!resp.ok) {
+        showGameListError('Failed to load your games. Please refresh.');
+        return;
+    }
+    const data = await resp.json();
+    myGamesPage = page;
+    myGamesTotal = data.total;
+
+    if (!append) list.innerHTML = '';
+    const existingMore = list.querySelector('.load-more-item');
+    if (existingMore) existingMore.remove();
+
+    if (data.games.length === 0 && !append) {
+        list.appendChild(_emptyPlaceholder('You have no active games.'));
+    } else {
+        data.games.forEach(g => list.appendChild(buildGameItem(g)));
+    }
+
+    if (page * PAGE_SIZE < myGamesTotal) {
+        list.appendChild(_loadMoreItem(() => loadMyGames(page + 1, true)));
+    }
+}
+
+async function loadJoinableGames(page, append = false) {
+    const list = document.getElementById('joinGameList');
+    const resp = await fetch(
+        `/v1/games?status=NEW&page=${page}&page_size=${PAGE_SIZE}`
+    );
+    if (!resp.ok) {
+        showGameListError('Failed to load joinable games. Please refresh.');
+        return;
+    }
+    const data = await resp.json();
+    joinGamesPage = page;
+    joinGamesTotal = data.total;
+
+    if (!append) list.innerHTML = '';
+    const existingMore = list.querySelector('.load-more-item');
+    if (existingMore) existingMore.remove();
+
+    // Filter out games the user is already a member of
+    const joinable = data.games.filter(
+        g => !user || !g.players || !g.players.some(p => p === user.id)
+    );
+
+    if (joinable.length === 0 && !append) {
+        list.appendChild(_emptyPlaceholder('No games available to join right now.'));
+    } else {
+        joinable.forEach(g => list.appendChild(buildGameItem(g)));
+    }
+
+    if (page * PAGE_SIZE < joinGamesTotal) {
+        list.appendChild(_loadMoreItem(() => loadJoinableGames(page + 1, true)));
+    }
+}
+
 async function createNewGame() {
     clearGameListError();
     const btn = document.querySelector("button[aria-label='Start new game']");
     if (btn) { btn.disabled = true; btn.textContent = 'Creating\u2026'; }
 
-    // Optimistic: immediately prepend a placeholder row
-    const gameList = document.getElementById('gameList');
+    const mySection = document.getElementById('myGamesSection');
+    const myList = document.getElementById('myGameList');
+    mySection.classList.remove('hidden');
+    const emptyEl = myList.querySelector('.game-section-empty');
+    if (emptyEl) emptyEl.remove();
+
     const placeholder = buildGameItem({
         host_username: user ? user.username : 'You',
         player_usernames: user ? [user.username] : [],
@@ -138,7 +230,7 @@ async function createNewGame() {
         status: 'NEW',
         pending: true,
     });
-    gameList.prepend(placeholder);
+    myList.prepend(placeholder);
 
     try {
         const response = await fetch('/v1/games', { method: 'POST' });
@@ -154,7 +246,6 @@ async function createNewGame() {
             return;
         }
         const data = await response.json();
-        // Upgrade placeholder: set real ID and show Go to Game
         placeholder.dataset.gameId = data.id;
         delete placeholder.dataset.pending;
         const action = placeholder.querySelector('.game-action');
@@ -163,7 +254,6 @@ async function createNewGame() {
         goBtn.textContent = 'Go to Game';
         goBtn.onclick = () => window.location.href = `/game?id=${data.id}`;
         action.appendChild(goBtn);
-        // Background sync
         listGames();
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Start Mixing Cocktails'; }
@@ -175,29 +265,29 @@ async function listGames() {
     listGamesInProgress = true;
     clearGameListError();
 
-    const gameList = document.getElementById('gameList');
+    myGamesPage = 1;
+    joinGamesPage = 1;
 
-    // First load only: show a spinner while fetching
+    const mySection = document.getElementById('myGamesSection');
+    const myList = document.getElementById('myGameList');
+    const joinList = document.getElementById('joinGameList');
+
     if (!initialLoadDone) {
-        gameList.innerHTML =
+        const spinnerHtml =
             '<li class="loading-placeholder">' +
             '<span class="spinner" aria-hidden="true"></span>Loading games\u2026</li>';
+        if (user) myList.innerHTML = spinnerHtml;
+        joinList.innerHTML = spinnerHtml;
     }
 
     try {
-        const response = await fetch('/v1/games');
-        if (!response.ok) {
-            showGameListError('Failed to load games. Please refresh the page.');
-            return;
+        if (!user) {
+            mySection.classList.add('hidden');
+        } else {
+            mySection.classList.remove('hidden');
+            await loadMyGames(1, false);
         }
-        const data = await response.json();
-
-        // Build all items off-DOM (no async lookups needed — data is already enriched)
-        const lis = data.games.map(game => buildGameItem(game));
-
-        // Atomic swap: only clear once new items are ready
-        gameList.innerHTML = '';
-        lis.forEach(li => gameList.appendChild(li));
+        await loadJoinableGames(1, false);
         initialLoadDone = true;
     } catch (e) {
         console.error(e);
@@ -210,7 +300,6 @@ async function listGames() {
 async function joinGame(gameId) {
     clearGameListError();
 
-    // Optimistic update: flip action to "Go to Game" immediately
     const li = document.querySelector(`li[data-game-id="${gameId}"]`);
     let actionEl = null;
     let originalHTML = null;
@@ -230,10 +319,8 @@ async function joinGame(gameId) {
         return;
     }
     if (response.ok) {
-        // Sync in background — UI already shows the right state
         listGames();
     } else {
-        // Revert optimistic update and show error
         if (actionEl !== null) actionEl.innerHTML = originalHTML;
         const data = await response.json().catch(() => ({}));
         showGameListError(data.error || 'Failed to join game. Please try again.');
@@ -259,6 +346,5 @@ async function setLogOutLink() {
 async function init() {
     await setUserHeader();
     await listGames();
-    // Keep the list fresh in the background
     setInterval(listGames, 30000);
 }

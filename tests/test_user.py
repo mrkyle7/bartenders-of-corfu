@@ -147,8 +147,13 @@ class TestUser(unittest.TestCase):
         # Test to_dict with sensitive data (no email — email requires include_email=True)
         sensitive_dict = original_user.to_dict(include_sensitive=True)
         expected_sensitive_keys = {
-            "id", "username", "status", "is_admin",
-            "created_at", "deactivated_at", "deactivated_by",
+            "id",
+            "username",
+            "status",
+            "is_admin",
+            "created_at",
+            "deactivated_at",
+            "deactivated_by",
         }
         self.assertEqual(
             set(sensitive_dict.keys()),

@@ -124,7 +124,9 @@ class User:
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def to_dict(self, include_sensitive: bool = False, include_email: bool = False) -> dict:
+    def to_dict(
+        self, include_sensitive: bool = False, include_email: bool = False
+    ) -> dict:
         result: dict = {
             "id": str(self.id),
             "username": self.username,
