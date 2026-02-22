@@ -144,10 +144,10 @@ class TestUser(unittest.TestCase):
         )
         self.assertEqual(user_dict["status"], "active")
 
-        # Test to_dict with sensitive data
+        # Test to_dict with sensitive data (no email — email requires include_email=True)
         sensitive_dict = original_user.to_dict(include_sensitive=True)
         expected_sensitive_keys = {
-            "id", "username", "status", "email", "is_admin",
+            "id", "username", "status", "is_admin",
             "created_at", "deactivated_at", "deactivated_by",
         }
         self.assertEqual(
@@ -155,6 +155,16 @@ class TestUser(unittest.TestCase):
             expected_sensitive_keys,
             f"Expected keys {expected_sensitive_keys}, got {set(sensitive_dict.keys())}",
         )
+
+        # Test to_dict with email included
+        email_dict = original_user.to_dict(include_email=True)
+        self.assertIn("email", email_dict)
+        self.assertNotIn("is_admin", email_dict)
+
+        # Test to_dict with both sensitive and email
+        full_dict = original_user.to_dict(include_sensitive=True, include_email=True)
+        self.assertIn("email", full_dict)
+        self.assertIn("is_admin", full_dict)
 
         # Test from_dict round-trip
         data = {

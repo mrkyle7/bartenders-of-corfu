@@ -21,4 +21,5 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 - `/static`: frontend assets
 - `/tests`: end to end and unit tests
 - `/terraform`: GCP terraform files
+- `/.github`: GitHub Actions YML files
 

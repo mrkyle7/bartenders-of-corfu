@@ -1,0 +1,126 @@
+-- UI Frontend
+-- Covers the three browser surfaces: home page, login/register, and in-game view.
+-- Auth actors and User entity are imported from the user management spec.
+
+use "./user-management.allium" as auth
+
+use "./game-manager.allium" as games
+
+-- Game entity is defined in game-manager.allium; aliased here for clarity.
+-- Full game logic is deferred to a separate spec.
+
+-- ─── Cross-cutting quality requirements ──────────────────────────────────────
+-- The following guarantees and guidance apply to every surface in this spec.
+-- They are restated per surface for traceability.
+--
+--   Visual polish:    all surfaces must be beautiful — consistent theme, careful
+--                     typography, deliberate spacing; no placeholder or unstyled UI.
+--   Accessibility:    WCAG 2.1 AA compliance throughout — keyboard navigation,
+--                     screen-reader support, sufficient colour contrast, focus
+--                     management on route transitions and modal interactions.
+--   Responsive:       layout must be fully usable on mobile (≥320 px) and
+--                     desktop (≥1280 px) without horizontal scrolling or
+--                     content truncation.
+--   Error display:    every operation failure must surface a clear, non-technical
+--                     message inline; raw error codes, API messages, and stack
+--                     traces must never reach the user.
+--
+-- ─── PWA (application-level) ─────────────────────────────────────────────────
+-- guidance: the application should be installable as a Progressive Web App —
+--           a web app manifest with icons, name, and theme colour, and a service
+--           worker that caches static assets for offline shell loading.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ─── Surfaces ────────────────────────────────────────────────────────────────
+
+surface HomePage {
+    -- Accessible to anyone. Auth state determines which header controls appear
+    -- and whether join/go-to-game actions are available.
+    facing visitor: auth/Visitor
+
+    exposes:
+        for g in games/Games:
+            g.id
+            g.host_username     -- display name resolved from g.host; falls back to "Unknown"
+            g.player_usernames  -- resolved display names for each player UUID
+            g.status
+
+    provides:
+        CreateGame()
+            when visitor is authenticated
+        CreateGame() redirects to LoginPage
+            when visitor is unauthenticated
+        JoinGame(game_id)
+            when visitor is authenticated
+            and visitor.id not in game.players
+        JoinGame(game_id) redirects to LoginPage
+            when visitor is unauthenticated
+        GoToGame(game_id)
+            when visitor is authenticated
+            and visitor.id in game.players
+        auth/LogoutUser(visitor)
+            when visitor is authenticated
+
+    guarantee: game list is publicly visible; no authentication required to view it
+    guarantee: game list shows player usernames, not raw UUIDs
+    guarantee: CreateGame and JoinGame redirect to LoginPage when visitor is unauthenticated
+    guarantee: game list refreshes after CreateGame or JoinGame succeeds
+    guarantee: header shows visitor's username and a logout action when authenticated
+    guarantee: header shows a login link when unauthenticated
+    guarantee: all operation failures display a clear, non-technical error message inline
+    guarantee: layout is responsive and usable on mobile and desktop viewports
+    guarantee: WCAG 2.1 AA compliant — keyboard navigable, screen-reader labelled, sufficient contrast
+    guarantee: visual design is polished and consistent with the Bartenders of Corfu theme
+
+    related:
+        LoginPage()
+            when visitor is unauthenticated
+        GamePage(game_id)
+            when visitor is authenticated
+            and visitor.id in game.players
+}
+
+surface LoginPage {
+    facing visitor: auth/Visitor
+
+    provides:
+        auth/LoginUser(username, password)
+        auth/RegisterUser(username, email, password)
+
+    guarantee: successful login or registration redirects to HomePage
+    guarantee: failed login or registration displays an inline error message
+    guarantee: both login and registration are available on the same page simultaneously
+    guarantee: all operation failures display a clear, non-technical error message inline
+    guarantee: layout is responsive and usable on mobile and desktop viewports
+    guarantee: WCAG 2.1 AA compliant — keyboard navigable, screen-reader labelled, sufficient contrast
+    guarantee: visual design is polished and consistent with the Bartenders of Corfu theme
+}
+
+surface GamePage {
+    -- Only accessible to authenticated users who are members of the game.
+    -- Non-members and unauthenticated visitors are rejected with an alert and
+    -- redirected to HomePage.
+    facing viewer: auth/AuthenticatedUser
+
+    context game: games/Game where viewer.id in game.players
+
+    exposes:
+        game.id
+        for p in game.players:
+            p.username          -- resolved from each player UUID
+
+    guarantee: a 401 or 403 response triggers an alert and redirects to HomePage
+    guarantee: all operation failures display a clear, non-technical error message inline
+    guarantee: layout is responsive and usable on mobile and desktop viewports
+    guarantee: WCAG 2.1 AA compliant — keyboard navigable, screen-reader labelled, sufficient contrast
+    guarantee: visual design is polished and consistent with the Bartenders of Corfu theme
+    guarantee: initial game state renders within an acceptable time on a standard connection
+    guidance: in-game interactions (ingredient actions, state updates) should respond within 200 ms
+
+    related:
+        HomePage()
+
+    -- Player sheets and in-game mechanics are not yet implemented.
+    deferred GamePlay.playerSheet   -- see: game.allium (not yet written)
+    deferred GamePlay.ingredient    -- Ingredient web component is a placeholder
+}

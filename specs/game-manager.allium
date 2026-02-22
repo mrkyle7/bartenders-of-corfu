@@ -1,0 +1,133 @@
+-- Game Manager
+-- Covers game creation, player membership, and game status lifecycle.
+-- Game logic (turns, ingredients, player sheets, win conditions) is
+-- deferred to a separate spec.
+
+use "./user-management.allium" as auth
+
+config {
+    max_players: Integer = 4
+}
+
+entity Game {
+    id: UUID
+    host: UUID              -- the player who created the game; invariant after creation
+    players: Set<UUID>      -- all current members; always includes the host
+    status: new | started | ended
+    created_at: Timestamp
+
+    -- Internal game state (bag contents, player sheets, turn order, winner) is
+    -- owned by the game logic spec. It is persisted alongside the game record
+    -- but its fields are not specified here.
+    game_state: GameState   -- opaque here; see: game.allium (not yet written)
+
+    -- Derived
+    is_full: players.count >= config.max_players
+    is_joinable: status = new and not is_full
+}
+
+-- ─── Rules ───────────────────────────────────────────────────────────────────
+
+rule CreateGame {
+    when: CreateGame(creator: auth/TokenUser)
+    requires: user: auth/User where id = creator.id and status = active
+    ensures: Game.created(
+        id: new_uuid,
+        host: creator.id,
+        players: { creator.id },
+        status: new,
+        created_at: now
+    )
+    -- Host is automatically the first and only player at creation.
+    -- game_state is initialised by the game logic layer.
+}
+
+rule JoinGame {
+    when: JoinGame(joiner: auth/TokenUser, game_id: UUID)
+    requires: user: auth/User where id = joiner.id and status = active
+    requires: game: Game where id = game_id
+    requires: game.status = new
+    requires: joiner.id not in game.players      -- a player may join a given game only once
+    requires: not game.is_full                   -- enforces max_players cap
+    ensures: game.players = game.players + { joiner.id }
+    -- A player may be a member of multiple games simultaneously;
+    -- the once-only constraint is per game, not per player globally.
+}
+
+rule RemovePlayer {
+    -- Host-only action. The host cannot remove themselves.
+    when: RemovePlayer(requester: auth/TokenUser, game_id: UUID, target_id: UUID)
+    requires: game: Game where id = game_id
+    requires: requester.id = game.host
+    requires: target_id in game.players
+    requires: target_id != game.host
+    ensures: game.players = game.players - { target_id }
+}
+
+-- ─── Concurrency ─────────────────────────────────────────────────────────────
+--
+-- JoinGame and RemovePlayer are safe under concurrent requests in a distributed
+-- deployment. All membership mutations acquire a FOR UPDATE row lock on the game
+-- record inside a Postgres transaction, so invariants (max_players cap, host-only
+-- removal, idempotency) are enforced atomically — not optimistically from
+-- application-layer snapshots.
+--
+-- guarantee: at most one of N concurrent JoinGame requests on a full-minus-one
+--            game receives success; the rest receive a 'full' rejection.
+-- guarantee: concurrent RemovePlayer calls on disjoint targets both take effect;
+--            no removal is silently lost to a last-write-wins race.
+
+-- ─── Surfaces ────────────────────────────────────────────────────────────────
+
+surface GameList {
+    -- Public. No authentication required to browse available games.
+    facing visitor: auth/Visitor
+
+    exposes:
+        for g in Games:
+            g.id
+            g.host
+            g.players
+            g.status
+
+    provides:
+        CreateGame(visitor)
+            when visitor is authenticated
+        JoinGame(visitor, game_id)
+            when visitor is authenticated
+            and game.is_joinable
+            and visitor.id not in game.players
+
+    guarantee: all games are listed regardless of status
+    guarantee: a player who is already a member of a game cannot join it again
+    guarantee: a full game (players.count = config.max_players) cannot be joined
+    guarantee: a game that is not in status new cannot be joined
+}
+
+surface GameRoom {
+    -- Only members of the game may access room details.
+    -- Non-members and unauthenticated visitors are rejected.
+    facing viewer: auth/AuthenticatedUser
+
+    context game: Game where viewer.id in game.players
+
+    exposes:
+        game.id
+        game.host
+        game.players
+        game.status
+
+    provides:
+        RemovePlayer(viewer, game.id, target_id)
+            when viewer.id = game.host
+            and target_id in game.players
+            and target_id != viewer.id
+
+    guarantee: non-members receive a 403 and are not shown any game data
+    guarantee: the host field is immutable after game creation
+    guarantee: there is exactly one host per game at all times
+
+    -- In-game actions (taking turns, playing ingredients, etc.) are not
+    -- part of this spec.
+    deferred GamePlay.actions   -- see: game.allium (not yet written)
+}

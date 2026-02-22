@@ -287,10 +287,18 @@ class Db:
 
         return games
 
-    def add_player_to_game(self, game_id: UUID, player_id: UUID) -> bool:
-        """Add a player to an existing game"""
+    def add_player_to_game(self, game_id: UUID, player_id: UUID) -> str:
+        """Add a player to an existing game. Returns a text code: 'ok' | 'not_found' | 'not_new' | 'duplicate' | 'full'"""
         response = self.supabase.rpc(
             "add_player_to_game", {"game_id": str(game_id), "player_id": str(player_id)}
+        ).execute()
+        return response.data
+
+    def remove_player_from_game(self, game_id: UUID, requester_id: UUID, player_id: UUID) -> str:
+        """Remove a player from an existing game. Returns a text code: 'ok' | 'not_found' | 'not_host' | 'not_in_game' | 'is_host'"""
+        response = self.supabase.rpc(
+            "remove_player_from_game",
+            {"game_id": str(game_id), "requester_id": str(requester_id), "player_id": str(player_id)},
         ).execute()
         return response.data
 

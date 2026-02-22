@@ -124,7 +124,7 @@ class User:
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def to_dict(self, include_sensitive: bool = False) -> dict:
+    def to_dict(self, include_sensitive: bool = False, include_email: bool = False) -> dict:
         result: dict = {
             "id": str(self.id),
             "username": self.username,
@@ -132,13 +132,15 @@ class User:
         }
 
         if include_sensitive:
-            result["email"] = self.email
             result["is_admin"] = self.is_admin
             result["created_at"] = self.created_at
             result["deactivated_at"] = self.deactivated_at
             result["deactivated_by"] = (
                 str(self.deactivated_by) if self.deactivated_by else None
             )
+
+        if include_email:
+            result["email"] = self.email
 
         return result
 

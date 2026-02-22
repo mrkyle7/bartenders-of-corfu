@@ -359,7 +359,9 @@ class TestAdminDeactivateReactivate(UserManagementTestCase):
         data = resp.json()
         self.assertIn("users", data)
         if data["users"]:
-            self.assertIn("email", data["users"][0])
+            # email must NOT appear — admins cannot see other users' emails
+            self.assertNotIn("email", data["users"][0])
+            self.assertIn("is_admin", data["users"][0])
 
     def test_non_admin_cannot_access_admin_list(self):
         username = _unique("noadminlist")
@@ -395,6 +397,45 @@ class TestAdminDeactivateReactivate(UserManagementTestCase):
             f"/v1/users/{user_id}/reactivate", cookies=self._auth(admin_token)
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class TestEmailPrivacy(UserManagementTestCase):
+    """Email must only be visible to the user themselves via /userDetails."""
+
+    def test_own_user_details_includes_email(self):
+        username = _unique("emailself")
+        reg = self._register(username, f"{username}@example.com")
+        token = self._token(reg)
+
+        resp = self.client.get("/userDetails", cookies=self._auth(token))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("email", resp.json())
+        self.assertEqual(resp.json()["email"], f"{username}@example.com")
+
+    def test_public_user_list_excludes_email(self):
+        username = _unique("emailpub")
+        reg = self._register(username, f"{username}@example.com")
+        token = self._token(reg)
+
+        resp = self.client.get("/v1/users", cookies=self._auth(token))
+        self.assertEqual(resp.status_code, 200)
+        for user in resp.json()["users"]:
+            self.assertNotIn("email", user)
+
+    def test_admin_user_list_excludes_email(self):
+        admin_name = _unique("emailadmin")
+        admin_reg = self._register(admin_name, f"{admin_name}@example.com")
+        admin_id = admin_reg.json()["id"]
+        self._make_admin(admin_id)
+        admin_token = self._token(admin_reg)
+
+        target = _unique("emailtarget")
+        self._register(target, f"{target}@example.com")
+
+        resp = self.client.get("/v1/admin/users", cookies=self._auth(admin_token))
+        self.assertEqual(resp.status_code, 200)
+        for user in resp.json()["users"]:
+            self.assertNotIn("email", user)
 
 
 if __name__ == "__main__":

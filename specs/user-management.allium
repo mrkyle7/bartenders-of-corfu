@@ -212,6 +212,8 @@ surface UserDetail {
             when subject.status = active
         DeleteAccount(user)
             when subject.status = active
+
+    guarantee: subject.email is only exposed when subject.id = user.id
 }
 
 surface UserList {
@@ -232,7 +234,6 @@ surface AdminUserManagement {
         for u in Users where status != deleted:
             u.id
             u.username
-            u.email
             u.status
             u.deactivated_at
             u.deactivated_by
@@ -242,4 +243,6 @@ surface AdminUserManagement {
             when target.status = active
         ReactivateAccount(admin, target_id)
             when target.status = deactivated
+
+    guarantee: email is never exposed, even to admins — it is visible only through UserDetail when subject.id = user.id
 }

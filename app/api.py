@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from app.gameManager import GameManager
+from app.game import GameException
 from app.UserManager import UserManager, UserManagerPermissionError
 from app.JWTHandler import JWTHandler
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -83,7 +84,9 @@ def _require_auth(request: Request) -> tuple[TokenUser | None, JSONResponse | No
                 if token_user.iat <= logged_out_dt:
                     response = JSONResponse(
                         status_code=401,
-                        content={"error": "Token has been invalidated. Please log in again."},
+                        content={
+                            "error": "Token has been invalidated. Please log in again."
+                        },
                     )
                     response.delete_cookie(key="userjwt")
                     return None, response
@@ -179,31 +182,13 @@ async def get_game(game_id: str, request: Request):
 
 @app.post("/v1/games")
 async def new_game(request: Request):
-    token = request.cookies.get("userjwt")
-    if token is None:
-        return JSONResponse(
-            status_code=401, content={"error": "Please log in to create a game"}
-        )
+    token_user, err = _require_auth(request)
+    if err:
+        return err
     try:
-        token_user: TokenUser = jwt_handler.verify(token)
-        if token_user:
-            # Get the full user object from the database
-            user = userManager.get_user(token_user.id)
-            if user:
-                game_id = gameManager.new_game(user)
-                logger.info(f"{user.username} created new game with ID {game_id}")
-                return JSONResponse(content={"id": str(game_id)})
-            else:
-                return JSONResponse(
-                    status_code=401, content={"error": "User not found"}
-                )
-        else:
-            logger.warning("Invalid or expired token")
-            response = JSONResponse(
-                content={"error": "Invalid or expired token"}, status_code=401
-            )
-            response.delete_cookie(key="userjwt")
-            return response
+        game_id = gameManager.new_game(token_user.id)
+        logger.info(f"{token_user.username} created new game with ID {game_id}")
+        return JSONResponse(content={"id": str(game_id)})
     except Exception:
         logger.exception("Error creating game")
         return JSONResponse(status_code=500, content={"error": "Failed to create game"})
@@ -211,35 +196,40 @@ async def new_game(request: Request):
 
 @app.post("/v1/games/{game_id}/join")
 async def join_game(game_id: str, request: Request):
-    from uuid import UUID
-
-    token = request.cookies.get("userjwt")
-    if token is None:
-        return JSONResponse(
-            status_code=401, content={"error": "Please log in to join a game"}
-        )
+    token_user, err = _require_auth(request)
+    if err:
+        return err
     try:
-        user_short = jwt_handler.verify(token)
-        if user_short:
-            try:
-                gameManager.add_player(user_short.id, UUID(game_id))
-                logger.info(f"{user_short.username} joined game with ID {game_id}")
-                return JSONResponse(content={"message": "Joined game successfully"})
-            except Exception:
-                logging.exception("Failed to add user to game")
-                return JSONResponse(
-                    status_code=404, content={"error": "Game not found"}
-                )
-        else:
-            logger.warning("Invalid or expired token")
-            response = JSONResponse(
-                content={"error": "Invalid or expired token"}, status_code=401
-            )
-            response.delete_cookie(key="userjwt")
-            return response
+        gameManager.add_player(token_user.id, UUID(game_id))
+        logger.info(f"{token_user.username} joined game with ID {game_id}")
+        return JSONResponse(content={"message": "Joined game successfully"})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "Game not found"})
     except Exception:
         logger.exception("Error joining game")
-        return JSONResponse(status_code=400, content={"error": "Failed to join game"})
+        return JSONResponse(status_code=500, content={"error": "Failed to join game"})
+
+
+@app.delete("/v1/games/{game_id}/players/{player_id}")
+async def remove_player(game_id: str, player_id: str, request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    try:
+        gameManager.remove_player(token_user.id, UUID(game_id), UUID(player_id))
+        logger.info(
+            f"{token_user.username} removed player {player_id} from game {game_id}"
+        )
+        return JSONResponse(content={"message": "Player removed successfully"})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error removing player from game")
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to remove player"}
+        )
 
 
 @app.get("/v1/users")
@@ -366,7 +356,10 @@ async def user_details(request: Request):
             response.delete_cookie(key="userjwt")
             return response
         logger.info("User details for %s", token_user.username)
-        return JSONResponse(content=user.to_dict(include_sensitive=True), status_code=200)
+        return JSONResponse(
+            content=user.to_dict(include_sensitive=True, include_email=True),
+            status_code=200,
+        )
     except Exception as e:
         logger.error("Error verifying token: %s", str(e))
         response = JSONResponse(content={"error": str(e)}, status_code=400)
@@ -392,7 +385,9 @@ async def change_password(body: ChangePasswordRequest, request: Request):
         return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("Error changing password for %s", token_user.username)
-        return JSONResponse(status_code=500, content={"error": "Failed to change password"})
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to change password"}
+        )
 
 
 @app.delete("/v1/users/me")
@@ -410,7 +405,9 @@ async def delete_account(request: Request):
         return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("Error deleting account for %s", token_user.username)
-        return JSONResponse(status_code=500, content={"error": "Failed to delete account"})
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to delete account"}
+        )
 
 
 @app.post("/v1/users/{user_id}/deactivate")
@@ -428,7 +425,9 @@ async def deactivate_user(user_id: str, request: Request):
         return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("Error deactivating user %s", user_id)
-        return JSONResponse(status_code=500, content={"error": "Failed to deactivate user"})
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to deactivate user"}
+        )
 
 
 @app.post("/v1/users/{user_id}/reactivate")
@@ -446,7 +445,9 @@ async def reactivate_user(user_id: str, request: Request):
         return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("Error reactivating user %s", user_id)
-        return JSONResponse(status_code=500, content={"error": "Failed to reactivate user"})
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to reactivate user"}
+        )
 
 
 @app.get("/v1/admin/users")
