@@ -322,6 +322,139 @@ rule ReplaceCard {
     ensures: a new card drawn from deck and added to row.cards
 }
 
+-- ─── Move history ─────────────────────────────────────────────────────────────
+-- Every completed turn action produces an immutable MoveRecord appended to the
+-- game's history. The initial game state captured at StartGame, combined with the
+-- full ordered sequence of MoveRecords, is sufficient to reconstruct game state
+-- at any point in time.
+
+entity MoveRecord {
+    id: UUID
+    game: session/Game
+    turn_number: Integer          -- monotonically increasing per game; 1-based; never reused
+    player_id: UUID               -- player who performed the action
+    action: RecordedAction        -- serialised payload capturing all action arguments
+    timestamp: Timestamp
+}
+
+value RecordedAction {
+    -- Exactly one variant is set per record.
+    take_ingredients: TakenIngredientsRecord?
+    sell_cup: SoldCupRecord?
+    drink_cup: DrunkCupRecord?
+    go_for_a_wee: WeeRecord?
+    claim_card: ClaimedCardRecord?
+    refresh_card_row: RefreshedRowRecord?
+}
+
+value TakenIngredientsRecord {
+    taken: List<{
+        ingredient: Ingredient,
+        disposition: placed_in_cup | drunk_directly | drawn_as_special,
+        cup_index: Integer?,    -- set when disposition = placed_in_cup
+        special_type: Special?  -- set when disposition = drawn_as_special and result != nothing
+    }>
+}
+
+value SoldCupRecord {
+    cup_index: Integer
+    ingredients: List<Ingredient>
+    declared_specials: List<Special>
+    points_earned: Integer
+}
+
+value DrunkCupRecord {
+    cup_index: Integer
+    ingredients: List<Ingredient>
+}
+
+value WeeRecord {}
+
+value ClaimedCardRecord {
+    card_id: UUID
+    is_karaoke: Boolean
+    row_position: Integer
+}
+
+value RefreshedRowRecord {
+    row_position: Integer
+}
+
+guarantee: every completed turn action produces exactly one MoveRecord before the next turn begins
+guarantee: MoveRecords are immutable; they are never updated or deleted
+guarantee: turn_number is unique within a game and never reused, even after an undo
+guarantee: the system maintains sufficient history to reconstruct the full game state at the
+           start of any recorded turn — via stored per-turn snapshots or deterministic replay
+           from the initial state captured at StartGame
+
+-- ─── Undo turn ────────────────────────────────────────────────────────────────
+-- Any active player may propose to undo the most recently completed turn.
+-- The undo is applied only when all active (non-eliminated) players have agreed.
+-- The proposing player implicitly votes agree at proposal time.
+-- At most one undo proposal may be pending per game at any time.
+
+entity UndoRequest {
+    id: UUID
+    game: session/Game
+    target_turn_number: Integer         -- turn_number of the MoveRecord being undone
+    proposed_by: UUID                   -- player_id of the proposer
+    proposed_at: Timestamp
+    votes: Map<UUID, agree | disagree>  -- keyed by player_id; only active players vote
+    status: pending | approved | rejected
+}
+
+rule ProposeUndoTurn {
+    when: ProposeUndoTurn(player)
+    requires: player.status = active
+    requires: game.status = started
+    requires: at least one MoveRecord exists for this game
+    requires: no UndoRequest with status = pending exists for this game
+    let last_turn = MoveRecord with the highest turn_number for this game
+    ensures: UndoRequest.created(
+        id: new_uuid,
+        game: game,
+        target_turn_number: last_turn.turn_number,
+        proposed_by: player.player_id,
+        proposed_at: now,
+        votes: { player.player_id → agree },    -- proposer implicitly agrees
+        status: pending
+    )
+}
+
+rule VoteOnUndoTurn {
+    when: VoteOnUndoTurn(player, request_id, vote: agree | disagree)
+    requires: player.status = active
+    requires: request: UndoRequest where id = request_id
+              and request.game = game
+              and request.status = pending
+    requires: player.player_id not in request.votes    -- each active player votes at most once
+    ensures: request.votes = request.votes + { player.player_id → vote }
+    if vote = disagree:
+        ensures: request.status = rejected
+    if all active players are present in request.votes and all values are agree:
+        ensures: request.status = approved
+        ensures: ExecuteUndoTurn(request)
+}
+
+rule ExecuteUndoTurn {
+    -- Triggered automatically when VoteOnUndoTurn causes all active players to agree.
+    when: ExecuteUndoTurn(request: UndoRequest)
+    requires: request.status = approved
+    -- Restore the full game state (BoardState and all PlayerState) to what it was
+    -- immediately before the target turn began.
+    ensures: BoardState is restored to its state at the start of request.target_turn_number
+    ensures: all PlayerState records are restored to their state at the start of request.target_turn_number
+    ensures: BoardState.active_player_id is restored to the player who performed the undone turn
+    -- The MoveRecord for the undone turn is NOT removed; it is retained for audit purposes.
+    -- Subsequent actions will produce new MoveRecords continuing from the restored state.
+}
+
+guarantee: at most one UndoRequest may be in status = pending per game at any time
+guarantee: an eliminated player (hospitalised or wet) does not vote and is not counted
+           in the "all active players agree" threshold
+guarantee: a rejected or approved UndoRequest does not block future undo proposals
+guarantee: ProposeUndoTurn is unavailable when there are no MoveRecords for the game
+
 -- ─── Victory and elimination ──────────────────────────────────────────────────
 
 rule CheckVictory {
@@ -365,6 +498,13 @@ surface PlayerTurn {
         for card in state.cards:
             card.is_karaoke
             card.cost
+        -- Undo state
+        pending_undo: UndoRequest?          -- the active undo proposal for this game, if any
+            pending_undo.proposed_by
+            pending_undo.proposed_at
+            pending_undo.target_turn_number
+            pending_undo.votes              -- so each player can see who has and has not voted
+            pending_undo.status
 
     provides:
         TakeIngredients(player, chosen)
@@ -390,6 +530,16 @@ surface PlayerTurn {
             when state.status = active
             and board.active_player_id = player.id
             and state.drunk_level >= config.min_drunk_to_refresh
+        ProposeUndoTurn(player)
+            when state.status = active
+            and game.status = started
+            and pending_undo is null
+            and at least one MoveRecord exists for this game
+        VoteOnUndoTurn(player, request_id, vote: agree | disagree)
+            when state.status = active
+            and pending_undo is not null
+            and pending_undo.status = pending
+            and player.player_id not in pending_undo.votes
 
     guarantee: exactly one action is taken per turn
     guarantee: an eliminated player (hospitalised or wet) takes no further turns; the game continues for others
@@ -398,6 +548,8 @@ surface PlayerTurn {
     guarantee: bladder_capacity never goes below config.min_bladder_capacity
     guarantee: specials are never placed in cups or drunk directly; they always go to the player mat
     guarantee: TakeIngredients is unavailable when bag + display together hold fewer than take_limit ingredients
+    guarantee: a player may not cast a VoteOnUndoTurn vote if they already voted on the same request
+    guarantee: the proposer of an UndoRequest is already recorded as agree and cannot vote again
 }
 
 surface BoardView {
@@ -424,6 +576,39 @@ surface BoardView {
     related:
         PlayerTurn(player)
             when board.active_player_id = player.id
+}
+
+surface GameReplay {
+    -- Accessible to all game members. Exposes the ordered move history and allows
+    -- the caller to retrieve reconstructed game state at any turn boundary.
+    -- Available for games in any status (new, started, or ended).
+    facing viewer: session/auth/AuthenticatedUser
+
+    context game: session/Game where viewer.id in game.players
+
+    exposes:
+        game.status
+        for m in MoveRecord where m.game = game [ordered by turn_number ascending]:
+            m.id
+            m.turn_number
+            m.player_id
+            m.action
+            m.timestamp
+
+    provides:
+        GetStateAtTurn(turn_number: Integer)
+            -- Returns the reconstructed BoardState and all PlayerState records as they
+            -- existed immediately after the specified turn completed.
+            -- turn_number = 0 returns the initial game state captured at StartGame.
+            requires: turn_number >= 0
+            requires: turn_number <= max recorded turn_number for this game
+
+    guarantee: move history is returned in ascending turn_number order
+    guarantee: game members may access the history of any game regardless of status
+    guarantee: non-members receive a 403
+    guarantee: GetStateAtTurn(0) returns the initial game state at the moment StartGame was executed
+    guarantee: GetStateAtTurn for any valid turn_number returns a fully consistent snapshot
+               (board state and all player states) without requiring the caller to replay moves locally
 }
 
 -- ─── Deferred ─────────────────────────────────────────────────────────────────

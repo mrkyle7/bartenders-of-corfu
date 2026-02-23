@@ -22,6 +22,9 @@ entity Game {
     -- Internal game state (bag contents, player sheets, turn order, winner) is
     -- owned by the game logic spec. It is persisted alongside the game record
     -- but its fields are not specified here.
+    -- Move history (MoveRecord sequence and initial state snapshot) is part of
+    -- game_state and is stored for every game. See: game.allium for MoveRecord,
+    -- UndoRequest, and the GameReplay surface.
     game_state: GameState   -- opaque here; see: game.allium (not yet written)
 
     -- Derived
