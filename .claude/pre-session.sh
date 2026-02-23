@@ -4,17 +4,29 @@
 
 set -euo pipefail
 
-# ─── Check supabase CLI is installed ──────────────────────────────────────────
+# ─── Install supabase CLI if not present ──────────────────────────────────────
 if ! command -v supabase &>/dev/null; then
-  echo "ERROR: The 'supabase' CLI is not installed." >&2
-  echo "" >&2
-  echo "Install it with:" >&2
-  echo "  brew install supabase/tap/supabase   (macOS)" >&2
-  echo "  or: https://supabase.com/docs/guides/cli/getting-started" >&2
-  echo "" >&2
-  echo "Tests require a running Supabase instance. Start it with:" >&2
-  echo "  supabase start --network-id k3s-net" >&2
-  exit 1
+  echo "Supabase CLI not found. Installing..." >&2
+  OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+  ARCH=$(uname -m)
+  if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
+
+  LATEST=$(curl -fsSL https://api.github.com/repos/supabase/cli/releases/latest \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])" 2>/dev/null || echo "")
+
+  if [ -z "$LATEST" ]; then
+    echo "ERROR: Could not determine latest Supabase CLI version." >&2
+    exit 1
+  fi
+
+  TARBALL="supabase_${OS}_${ARCH}.tar.gz"
+  curl -fsSL "https://github.com/supabase/cli/releases/download/${LATEST}/${TARBALL}" \
+    -o /tmp/supabase_install.tar.gz
+  tar -xzf /tmp/supabase_install.tar.gz -C /tmp supabase
+  mv /tmp/supabase /usr/local/bin/supabase
+  chmod +x /usr/local/bin/supabase
+  rm -f /tmp/supabase_install.tar.gz
+  echo "Supabase CLI ${LATEST} installed successfully." >&2
 fi
 
 # ─── Check Supabase is running ────────────────────────────────────────────────

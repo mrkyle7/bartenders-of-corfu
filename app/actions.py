@@ -100,15 +100,28 @@ def _check_victory(gs: GameState, player_id: UUID) -> bool:
     return False
 
 
-def _drink_ingredient(gs: GameState, player_id: UUID, ingredient: Ingredient):
-    """Apply DrinkIngredient rule for one spirit or mixer."""
+def _apply_drunk_modifier(gs: GameState, player_id: UUID, ingredients: list[Ingredient]):
+    """Apply drunk level changes for a batch of drunk ingredients.
+
+    You only sober up if ALL ingredients in the batch are mixers (no spirits).
+    If any spirit is present, mixers do not reduce drunk_level.
+    """
     ps = gs.player_states[player_id]
-    if ingredient in _SPIRITS:
-        ps.drunk_level = ps.drunk_level + 1
-    elif ingredient in _MIXERS:
-        ps.drunk_level = max(0, ps.drunk_level - 1)
-    ps.bladder.append(ingredient)
+    spirits = [i for i in ingredients if i in _SPIRITS]
+    mixers = [i for i in ingredients if i in _MIXERS]
+    ps.drunk_level += len(spirits)
+    if not spirits:
+        ps.drunk_level = max(0, ps.drunk_level - len(mixers))
     _check_elimination(gs, player_id)
+
+
+def _drink_ingredient(gs: GameState, player_id: UUID, ingredient: Ingredient):
+    """Add one spirit or mixer to the bladder (drunk level is NOT adjusted here).
+
+    Callers must call _apply_drunk_modifier after processing the full batch.
+    """
+    ps = gs.player_states[player_id]
+    ps.bladder.append(ingredient)
 
 
 def _replace_card(gs: GameState, row: CardRow):
@@ -159,6 +172,7 @@ def take_ingredients(
         )
 
     taken_records: list[dict] = []
+    drunk_this_turn: list[Ingredient] = []
 
     for asn in assignments:
         raw_name = asn.get("ingredient", "")
@@ -219,11 +233,16 @@ def take_ingredients(
                     "Only spirits and mixers may be drunk directly", status_code=400
                 )
             _drink_ingredient(gs, player_id, ingredient)
+            drunk_this_turn.append(ingredient)
             record["disposition"] = "drink"
         else:
             raise GameException(f"Unknown disposition: {disposition}", status_code=400)
 
         taken_records.append(record)
+
+    # Apply drunk modifier for all ingredients drunk this turn in one batch
+    if drunk_this_turn:
+        _apply_drunk_modifier(gs, player_id, drunk_this_turn)
 
     _replenish_display(gs)
     gs.turn_number += 1
@@ -316,6 +335,8 @@ def drink_cup(
     for ingredient in drunk_ingredients:
         _drink_ingredient(gs, player_id, ingredient)
     # Drunk cup ingredients go to the bladder (not the bag) — handled by _drink_ingredient
+    # Apply drunk modifier in one batch: only sober up if all ingredients are mixers
+    _apply_drunk_modifier(gs, player_id, drunk_ingredients)
 
     if cup_index == 0:
         ps.cup1 = []
