@@ -10,11 +10,16 @@ if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
   exit 0
 fi
 
+if ! command -v supabase &>/dev/null; then
+  echo "Warning: supabase CLI not installed — skipping full test suite." >&2
+  exit 0
+fi
+
 SUPABASE_URL=$(supabase status -o json 2>/dev/null | jq -r '.API_URL // ""')
 SUPABASE_KEY=$(supabase status -o json 2>/dev/null | jq -r '.SECRET_KEY // ""')
 
 if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
-  echo "Warning: Supabase not running — failing full test suite. run `supabase start --network-id k3s-net` to start" >&2
+  echo "Warning: Supabase not running — failing full test suite. run \`supabase start --network-id k3s-net\` to start" >&2
   exit 2
 fi
 
