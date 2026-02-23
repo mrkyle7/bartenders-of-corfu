@@ -111,12 +111,36 @@ surface GamePage {
         game.id
         for p in game.players:
             p.username          -- resolved from each player UUID
+        -- Move history and undo state (sourced from game.allium surfaces)
+        move_history: list of MoveRecord for this game, ordered by turn_number ascending
+            -- allows the UI to render a scrollable log of all past actions
+        pending_undo: UndoRequest?      -- non-null when an undo proposal is active
+            pending_undo.proposed_by    -- resolved to username for display
+            pending_undo.proposed_at
+            pending_undo.target_turn_number
+            pending_undo.votes          -- so players can see who has and has not yet voted
 
     provides:
         games/RemovePlayer(viewer, game.id, target_id)
             when viewer.id = game.host
             and target_id in game.players
             and target_id != viewer.id
+        -- Undo turn
+        ProposeUndoTurn(viewer)
+            when viewer.id in game.players
+            and game.status = started
+            and pending_undo is null
+            and at least one move has been recorded for this game
+        VoteOnUndoTurn(viewer, request_id, agree | disagree)
+            when viewer.id in game.players
+            and pending_undo is not null
+            and pending_undo.status = pending
+            and viewer.id not in pending_undo.votes
+        -- Replay
+        ReplayGame(turn_number: Integer)
+            -- Fetches and displays the reconstructed game state at the given turn boundary.
+            -- turn_number = 0 shows the initial state; turn_number = N shows state after turn N.
+            when viewer.id in game.players
 
     guarantee: a 401 or 403 response triggers an alert and redirects to HomePage
     guarantee: all operation failures display a clear, non-technical error message inline
@@ -126,7 +150,16 @@ surface GamePage {
     guarantee: initial game state renders within an acceptable time on a standard connection
     guarantee: the host sees a 'Remove' action next to each non-host player; non-hosts see no such action
     guarantee: a successful remove refreshes the player list inline without a full page reload
+    guarantee: when a pending_undo is active, every active player sees a clear prompt to agree or disagree
+    guarantee: a player who has already voted on the pending undo sees their vote status, not a second prompt
+    guarantee: the proposer of an undo sees their vote recorded as agree and no second prompt
+    guarantee: when pending_undo transitions to approved or rejected, the UI updates inline without a full reload
+    guarantee: the move history log is visible to all game members and updates in real time as new moves are made
+    guarantee: the replay controls allow stepping to any recorded turn; the reconstructed state is fetched
+               from the API and displayed without requiring a full page reload
     guidance: in-game interactions (ingredient actions, state updates) should respond within 200 ms
+    guidance: the move history log and replay controls should be visually distinct from the live game board
+               to avoid confusion between the replay view and the current game state
 
     related:
         HomePage()
