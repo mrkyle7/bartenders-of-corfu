@@ -29,6 +29,9 @@ case "$BASENAME" in
   game.py|gameManager.py|GameState.py|PlayerState.py|Ingredient.py)
     TESTS+=("tests/test_game_manager.py" "tests/test_api.py")
     ;;
+  actions.py|cocktails.py|card.py)
+    TESTS+=("tests/test_game_actions_bdd.py" "tests/test_game_manager.py")
+    ;;
   db.py)
     TESTS+=("tests/test_game_manager.py" "tests/test_api.py" "tests/test_user_management.py")
     ;;
@@ -39,7 +42,7 @@ case "$BASENAME" in
     TESTS+=("tests/test_user_manager.py" "tests/test_user_management.py")
     ;;
   api.py)
-    TESTS+=("tests/test_api.py" "tests/test_user_management.py" "tests/test_game_manager.py")
+    TESTS+=("tests/test_api.py" "tests/test_user_management.py" "tests/test_game_manager.py" "tests/test_game_actions_bdd.py")
     ;;
   utils.py|JWTHandler.py)
     TESTS+=("tests/test_utils.py" "tests/test_user_management.py")
