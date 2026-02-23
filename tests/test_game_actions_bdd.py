@@ -152,6 +152,15 @@ def p1_empty_cup0(ctx):
     assert ps["cup1"] == [], "Cup 0 should already be empty after game start"
 
 
+@given("the bag contains no special tokens")
+def bag_no_specials(ctx):
+    def patch(gs):
+        gs.bag_contents = [i for i in gs.bag_contents if not i.value.special]
+        return gs
+
+    _patch_game_state(ctx["game_id"], ctx["p1_token"], patch)
+
+
 @given(parsers.parse("player 1's cup {cup_index:d} is full with {count:d} ingredients"))
 def p1_cup_full(ctx, cup_index, count):
     def patch(gs):
@@ -310,16 +319,12 @@ def p1_take_3_to_cup0(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
     bag = game["game_state"]["bag_contents"]
     assert len(bag) >= 3, "Not enough in bag"
-    assignments = []
-    for ing_name in bag[:3]:
-        ing = Ingredient[ing_name]
-        if ing.value.special:
-            assignments.append({"ingredient": ing_name, "source": "bag", "disposition": "special"})
-        elif ing.value.alcohol:
-            assignments.append({"ingredient": ing_name, "source": "bag", "disposition": "cup", "cup_index": 0})
-        else:
-            assignments.append({"ingredient": ing_name, "source": "bag", "disposition": "cup", "cup_index": 0})
-    # Fill up to take_limit (3 at drunk_level 0) if needed
+    # Bag draws are random — do not specify ingredient; system selects randomly
+    assignments = [
+        {"source": "bag", "disposition": "cup", "cup_index": 0},
+        {"source": "bag", "disposition": "cup", "cup_index": 0},
+        {"source": "bag", "disposition": "cup", "cup_index": 0},
+    ]
     resp = _client.post(
         f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
         json={"assignments": assignments},
@@ -335,10 +340,9 @@ def p1_place_in_full_cup(ctx):
     bag = game["game_state"]["bag_contents"]
     if not bag:
         pytest.skip("Bag is empty")
-    ing_name = bag[0]
-    # Just one assignment — will fail because take_limit != 1 usually,
-    # but we want the cup-full error; force take_limit=1 scenario by using the cup-full path
-    assignments = [{"ingredient": ing_name, "source": "bag", "disposition": "cup", "cup_index": 0}]
+    # Bag draws are random — do not specify ingredient; system selects randomly.
+    # Submitting only 1 assignment when take_limit=3 will yield a 400 error.
+    assignments = [{"source": "bag", "disposition": "cup", "cup_index": 0}]
     resp = _client.post(
         f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
         json={"assignments": assignments},
@@ -430,7 +434,8 @@ def p2_take_ingredient(ctx):
     bag = game["game_state"]["bag_contents"]
     if not bag:
         pytest.skip("No bag contents")
-    assignments = [{"ingredient": bag[0], "source": "bag", "disposition": "drink"}]
+    # Bag draws are random — do not specify ingredient
+    assignments = [{"source": "bag", "disposition": "drink"}]
     resp = _client.post(
         f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
         json={"assignments": assignments},

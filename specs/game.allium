@@ -172,6 +172,10 @@ rule TakeIngredients {
         -- this action is unavailable; player must choose another action
     requires: chosen.count = player.take_limit
     requires: chosen drawn from board.open_display ∪ board.ingredient_bag in any order
+    -- Bag draws are random: the player cannot choose which ingredient they receive from
+    -- board.ingredient_bag. The system selects a random ingredient from the bag on each
+    -- bag draw. The player may only choose specific ingredients when taking from
+    -- board.open_display (where all contents are visible).
     -- The player takes ingredients in one or more batches until take_limit is reached.
     -- Each batch may be any size (e.g. take 3 from the bag at once).
     -- All ingredients in a batch must be assigned (PlaceIngredientInCup,
@@ -331,7 +335,9 @@ rule ReplenishDisplay {
     let deficit = config.open_display_size - board.open_display.count
     requires: deficit > 0
     let fill = min(deficit, board.ingredient_bag.count)
-    ensures: board.open_display refilled by fill ingredients drawn from board.ingredient_bag
+    ensures: board.open_display refilled by fill ingredients randomly selected from board.ingredient_bag
+    -- Selection is random: the fill ingredients are chosen uniformly at random from
+    -- the bag, preserving the blind-draw nature of the ingredient bag.
     -- Display may remain below config.open_display_size if the bag is empty.
 }
 

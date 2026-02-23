@@ -73,12 +73,14 @@ def _advance_turn(gs: GameState) -> GameState:
 
 
 def _replenish_display(gs: GameState):
-    """Draw from the bag to fill the open display up to OPEN_DISPLAY_SIZE."""
+    """Randomly draw from the bag to fill the open display up to OPEN_DISPLAY_SIZE."""
     deficit = OPEN_DISPLAY_SIZE - len(gs.open_display)
     if deficit > 0 and gs.bag_contents:
         fill = min(deficit, len(gs.bag_contents))
-        gs.open_display.extend(gs.bag_contents[:fill])
-        gs.bag_contents = gs.bag_contents[fill:]
+        chosen = random.sample(gs.bag_contents, fill)
+        for item in chosen:
+            gs.bag_contents.remove(item)
+        gs.open_display.extend(chosen)
 
 
 def _check_elimination(gs: GameState, player_id: UUID):
@@ -193,11 +195,12 @@ def take_ingredients(
                 )
             gs.open_display.remove(ingredient)
         else:
-            if ingredient not in gs.bag_contents:
-                raise GameException(
-                    f"{raw_name} is not available in the bag", status_code=400
-                )
+            # Bag draws are random — the player cannot choose which ingredient they receive
+            if not gs.bag_contents:
+                raise GameException("The bag is empty", status_code=400)
+            ingredient = random.choice(gs.bag_contents)
             gs.bag_contents.remove(ingredient)
+            raw_name = ingredient.name
 
         record: dict = {"ingredient": raw_name, "source": source}
 

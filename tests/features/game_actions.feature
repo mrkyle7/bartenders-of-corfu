@@ -9,6 +9,7 @@ Feature: Game turn actions
   Scenario: Player takes ingredients from the bag and places them in a cup
     Given it is player 1's turn
     And player 1 has an empty cup 0
+    And the bag contains no special tokens
     When player 1 takes 3 ingredients from the bag placing all in cup 0
     Then cup 0 should contain 3 ingredients
     And a move record should be created for the game
