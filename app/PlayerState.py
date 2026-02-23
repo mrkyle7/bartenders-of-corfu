@@ -1,8 +1,12 @@
 from uuid import UUID
+
 from app.Ingredient import Ingredient
 
 INITIAL_BLADDER_CAPACITY = 8
 INITIAL_TOILET_TOKENS = 4
+BASE_TAKE_COUNT = 3
+MAX_CUP_INGREDIENTS = 5
+MIN_BLADDER_CAPACITY = 4
 
 
 class PlayerState:
@@ -19,6 +23,7 @@ class PlayerState:
         special_ingredients: list[str] | None = None,
         karaoke_cards_claimed: int = 0,
         status: str = "active",
+        cards: list[dict] | None = None,
     ):
         self.player_id: UUID = player_id
         self.points: int = points
@@ -28,11 +33,28 @@ class PlayerState:
         self.bladder: list[Ingredient] = bladder if bladder is not None else []
         self.bladder_capacity: int = bladder_capacity
         self.toilet_tokens: int = toilet_tokens
+        # Resolved special types sitting on the player mat (list of SpecialType.value strings)
         self.special_ingredients: list[str] = (
             special_ingredients if special_ingredients is not None else []
         )
         self.karaoke_cards_claimed: int = karaoke_cards_claimed
         self.status: str = status
+        # Claimed ability cards (serialised dicts)
+        self.cards: list[dict] = cards if cards is not None else []
+
+    @property
+    def take_limit(self) -> int:
+        """Number of ingredients to take per turn (drunk_level + base_take_count)."""
+        return self.drunk_level + BASE_TAKE_COUNT
+
+    @property
+    def cups(self) -> list[list[Ingredient]]:
+        """[cup1, cup2] — convenience accessor."""
+        return [self.cup1, self.cup2]
+
+    @property
+    def is_eliminated(self) -> bool:
+        return self.status in ("hospitalised", "wet")
 
     @classmethod
     def new_player(cls, player_id: UUID) -> "PlayerState":
@@ -43,6 +65,7 @@ class PlayerState:
             "player_id": str(self.player_id),
             "points": self.points,
             "drunk_level": self.drunk_level,
+            "take_limit": self.take_limit,
             "cup1": [ingredient.name for ingredient in self.cup1],
             "cup2": [ingredient.name for ingredient in self.cup2],
             "bladder": [ingredient.name for ingredient in self.bladder],
@@ -51,4 +74,5 @@ class PlayerState:
             "special_ingredients": self.special_ingredients,
             "karaoke_cards_claimed": self.karaoke_cards_claimed,
             "status": self.status,
+            "cards": self.cards,
         }

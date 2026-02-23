@@ -14,7 +14,7 @@ from pydantic import BaseModel
 import traceback
 
 from app.user import TokenUser, UserValidationError
-from typing import Optional
+from typing import Optional, List
 
 _VALID_STATUSES = {"NEW", "STARTED", "ENDED"}
 
@@ -542,3 +542,224 @@ async def admin_list_users(request: Request):
     return JSONResponse(
         content={"users": [u.to_dict(include_sensitive=True) for u in users]}
     )
+
+
+# ─── Game action endpoints ────────────────────────────────────────────────────
+
+
+def _game_action_precheck(
+    game_id: str, request: Request
+) -> tuple[any, any, any] | tuple[None, None, any]:
+    """Auth + membership check shared by all game action endpoints.
+    Returns (token_user, game, None) on success or (None, None, error_response).
+    """
+    token_user, err = _require_auth(request)
+    if err:
+        return None, None, err
+    try:
+        game = gameManager.get_game_by_id(UUID(game_id))
+    except ValueError:
+        return None, None, JSONResponse(status_code=400, content={"error": "Invalid game ID"})
+    if game is None:
+        return None, None, JSONResponse(status_code=404, content={"error": "Game not found"})
+    if token_user.id not in game.players:
+        return None, None, JSONResponse(status_code=403, content={"error": "Not a member of this game"})
+    return token_user, game, None
+
+
+class TakeIngredientsRequest(BaseModel):
+    assignments: List[dict]
+
+
+@app.post("/v1/games/{game_id}/actions/take-ingredients")
+async def action_take_ingredients(game_id: str, body: TakeIngredientsRequest, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.take_ingredients(
+            game, token_user.id, body.assignments
+        )
+        logger.info("%s took ingredients in game %s", token_user.username, game_id)
+        return JSONResponse(content={"game_state": new_state.to_dict(), "move": payload})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in take-ingredients for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+class SellCupRequest(BaseModel):
+    cup_index: int
+    declared_specials: List[str] = []
+
+
+@app.post("/v1/games/{game_id}/actions/sell-cup")
+async def action_sell_cup(game_id: str, body: SellCupRequest, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.sell_cup(
+            game, token_user.id, body.cup_index, body.declared_specials
+        )
+        logger.info("%s sold cup in game %s", token_user.username, game_id)
+        return JSONResponse(content={"game_state": new_state.to_dict(), "move": payload})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in sell-cup for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+class DrinkCupRequest(BaseModel):
+    cup_index: int
+
+
+@app.post("/v1/games/{game_id}/actions/drink-cup")
+async def action_drink_cup(game_id: str, body: DrinkCupRequest, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.drink_cup(game, token_user.id, body.cup_index)
+        logger.info("%s drank cup in game %s", token_user.username, game_id)
+        return JSONResponse(content={"game_state": new_state.to_dict(), "move": payload})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in drink-cup for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+@app.post("/v1/games/{game_id}/actions/go-for-a-wee")
+async def action_go_for_a_wee(game_id: str, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.go_for_a_wee(game, token_user.id)
+        logger.info("%s went for a wee in game %s", token_user.username, game_id)
+        return JSONResponse(content={"game_state": new_state.to_dict(), "move": payload})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in go-for-a-wee for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+class ClaimCardRequest(BaseModel):
+    card_id: str
+
+
+@app.post("/v1/games/{game_id}/actions/claim-card")
+async def action_claim_card(game_id: str, body: ClaimCardRequest, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.claim_card(game, token_user.id, body.card_id)
+        logger.info("%s claimed card in game %s", token_user.username, game_id)
+        return JSONResponse(content={"game_state": new_state.to_dict(), "move": payload})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in claim-card for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+class RefreshRowRequest(BaseModel):
+    row_position: int
+
+
+@app.post("/v1/games/{game_id}/actions/refresh-card-row")
+async def action_refresh_card_row(game_id: str, body: RefreshRowRequest, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.refresh_card_row(
+            game, token_user.id, body.row_position
+        )
+        logger.info("%s refreshed card row in game %s", token_user.username, game_id)
+        return JSONResponse(content={"game_state": new_state.to_dict(), "move": payload})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in refresh-card-row for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+# ─── Move history & replay ────────────────────────────────────────────────────
+
+
+@app.get("/v1/games/{game_id}/history")
+async def get_game_history(game_id: str, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        moves = gameManager.get_history(UUID(game_id))
+        return JSONResponse(content={"moves": moves})
+    except Exception:
+        logger.exception("Error fetching history for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Failed to fetch history"})
+
+
+@app.get("/v1/games/{game_id}/history/{turn_number}")
+async def get_state_at_turn(game_id: str, turn_number: int, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        state = gameManager.get_state_at_turn(UUID(game_id), turn_number)
+        if state is None:
+            return JSONResponse(status_code=404, content={"error": "Turn not found"})
+        return JSONResponse(content={"game_state": state})
+    except Exception:
+        logger.exception("Error fetching state at turn %d for game %s", turn_number, game_id)
+        return JSONResponse(status_code=500, content={"error": "Failed to fetch state"})
+
+
+# ─── Undo endpoints ───────────────────────────────────────────────────────────
+
+
+@app.post("/v1/games/{game_id}/undo")
+async def propose_undo(game_id: str, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        undo_req = gameManager.propose_undo(game, token_user.id)
+        logger.info("%s proposed undo in game %s", token_user.username, game_id)
+        return JSONResponse(content={"undo_request": undo_req})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error proposing undo for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Failed to propose undo"})
+
+
+class UndoVoteRequest(BaseModel):
+    request_id: str
+    vote: str  # "agree" | "disagree"
+
+
+@app.post("/v1/games/{game_id}/undo/vote")
+async def vote_undo(game_id: str, body: UndoVoteRequest, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    if body.vote not in ("agree", "disagree"):
+        return JSONResponse(status_code=400, content={"error": "vote must be 'agree' or 'disagree'"})
+    try:
+        result = gameManager.vote_undo(game, token_user.id, body.request_id, body.vote)
+        logger.info(
+            "%s voted '%s' on undo in game %s", token_user.username, body.vote, game_id
+        )
+        return JSONResponse(content=result)
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error voting on undo for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Failed to vote on undo"})

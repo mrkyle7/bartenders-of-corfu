@@ -12,36 +12,280 @@
 </head>
 
 <body>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
-    <link rel="stylesheet" href="/static/styles.css" />
+    <div class="gb-page" id="gbPage">
 
-    <div class="page">
-        <header>
-            <img src="/static/bartenders.png" alt="Illustration of bartenders mixing cocktails" class="bartender-image"
-                role="img" aria-describedby="bartender-desc" />
-            <div class="game-meta">
-                <div>Game: <span id="gameId"></span></div>
-                <p id="gameError" role="alert" class="error-msg hidden"></p>
-                <div>Players: <div id="playerList"></div></div>
-                <div id="gameControls"></div>
+        <!-- ===== HEADER ===== -->
+        <header class="gb-header" role="banner">
+            <img src="/static/bartenders.png"
+                 alt="Bartenders of Corfu logo"
+                 class="gb-header-logo"
+                 aria-hidden="true">
+            <div>
+                <div class="gb-header-title">Bartenders of Corfu</div>
+                <div class="gb-header-gameid" id="gbGameId" aria-label="Game ID"></div>
             </div>
+            <div id="gbTurnIndicator" class="gb-turn-indicator" aria-live="polite" aria-atomic="true">Loading…</div>
+            <div id="gbWinnerBanner" class="gb-winner-banner" role="status" aria-live="polite"></div>
+            <div id="gbErrorBar" class="gb-error-bar" role="alert" aria-live="assertive"></div>
         </header>
-        <main>
-            <h2>Welcome!</h2>
-            <div class="table">
-                <div class="playerSheet">Player 1</div>
-                <div class="playerSheet">Player 2</div>
-            </div>
+
+        <!-- ===== REPLAY BANNER ===== -->
+        <div id="gbReplayBanner" class="gb-replay-banner" role="status" aria-live="polite">
+            REPLAY MODE — viewing historical state
+        </div>
+
+        <!-- ===== MAIN (left board + right player sheets) ===== -->
+        <main class="gb-main" id="gbMain">
+
+            <!-- LEFT: game board -->
+            <section class="gb-board-panel" id="gbBoardPanel" aria-label="Game board">
+
+                <div id="gbBoardLoading" class="gb-loading" aria-busy="true">
+                    <span class="spinner" aria-hidden="true"></span>Loading game…
+                </div>
+
+                <div id="gbBoardContent" class="hidden">
+
+                    <!-- Open display + bag -->
+                    <div class="gb-section-title">Open Display</div>
+                    <div class="gb-open-display" id="gbOpenDisplay" aria-label="Open ingredient display" role="list"></div>
+                    <div class="gb-bag-count" id="gbBagCount" aria-label="Bag contents count"></div>
+
+                    <!-- Card rows -->
+                    <div class="gb-section-title" style="margin-top:14px">Card Rows</div>
+                    <div class="gb-card-rows" id="gbCardRows" role="list" aria-label="Available cards"></div>
+
+                </div>
+            </section>
+
+            <!-- RIGHT: player sheets -->
+            <aside class="gb-right-panel" aria-label="Player sheets">
+
+                <!-- My player sheet -->
+                <section class="gb-my-sheet" id="gbMySheet" aria-label="My player sheet">
+                    <div id="gbMySheetLoading" class="gb-loading" aria-busy="true">
+                        <span class="spinner" aria-hidden="true"></span>Loading…
+                    </div>
+                    <div id="gbMySheetContent" class="hidden">
+                        <div class="gb-sheet-name" id="gbMyName"></div>
+
+                        <!-- Stats row -->
+                        <div class="gb-stats-row" id="gbMyStats" role="group" aria-label="My stats"></div>
+
+                        <!-- Cups -->
+                        <div class="gb-section-title" style="margin-top:8px">My Cups</div>
+                        <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
+
+                        <!-- Special ingredients -->
+                        <div class="gb-section-title">Special Ingredients on Mat</div>
+                        <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
+
+                        <!-- Claimed cards -->
+                        <div class="gb-section-title">Claimed Cards</div>
+                        <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
+
+                        <!-- Actions -->
+                        <div class="gb-section-title" style="margin-top:10px">Actions</div>
+                        <div class="gb-actions" id="gbActions" role="group" aria-label="Available actions">
+                            <button class="gb-action-btn" id="gbBtnTakeIngredients"
+                                    aria-label="Take ingredients from display or bag">
+                                Take Ingredients
+                            </button>
+                            <button class="gb-action-btn secondary" id="gbBtnWee"
+                                    aria-label="Go for a wee — empties bladder">
+                                Go for a Wee
+                            </button>
+                        </div>
+
+                        <!-- Undo section -->
+                        <div id="gbUndoSection" class="gb-undo-section hidden" aria-label="Undo controls">
+                            <div class="gb-undo-title">Undo</div>
+                            <div id="gbUndoContent"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Other players -->
+                <section class="gb-others-area" id="gbOthers" aria-label="Other players"></section>
+
+            </aside>
         </main>
-        <footer>
-            <a href="/docs" target="_blank">API</a> |
-            <a href="https://github.com/mrkyle7/bartenders-of-corfu" target="_blank">Source</a>
-            |
-            <a href="https://github.com/mrkyle7/bartenders-of-corfu/issues" target="_blank">Support</a>
-        </footer>
+
+        <!-- ===== BOTTOM PANEL (history / replay / undo) ===== -->
+        <div class="gb-bottom-panel" role="complementary" aria-label="Game history">
+            <div class="gb-bottom-tabs" role="tablist" aria-label="Bottom panel tabs">
+                <button class="gb-tab-btn active" role="tab" aria-selected="true"
+                        aria-controls="gbTabHistory" id="gbTabBtnHistory"
+                        onclick="switchTab('history')">
+                    Move History
+                </button>
+                <button class="gb-tab-btn" role="tab" aria-selected="false"
+                        aria-controls="gbTabReplay" id="gbTabBtnReplay"
+                        onclick="switchTab('replay')">
+                    Replay
+                </button>
+            </div>
+
+            <div class="gb-tab-content active" id="gbTabHistory"
+                 role="tabpanel" aria-labelledby="gbTabBtnHistory">
+                <div id="gbHistoryLog" aria-live="polite" aria-relevant="additions"></div>
+            </div>
+
+            <div class="gb-tab-content" id="gbTabReplay"
+                 role="tabpanel" aria-labelledby="gbTabBtnReplay">
+                <div class="gb-replay-controls" id="gbReplayControls">
+                    <button class="gb-replay-btn" id="gbReplayFirst"
+                            onclick="replayGo('first')" aria-label="Jump to initial state">
+                        &#9664;&#9664; Initial
+                    </button>
+                    <button class="gb-replay-btn" id="gbReplayPrev"
+                            onclick="replayGo('prev')" aria-label="Previous turn">
+                        &#9664; Prev
+                    </button>
+                    <span class="gb-replay-label" id="gbReplayLabel" aria-live="polite">—</span>
+                    <button class="gb-replay-btn" id="gbReplayNext"
+                            onclick="replayGo('next')" aria-label="Next turn">
+                        Next &#9654;
+                    </button>
+                    <button class="gb-replay-btn" id="gbReplayLast"
+                            onclick="replayGo('last')" aria-label="Jump to current state">
+                        Current &#9654;&#9654;
+                    </button>
+                    <button class="gb-replay-btn" id="gbReplayExit"
+                            onclick="exitReplay()" aria-label="Exit replay mode"
+                            style="background:#b91c1c;margin-left:8px">
+                        Exit Replay
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /.gb-page -->
+
+    <!-- ===== TAKE INGREDIENTS MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbTakeModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbTakeModalTitle"
+         tabindex="-1">
+        <div class="gb-modal">
+            <button class="gb-modal-close" onclick="closeTakeModal()"
+                    aria-label="Close take ingredients dialog">&#x2715;</button>
+
+            <!-- Step dots -->
+            <div class="gb-step-dots" id="gbTakeStepDots" aria-hidden="true">
+                <div class="gb-step-dot active" id="gbTakeDot0"></div>
+                <div class="gb-step-dot" id="gbTakeDot1"></div>
+            </div>
+
+            <div class="gb-modal-title" id="gbTakeModalTitle">Take Ingredients</div>
+            <div class="gb-modal-step-label" id="gbTakeStepLabel"></div>
+
+            <!-- STEP 0: select ingredients -->
+            <div id="gbTakeStep0">
+                <div class="gb-modal-section">
+                    <div class="gb-modal-section-title">From Open Display</div>
+                    <div class="gb-pick-grid" id="gbPickDisplay" role="group"
+                         aria-label="Select ingredients from open display"></div>
+                </div>
+                <div class="gb-modal-section">
+                    <div class="gb-modal-section-title">
+                        From Bag
+                        <span id="gbBagPickInfo" style="font-size:0.85em;font-weight:normal;color:#8a5c2e"></span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <button class="gb-modal-btn" id="gbBtnDrawBag"
+                                aria-label="Draw one ingredient from bag">
+                            Draw from Bag
+                        </button>
+                        <span id="gbBagDrawStatus" style="font-size:0.8em;color:#6b3a0f"></span>
+                    </div>
+                    <div class="gb-pick-grid" id="gbPickBag" style="margin-top:6px"
+                         role="group" aria-label="Drawn bag ingredients"></div>
+                </div>
+                <div style="font-size:0.8em;color:#6b3a0f;margin-bottom:8px">
+                    Selected: <strong id="gbTakeCount">0</strong> / <strong id="gbTakeLimit">0</strong>
+                </div>
+            </div>
+
+            <!-- STEP 1: assign each selected ingredient -->
+            <div id="gbTakeStep1" class="hidden">
+                <table class="gb-assign-table" aria-label="Assign ingredients to cups or drink">
+                    <thead>
+                        <tr>
+                            <th scope="col">Ingredient</th>
+                            <th scope="col">Assign to</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gbAssignTableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="gb-modal-actions">
+                <button class="gb-modal-btn cancel" onclick="closeTakeModal()">Cancel</button>
+                <button class="gb-modal-btn" id="gbTakeNextBtn" onclick="takeModalNext()">
+                    Next &rarr;
+                </button>
+            </div>
+            <div id="gbTakeModalError" class="gb-error-bar" style="margin-top:8px"></div>
+        </div>
     </div>
+
+    <!-- ===== SELL CUP MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbSellModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbSellModalTitle"
+         tabindex="-1">
+        <div class="gb-modal">
+            <button class="gb-modal-close" onclick="closeSellModal()"
+                    aria-label="Close sell cup dialog">&#x2715;</button>
+            <div class="gb-modal-title" id="gbSellModalTitle">Sell Cup</div>
+            <div class="gb-modal-step-label" id="gbSellModalDesc"></div>
+
+            <div class="gb-modal-section">
+                <div class="gb-modal-section-title">Cup Contents</div>
+                <div id="gbSellCupContents" class="gb-pick-grid"></div>
+            </div>
+
+            <div class="gb-modal-section" id="gbSellSpecialsSection">
+                <div class="gb-modal-section-title">Declare Special Ingredients</div>
+                <div style="font-size:0.78em;color:#6b3a0f;margin-bottom:6px">
+                    Select specials from your mat to declare for this cocktail:
+                </div>
+                <div id="gbSellSpecialsPicker" class="gb-pick-grid"
+                     role="group" aria-label="Select specials to declare"></div>
+            </div>
+
+            <div class="gb-modal-actions">
+                <button class="gb-modal-btn cancel" onclick="closeSellModal()">Cancel</button>
+                <button class="gb-modal-btn confirm" id="gbSellConfirmBtn"
+                        onclick="confirmSell()">
+                    Sell Cup
+                </button>
+            </div>
+            <div id="gbSellModalError" class="gb-error-bar" style="margin-top:8px"></div>
+        </div>
+    </div>
+
+    <!-- ===== DRINK CUP CONFIRM MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbDrinkModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbDrinkModalTitle"
+         tabindex="-1">
+        <div class="gb-modal" style="max-width:360px">
+            <button class="gb-modal-close" onclick="closeDrinkModal()"
+                    aria-label="Close drink cup dialog">&#x2715;</button>
+            <div class="gb-modal-title" id="gbDrinkModalTitle">Drink Cup</div>
+            <div id="gbDrinkModalDesc" style="font-size:0.85em;color:#4a2c0e;margin-bottom:12px"></div>
+            <div class="gb-modal-actions">
+                <button class="gb-modal-btn cancel" onclick="closeDrinkModal()">Cancel</button>
+                <button class="gb-modal-btn danger" id="gbDrinkConfirmBtn"
+                        onclick="confirmDrink()">
+                    Drink!
+                </button>
+            </div>
+            <div id="gbDrinkModalError" class="gb-error-bar" style="margin-top:8px"></div>
+        </div>
+    </div>
+
     <script>
-        load()
+        load();
     </script>
 </body>
 

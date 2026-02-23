@@ -18,6 +18,7 @@ dependencies = [
 dev = [
     "playwright>=1.40.0",
     "pytest>=9.0.2",
+    "pytest-bdd>=7.0.0",
     "pytest-playwright>=0.4.4",
     "ruff>=0.15.1",
 ]

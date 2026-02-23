@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 from supabase import create_client, Client
 from app.game import Game, Status
 from app.GameState import GameState
@@ -225,37 +225,7 @@ class Db:
 
     @staticmethod
     def game_response_to_game(game_data) -> Game:
-
-        state_data = game_data["latest_state"]
-        player_states = {}
-        if "player_states" in game_data["latest_state"]:
-            for player, ps_data in state_data["player_states"].items():
-                player_states[UUID(player)] = PlayerState(
-                    player_id=UUID(ps_data["player_id"]),
-                    points=ps_data["points"],
-                    drunk_level=ps_data["drunk_level"],
-                    cup1=[Ingredient[ingredient] for ingredient in ps_data["cup1"]],
-                    cup2=[Ingredient[ingredient] for ingredient in ps_data["cup2"]],
-                    bladder=[Ingredient[i] for i in ps_data.get("bladder", [])],
-                    bladder_capacity=ps_data.get("bladder_capacity", 8),
-                    toilet_tokens=ps_data.get("toilet_tokens", 4),
-                    special_ingredients=ps_data.get("special_ingredients", []),
-                    karaoke_cards_claimed=ps_data.get("karaoke_cards_claimed", 0),
-                    status=ps_data.get("status", "active"),
-                )
-
-        game_state = GameState(
-            winner=UUID(state_data["winner"]) if state_data.get("winner") else None,
-            bag_contents=[
-                Ingredient[ingredient] for ingredient in state_data["bag_contents"]
-            ],
-            player_states=player_states,
-            player_turn=UUID(state_data["player_turn"])
-            if state_data.get("player_turn")
-            else None,
-            open_display=[Ingredient[i] for i in state_data.get("open_display", [])],
-        )
-
+        game_state = GameState.from_dict(game_data["latest_state"])
         return Game(
             id=UUID(game_data["id"]),
             host=UUID(game_data["host"]),
@@ -307,14 +277,16 @@ class Db:
         return games, total
 
     def start_game(self, game_id: UUID, game_state: GameState) -> str:
-        """Start a game: atomically set status=STARTED and save new game_state.
+        """Start a game: atomically set status=STARTED, save initial_state and latest_state.
         Returns 'ok' | 'not_found' | 'not_new'"""
+        state_dict = game_state.to_dict()
         response = (
             self.supabase.table("games")
             .update(
                 {
                     "status": "STARTED",
-                    "latest_state": game_state.to_dict(),
+                    "latest_state": state_dict,
+                    "initial_state": state_dict,
                 }
             )
             .eq("id", str(game_id))
@@ -323,13 +295,180 @@ class Db:
         )
         if len(response.data) == 1:
             return "ok"
-        # Distinguish not_found from not_new
         check = (
             self.supabase.table("games").select("id").eq("id", str(game_id)).execute()
         )
         if not check.data:
             return "not_found"
         return "not_new"
+
+    def update_game_state(self, game_id: UUID, game_state: GameState) -> bool:
+        """Overwrite latest_state after a game action."""
+        response = (
+            self.supabase.table("games")
+            .update({"latest_state": game_state.to_dict()})
+            .eq("id", str(game_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def add_game_move(
+        self,
+        game_id: UUID,
+        turn_number: int,
+        player_id: UUID,
+        action_type: str,
+        action_payload: dict,
+        state_before: dict,
+    ) -> bool:
+        """Append an immutable MoveRecord to game_moves."""
+        response = (
+            self.supabase.table("game_moves")
+            .insert(
+                {
+                    "id": str(uuid4()),
+                    "game_id": str(game_id),
+                    "turn_number": turn_number,
+                    "player_id": str(player_id),
+                    "action_type": action_type,
+                    "action_payload": action_payload,
+                    "state_before": state_before,
+                }
+            )
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def get_game_moves(self, game_id: UUID) -> list[dict]:
+        """Return all MoveRecords for a game, ordered by turn_number ascending."""
+        response = (
+            self.supabase.table("game_moves")
+            .select("id, turn_number, player_id, action_type, action_payload, created_at")
+            .eq("game_id", str(game_id))
+            .order("turn_number", desc=False)
+            .execute()
+        )
+        return response.data or []
+
+    def get_state_at_turn(self, game_id: UUID, turn_number: int) -> dict | None:
+        """Return the reconstructed game state immediately after turn_number completed.
+
+        turn_number=0  → initial state (before any moves)
+        turn_number=N  → state_before from move N+1, or latest_state if N is the last turn
+        """
+        if turn_number == 0:
+            # Return the initial state snapshot
+            resp = (
+                self.supabase.table("games")
+                .select("initial_state")
+                .eq("id", str(game_id))
+                .execute()
+            )
+            if not resp.data:
+                return None
+            return resp.data[0].get("initial_state")
+
+        # State after turn N = state_before of turn N+1
+        next_move = (
+            self.supabase.table("game_moves")
+            .select("state_before")
+            .eq("game_id", str(game_id))
+            .eq("turn_number", turn_number + 1)
+            .execute()
+        )
+        if next_move.data:
+            return next_move.data[0]["state_before"]
+
+        # N is the last turn — return latest_state
+        resp = (
+            self.supabase.table("games")
+            .select("latest_state")
+            .eq("id", str(game_id))
+            .execute()
+        )
+        if not resp.data:
+            return None
+        return resp.data[0].get("latest_state")
+
+    # ─── Undo requests ────────────────────────────────────────────────────────
+
+    def get_pending_undo(self, game_id: UUID) -> dict | None:
+        """Return the pending UndoRequest for a game, or None."""
+        resp = (
+            self.supabase.table("undo_requests")
+            .select("*")
+            .eq("game_id", str(game_id))
+            .eq("status", "pending")
+            .execute()
+        )
+        return resp.data[0] if resp.data else None
+
+    def create_undo_request(
+        self,
+        game_id: UUID,
+        target_turn_number: int,
+        proposed_by: UUID,
+    ) -> dict:
+        """Create a new pending UndoRequest. Proposer implicitly votes agree."""
+        record = {
+            "id": str(uuid4()),
+            "game_id": str(game_id),
+            "target_turn_number": target_turn_number,
+            "proposed_by": str(proposed_by),
+            "votes": {str(proposed_by): "agree"},
+            "status": "pending",
+        }
+        self.supabase.table("undo_requests").insert(record).execute()
+        return record
+
+    def vote_on_undo(self, request_id: str, player_id: UUID, vote: str) -> dict | None:
+        """Record a player's vote on an undo request. Returns updated request or None."""
+        # Fetch current request
+        resp = (
+            self.supabase.table("undo_requests")
+            .select("*")
+            .eq("id", request_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        if not resp.data:
+            return None
+        request = resp.data[0]
+        votes: dict = dict(request.get("votes") or {})
+        votes[str(player_id)] = vote
+
+        new_status = "pending"
+        if vote == "disagree":
+            new_status = "rejected"
+
+        updated = (
+            self.supabase.table("undo_requests")
+            .update({"votes": votes, "status": new_status})
+            .eq("id", request_id)
+            .execute()
+        )
+        return updated.data[0] if updated.data else None
+
+    def approve_undo(self, request_id: str, votes: dict) -> bool:
+        """Mark an undo request as approved."""
+        resp = (
+            self.supabase.table("undo_requests")
+            .update({"votes": votes, "status": "approved"})
+            .eq("id", request_id)
+            .execute()
+        )
+        return len(resp.data) == 1
+
+    def get_state_before_turn(self, game_id: UUID, turn_number: int) -> dict | None:
+        """Return state_before from the MoveRecord for the given turn_number."""
+        resp = (
+            self.supabase.table("game_moves")
+            .select("state_before")
+            .eq("game_id", str(game_id))
+            .eq("turn_number", turn_number)
+            .execute()
+        )
+        return resp.data[0]["state_before"] if resp.data else None
 
     def add_player_to_game(self, game_id: UUID, player_id: UUID) -> str:
         """Add a player to an existing game. Returns a text code: 'ok' | 'not_found' | 'not_new' | 'duplicate' | 'full'"""

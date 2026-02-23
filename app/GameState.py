@@ -2,6 +2,7 @@ import random
 from typing import Mapping, Optional
 from uuid import UUID
 
+from app.card import CardRow, build_deck, deal_initial_rows
 from app.Ingredient import Ingredient
 from app.PlayerState import PlayerState
 from app.user import User
@@ -30,6 +31,10 @@ class GameState:
         player_states: Mapping[UUID, PlayerState],
         player_turn: Optional[UUID],
         open_display: list[Ingredient] | None = None,
+        card_rows: list[CardRow] | None = None,
+        deck: list[dict] | None = None,
+        turn_order: list[UUID] | None = None,
+        turn_number: int = 0,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -38,6 +43,13 @@ class GameState:
         self.open_display: list[Ingredient] = (
             open_display if open_display is not None else []
         )
+        self.card_rows: list[CardRow] = card_rows if card_rows is not None else []
+        # Remaining deck (serialised as list[dict] for storage; rebuild Card objects on demand)
+        self._deck_dicts: list[dict] = deck if deck is not None else []
+        # Fixed turn order established at game start
+        self.turn_order: list[UUID] = turn_order if turn_order is not None else []
+        # Current turn counter (monotonically increasing)
+        self.turn_number: int = turn_number
 
     @classmethod
     def new_game(cls, host: User) -> "GameState":
@@ -58,7 +70,14 @@ class GameState:
             pid: PlayerState.new_player(pid) for pid in players
         }
 
-        first_player = random.choice(players)
+        # Randomise turn order; persist it for the duration of the game
+        turn_order = list(players)
+        random.shuffle(turn_order)
+        first_player = turn_order[0]
+
+        # Build card deck and deal 3 rows of 3 cards
+        deck = build_deck()
+        card_rows, remaining_deck = deal_initial_rows(deck)
 
         return cls(
             winner=None,
@@ -66,6 +85,10 @@ class GameState:
             player_states=player_states,
             player_turn=first_player,
             open_display=open_display,
+            card_rows=card_rows,
+            deck=[c.to_dict() for c in remaining_deck],
+            turn_order=turn_order,
+            turn_number=0,
         )
 
     def to_dict(self) -> dict:
@@ -78,4 +101,47 @@ class GameState:
             },
             "player_turn": str(self.player_turn) if self.player_turn else None,
             "open_display": [ingredient.name for ingredient in self.open_display],
+            "card_rows": [row.to_dict() for row in self.card_rows],
+            "deck_size": len(self._deck_dicts),
+            "deck": self._deck_dicts,
+            "turn_order": [str(pid) for pid in self.turn_order],
+            "turn_number": self.turn_number,
         }
+
+    @classmethod
+    def from_dict(cls, state_data: dict) -> "GameState":
+        """Deserialise a GameState from a stored dict (DB JSONB)."""
+        from app.card import Card
+
+        player_states = {}
+        for player_str, ps_data in state_data.get("player_states", {}).items():
+            player_states[UUID(player_str)] = PlayerState(
+                player_id=UUID(ps_data["player_id"]),
+                points=ps_data["points"],
+                drunk_level=ps_data["drunk_level"],
+                cup1=[Ingredient[i] for i in ps_data.get("cup1", [])],
+                cup2=[Ingredient[i] for i in ps_data.get("cup2", [])],
+                bladder=[Ingredient[i] for i in ps_data.get("bladder", [])],
+                bladder_capacity=ps_data.get("bladder_capacity", 8),
+                toilet_tokens=ps_data.get("toilet_tokens", 4),
+                special_ingredients=ps_data.get("special_ingredients", []),
+                karaoke_cards_claimed=ps_data.get("karaoke_cards_claimed", 0),
+                status=ps_data.get("status", "active"),
+                cards=ps_data.get("cards", []),
+            )
+
+        card_rows = [CardRow.from_dict(r) for r in state_data.get("card_rows", [])]
+        deck_dicts = state_data.get("deck", [])
+        turn_order = [UUID(pid) for pid in state_data.get("turn_order", [])]
+
+        return cls(
+            winner=UUID(state_data["winner"]) if state_data.get("winner") else None,
+            bag_contents=[Ingredient[i] for i in state_data.get("bag_contents", [])],
+            player_states=player_states,
+            player_turn=UUID(state_data["player_turn"]) if state_data.get("player_turn") else None,
+            open_display=[Ingredient[i] for i in state_data.get("open_display", [])],
+            card_rows=card_rows,
+            deck=deck_dicts,
+            turn_order=turn_order,
+            turn_number=state_data.get("turn_number", 0),
+        )

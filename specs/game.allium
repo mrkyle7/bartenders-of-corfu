@@ -178,6 +178,10 @@ rule TakeIngredients {
     -- DrinkIngredient, or DrawSpecialIngredient) before the next batch may be taken.
     -- No ingredient may be returned to the bag or held undecided across batches.
     ensures: chosen ingredients removed from their source
+    -- After all assignments for this action are resolved, apply the drunk modifier
+    -- once across all ingredients assigned disposition=drink this turn.
+    let drunk_this_turn = chosen where disposition = drink
+    ensures: ApplyDrunkModifier(player, drunk_this_turn)
     ensures: ReplenishDisplay(board)
 }
 
@@ -202,14 +206,26 @@ rule DrawSpecialIngredient {
 
 rule DrinkIngredient {
     -- Called during TakeIngredients or DrinkCup for each spirit or mixer consumed.
+    -- Drunk level is NOT adjusted per ingredient; it is assessed once at end of turn
+    -- via ApplyDrunkModifier after all ingredients for that action have been consumed.
     when: DrinkIngredient(player, ingredient)
     requires: player.status = active
     requires: ingredient.kind in {Spirit, Mixer}
-    if ingredient.kind = Spirit:
-        ensures: player.drunk_level = player.drunk_level + 1
-    if ingredient.kind = Mixer:
-        ensures: player.drunk_level = max(0, player.drunk_level - 1)
     ensures: player.bladder = player.bladder + [ingredient]
+    -- Note: drunk_level change is deferred to ApplyDrunkModifier.
+}
+
+rule ApplyDrunkModifier {
+    -- Called once per action after all ingredients consumed in that action are known.
+    -- Applies to both TakeIngredients (drink disposition) and DrinkCup.
+    -- A player only sobers up if every ingredient consumed this action is a Mixer.
+    -- If any Spirit was consumed, Mixers provide no sobering effect.
+    when: ApplyDrunkModifier(player, consumed: List<Ingredient>)
+    let spirits = consumed where kind = Spirit
+    let mixers  = consumed where kind = Mixer
+    ensures: player.drunk_level = player.drunk_level + spirits.count
+    if spirits.count = 0:
+        ensures: player.drunk_level = max(0, player.drunk_level - mixers.count)
     ensures: CheckElimination(player)
 }
 
@@ -241,14 +257,17 @@ rule SellCup {
 
 rule DrinkCup {
     -- Player drinks the full contents of one of their cups.
-    -- Follows the same rules as DrinkIngredient for each ingredient in the cup.
+    -- Each ingredient is added to the bladder via DrinkIngredient.
+    -- The drunk modifier is applied once after all cup ingredients are consumed.
     when: DrinkCup(player, cup)
     requires: player.status = active
     requires: it is player's turn
     requires: cup.owner.player_id = player.player_id
     requires: not cup.is_empty
-    for ingredient in cup.ingredients:
+    let consumed = cup.ingredients (before drinking)
+    for ingredient in consumed:
         ensures: DrinkIngredient(player, ingredient)
+    ensures: ApplyDrunkModifier(player, consumed)
     ensures: cup.ingredients = []
     -- Drunk cup ingredients go to the bladder (not the bag).
     -- When the player later GoesForAWee, these are excreted and returned to the bag.

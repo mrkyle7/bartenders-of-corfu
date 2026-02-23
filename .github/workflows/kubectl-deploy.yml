@@ -108,6 +108,18 @@ jobs:
             --from-literal=supabase-key="${SUPABASE_KEY}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Push Supabase DB migrations
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          # Install supabase CLI
+          curl -fsSL https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz \
+            | tar -xz -C /usr/local/bin supabase
+          # Link project and push all pending migrations
+          supabase link --project-ref "${SUPABASE_PROJECT_ID}"
+          supabase db push --password "${SUPABASE_DB_PASSWORD}"
+
       - name: Render deployment manifest
         run: |
           export IMAGE_TAG=${{ github.sha }}
