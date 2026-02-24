@@ -250,6 +250,20 @@ function renderAll(game, replayState = null) {
     el('gbGameId').title = `Game ID: ${game.id}`;
     renderTurnIndicator(game, gs);
 
+    // Lobby view for NEW games
+    if (game.status === 'NEW' && !isReplay) {
+        el('gbLobbyPanel').classList.remove('hidden');
+        el('gbBoardLoading').classList.add('hidden');
+        el('gbBoardContent').classList.add('hidden');
+        el('gbMySheetLoading').classList.add('hidden');
+        el('gbMySheetContent').classList.add('hidden');
+        el('gbUndoSection').classList.add('hidden');
+        renderLobby(game);
+        schedulePollLobby();
+        return;
+    }
+    el('gbLobbyPanel').classList.add('hidden');
+
     // Board
     renderBoard(game, gs, isReplay);
 
@@ -298,13 +312,100 @@ function renderTurnIndicator(game, gs) {
     const currentPlayer = gs.player_turn;
     const isMyTurn = _me && currentPlayer === _me.id;
     if (isMyTurn) {
-        ind.textContent = `Your turn  •  Turn ${gs.turn_number || '?'}`;
+        ind.textContent = `Your turn  •  Turn ${gs.turn_number !== null ? gs.turn_number : '?'}`;
         ind.className = 'gb-turn-indicator gb-my-turn';
     } else {
         const name = playerName(currentPlayer);
-        ind.textContent = `${name}'s turn  •  Turn ${gs.turn_number || '?'}`;
+        ind.textContent = `${name}'s turn  •  Turn ${gs.turn_number !== null ? gs.turn_number : '?'}`;
         ind.className = 'gb-turn-indicator';
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Lobby view (NEW game — waiting for players)
+// ─────────────────────────────────────────────────────────────
+function renderLobby(game) {
+    const list = el('playerList');
+    if (!list) return;
+    list.innerHTML = '';
+    const isHost = _me && _me.id === game.host;
+    (game.players || []).forEach(pid => {
+        const entry = document.createElement('li');
+        entry.className = 'player-entry';
+        entry.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = playerName(pid);
+        if (pid === game.host) {
+            nameSpan.textContent += ' (host)';
+        }
+        entry.appendChild(nameSpan);
+
+        if (isHost && pid !== game.host) {
+            const btn = document.createElement('button');
+            btn.className = 'remove-player-btn';
+            btn.textContent = 'Remove';
+            btn.setAttribute('aria-label', `Remove ${playerName(pid)}`);
+            btn.dataset.playerId = pid;
+            btn.onclick = async () => {
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(`/v1/games/${_gameId}/players/${encodeURIComponent(pid)}`, { method: 'DELETE' });
+                    if (resp.ok) {
+                        await refreshGame();
+                    } else {
+                        btn.disabled = false;
+                        const d = await resp.json().catch(() => ({}));
+                        showError(d.error || 'Failed to remove player');
+                    }
+                } catch (e) {
+                    btn.disabled = false;
+                    showError('Network error removing player');
+                }
+            };
+            entry.appendChild(btn);
+        }
+
+        list.appendChild(entry);
+    });
+
+    // Start Game button — host only
+    const section = el('gbStartGameSection');
+    if (!section) return;
+    section.innerHTML = '';
+    if (isHost) {
+        const btn = document.createElement('button');
+        btn.id = 'gbBtnStartGame';
+        btn.className = 'gb-action-btn';
+        btn.textContent = 'Start Game';
+        btn.setAttribute('aria-label', 'Start the game');
+        btn.onclick = startGame;
+        section.appendChild(btn);
+    }
+}
+
+async function startGame() {
+    const btn = el('gbBtnStartGame');
+    setButtonBusy(btn, true, 'Starting…');
+    clearError();
+    try {
+        const resp = await fetch(`/v1/games/${_gameId}/start`, { method: 'POST' });
+        if (resp.ok) {
+            await refreshGame();
+        } else {
+            setButtonBusy(btn, false);
+            const d = await resp.json().catch(() => ({}));
+            showError(d.error || 'Failed to start game');
+        }
+    } catch (e) {
+        setButtonBusy(btn, false);
+        showError('Network error starting game');
+    }
+}
+
+function schedulePollLobby() {
+    if (_pollTimer) clearTimeout(_pollTimer);
+    _pollTimer = setTimeout(() => refreshGame(true), 3000);
 }
 
 // ─────────────────────────────────────────────────────────────

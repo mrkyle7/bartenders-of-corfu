@@ -34,7 +34,9 @@ class GameState:
         card_rows: list[CardRow] | None = None,
         deck: list[dict] | None = None,
         turn_order: list[UUID] | None = None,
-        turn_number: int = 0,
+        turn_number: int = 1,
+        ingredients_taken_this_turn: int = 0,
+        drunk_ingredients_this_turn: list[Ingredient] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -50,6 +52,14 @@ class GameState:
         self.turn_order: list[UUID] = turn_order if turn_order is not None else []
         # Current turn counter (monotonically increasing)
         self.turn_number: int = turn_number
+        # Tracks progress of a multi-batch TakeIngredients action within a single turn.
+        # Reset to 0 when the turn advances.
+        self.ingredients_taken_this_turn: int = ingredients_taken_this_turn
+        # Accumulates all ingredients drunk (disposition=drink) across batches this turn.
+        # Applied as a single drunk-modifier calculation when the turn completes.
+        self.drunk_ingredients_this_turn: list[Ingredient] = (
+            drunk_ingredients_this_turn if drunk_ingredients_this_turn is not None else []
+        )
 
     @classmethod
     def new_game(cls, host: User) -> "GameState":
@@ -106,6 +116,8 @@ class GameState:
             "deck": self._deck_dicts,
             "turn_order": [str(pid) for pid in self.turn_order],
             "turn_number": self.turn_number,
+            "ingredients_taken_this_turn": self.ingredients_taken_this_turn,
+            "drunk_ingredients_this_turn": [i.name for i in self.drunk_ingredients_this_turn],
         }
 
     @classmethod
@@ -144,4 +156,8 @@ class GameState:
             deck=deck_dicts,
             turn_order=turn_order,
             turn_number=state_data.get("turn_number", 0),
+            ingredients_taken_this_turn=state_data.get("ingredients_taken_this_turn", 0),
+            drunk_ingredients_this_turn=[
+                Ingredient[i] for i in state_data.get("drunk_ingredients_this_turn", [])
+            ],
         )

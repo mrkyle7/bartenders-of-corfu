@@ -124,7 +124,12 @@ class GameManager:
         new_state, payload = actions.take_ingredients(
             game.game_state, player_id, assignments
         )
-        self._apply_action(game, player_id, "take_ingredients", new_state, payload)
+        if payload.get("turn_complete"):
+            # Only record a move when the full take-ingredients turn is complete
+            self._apply_action(game, player_id, "take_ingredients", new_state, payload)
+        else:
+            # Intermediate batch: persist state change without creating a move record
+            db.update_game_state(game.id, new_state)
         return new_state, payload
 
     def sell_cup(

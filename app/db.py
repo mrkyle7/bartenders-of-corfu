@@ -303,10 +303,13 @@ class Db:
         return "not_new"
 
     def update_game_state(self, game_id: UUID, game_state: GameState) -> bool:
-        """Overwrite latest_state after a game action."""
+        """Overwrite latest_state after a game action. Also sets status=ENDED if there is a winner."""
+        update_data: dict = {"latest_state": game_state.to_dict()}
+        if game_state.winner is not None:
+            update_data["status"] = "ENDED"
         response = (
             self.supabase.table("games")
-            .update({"latest_state": game_state.to_dict()})
+            .update(update_data)
             .eq("id", str(game_id))
             .execute()
         )

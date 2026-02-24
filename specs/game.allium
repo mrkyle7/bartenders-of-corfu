@@ -169,22 +169,31 @@ rule TakeIngredients {
     requires: it is player's turn
     requires: board.available_ingredients.count >= player.take_limit
         -- if fewer than take_limit ingredients exist across bag + display,
-        -- this action is unavailable; player must choose another action
-    requires: chosen.count = player.take_limit
+        -- this action is unavailable; player must choose another action.
+        -- This check is performed only at the start of the first batch.
+    requires: chosen.count = player.take_limit across all batches this turn
     requires: chosen drawn from board.open_display ∪ board.ingredient_bag in any order
     -- Bag draws are random: the player cannot choose which ingredient they receive from
     -- board.ingredient_bag. The system selects a random ingredient from the bag on each
     -- bag draw. The player may only choose specific ingredients when taking from
     -- board.open_display (where all contents are visible).
-    -- The player takes ingredients in one or more batches until take_limit is reached.
-    -- Each batch may be any size (e.g. take 3 from the bag at once).
+    --
+    -- Multi-batch API protocol:
+    -- The player takes ingredients in one or more API calls (batches) until
+    -- take_limit total ingredients have been taken for this turn.
+    -- Each batch submits between 1 and (take_limit - already_taken) assignments.
     -- All ingredients in a batch must be assigned (PlaceIngredientInCup,
-    -- DrinkIngredient, or DrawSpecialIngredient) before the next batch may be taken.
-    -- No ingredient may be returned to the bag or held undecided across batches.
+    -- DrinkIngredient, or DrawSpecialIngredient) — no ingredient may be held
+    -- undecided or returned to the bag mid-turn.
+    -- The system tracks ingredients_taken_this_turn in game state across batches.
+    -- The turn does NOT advance until the cumulative total reaches take_limit.
+    -- While a batch is in progress (ingredients_taken_this_turn > 0), no other
+    -- turn action (SellCup, DrinkCup, GoForAWee, ClaimCard, RefreshCardRow) may
+    -- be performed; the player must complete the take first.
     ensures: chosen ingredients removed from their source
-    -- After all assignments for this action are resolved, apply the drunk modifier
-    -- once across all ingredients assigned disposition=drink this turn.
-    let drunk_this_turn = chosen where disposition = drink
+    -- After all batches for this turn are complete, apply the drunk modifier
+    -- once across ALL ingredients assigned disposition=drink across all batches.
+    let drunk_this_turn = chosen where disposition = drink (across all batches)
     ensures: ApplyDrunkModifier(player, drunk_this_turn)
     ensures: ReplenishDisplay(board)
 }

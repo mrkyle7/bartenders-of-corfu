@@ -40,6 +40,13 @@
             <!-- LEFT: game board -->
             <section class="gb-board-panel" id="gbBoardPanel" aria-label="Game board">
 
+                <!-- LOBBY VIEW (shown for NEW games) -->
+                <div id="gbLobbyPanel" class="hidden">
+                    <div class="gb-section-title">Players in Lobby</div>
+                    <ul id="playerList" role="list" aria-label="Players in lobby" style="list-style:none;padding:0;margin:0"></ul>
+                    <div id="gbStartGameSection" style="margin-top:16px"></div>
+                </div>
+
                 <div id="gbBoardLoading" class="gb-loading" aria-busy="true">
                     <span class="spinner" aria-hidden="true"></span>Loading game…
                 </div>

@@ -15,6 +15,34 @@ Feature: Game turn actions
     And a move record should be created for the game
     And it should be player 2's turn
 
+
+  Scenario: Player takes ingredients in two batches
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    When player 1 takes 1 ingredient from the bag
+    Then it should be player 1's turn
+    When player 1 takes 2 ingredients from the bag
+    Then it should be player 2's turn
+    And a move record should be created for the game
+
+  Scenario: Player takes ingredients in two batches after player 1's go
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    When player 1 takes 3 ingredients from the bag
+    Then it should be player 2's turn
+    When player 2 takes 2 ingredients from the bag
+    Then it should be player 2's turn
+    When player 2 takes 1 ingredient from the bag
+    Then it should be player 1's turn
+    And a move record should be created for the game
+
+  Scenario: Other actions are blocked while a take-ingredients batch is in progress
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    When player 1 takes 1 ingredient from the bag
+    And player 1 goes for a wee
+    Then the action should be rejected with a 409 error
+
   Scenario: Placing too many ingredients in a cup is rejected
     Given it is player 1's turn
     And player 1's cup 0 is full with 5 ingredients

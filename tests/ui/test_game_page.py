@@ -9,6 +9,9 @@ Covers:
   - non-host sees no .remove-player-btn
   - host does not see remove button next to their own name
   - removing a player refreshes the player list inline
+  - host sees #gbBtnStartGame in the lobby
+  - non-host does not see #gbBtnStartGame
+  - clicking Start Game transitions the game to the board view
 """
 
 from tests.ui.conftest import _api_register, _api_post, _unique
@@ -152,3 +155,48 @@ def test_remove_player_updates_list(page, base_url, new_user, new_game):
         timeout=5000,
     )
     assert other not in player_list.inner_text()
+
+
+# ---------------------------------------------------------------------------
+# Start Game button
+# ---------------------------------------------------------------------------
+
+
+def test_host_sees_start_game_button(page, base_url, new_user, new_game):
+    """Host sees the Start Game button in the lobby."""
+    page.goto(_game_url(base_url, new_game))
+    page.locator("#playerList").wait_for(state="visible", timeout=5000)
+    btn = page.locator("#gbBtnStartGame")
+    btn.wait_for(state="visible", timeout=5000)
+    assert btn.is_visible()
+
+
+def test_non_host_no_start_game_button(page, base_url, new_user, new_game, other_user_and_jwt):
+    """A non-host player does not see the Start Game button."""
+    _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
+
+    # Switch browser to the non-host user
+    page.context.clear_cookies()
+    page.context.add_cookies(
+        [{"name": "userjwt", "value": other_user_and_jwt["jwt"], "url": base_url}]
+    )
+
+    page.goto(_game_url(base_url, new_game))
+    page.locator("#playerList").wait_for(state="visible", timeout=5000)
+    assert page.locator("#gbBtnStartGame").count() == 0
+
+
+def test_start_game_transitions_to_board(page, base_url, new_user, new_game, other_user_and_jwt):
+    """Host clicks Start Game; lobby disappears and the game board renders."""
+    _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
+
+    page.goto(_game_url(base_url, new_game))
+    page.locator("#playerList").wait_for(state="visible", timeout=5000)
+
+    btn = page.locator("#gbBtnStartGame")
+    btn.wait_for(state="visible", timeout=5000)
+    btn.click()
+
+    # Board content should become visible; lobby panel should be hidden
+    page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
+    assert not page.locator("#gbLobbyPanel").is_visible()

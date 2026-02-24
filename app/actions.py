@@ -51,7 +51,11 @@ def _require_started(gs: GameState):
 
 
 def _advance_turn(gs: GameState) -> GameState:
-    """Advance player_turn to the next active player in turn_order."""
+    """Advance player_turn to the next active player in turn_order and reset per-turn batch state."""
+    # Reset batch tracking whenever the turn advances
+    gs.ingredients_taken_this_turn = 0
+    gs.drunk_ingredients_this_turn = []
+
     if not gs.turn_order:
         return gs
     order = gs.turn_order
@@ -70,6 +74,16 @@ def _advance_turn(gs: GameState) -> GameState:
 
     # All players eliminated — leave turn unchanged (game should be ended)
     return gs
+
+
+def _require_no_take_in_progress(gs: GameState):
+    """Raise if the current player is mid-way through a multi-batch TakeIngredients."""
+    if gs.ingredients_taken_this_turn > 0:
+        raise GameException(
+            "Cannot perform this action while a take-ingredients batch is in progress; "
+            "complete the take first.",
+            status_code=409,
+        )
 
 
 def _replenish_display(gs: GameState):
@@ -142,16 +156,23 @@ def take_ingredients(
     player_id: UUID,
     assignments: list[dict],
 ) -> tuple[GameState, dict]:
-    """TakeIngredients action.
+    """TakeIngredients action — supports multi-batch taking.
+
+    A player's turn allows them to take take_limit ingredients total.  They may
+    split this across multiple API calls (batches).  Each call takes 1 or more
+    ingredients and must assign every ingredient before the next batch is sent.
+    The turn only advances — and the drunk modifier is applied — after the total
+    across all batches reaches take_limit.
 
     assignments: list of {
-        ingredient: str,   # Ingredient enum name
+        ingredient: str,   # Ingredient enum name (required for source="display")
         source: "bag" | "display",
-        disposition: "cup" | "drink" | "special",
-        cup_index: 0 | 1   # only when disposition == "cup"
+        disposition: "cup" | "drink",
+        cup_index: 0 | 1   # required when disposition == "cup"
     }
 
-    Returns (new_game_state, move_payload).
+    Returns (new_game_state, move_payload) where move_payload includes
+    "turn_complete": bool indicating whether the turn has ended.
     """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)
@@ -159,22 +180,28 @@ def take_ingredients(
     _require_active(ps)
 
     take_limit = ps.take_limit
-    available_count = len(gs.bag_contents) + len(gs.open_display)
-    if available_count < take_limit:
-        raise GameException(
-            f"Not enough ingredients available ({available_count} < {take_limit}). "
-            "Choose a different action.",
-            status_code=409,
-        )
+    already_taken = gs.ingredients_taken_this_turn
+    remaining = take_limit - already_taken
 
-    if len(assignments) != take_limit:
+    # On the very first batch of the turn, verify enough ingredients exist
+    if already_taken == 0:
+        available_count = len(gs.bag_contents) + len(gs.open_display)
+        if available_count < take_limit:
+            raise GameException(
+                f"Not enough ingredients available ({available_count} < {take_limit}). "
+                "Choose a different action.",
+                status_code=409,
+            )
+
+    if len(assignments) == 0 or len(assignments) > remaining:
         raise GameException(
-            f"Must take exactly {take_limit} ingredient(s), got {len(assignments)}",
+            f"Must take between 1 and {remaining} ingredient(s) in this batch, "
+            f"got {len(assignments)}",
             status_code=400,
         )
 
     taken_records: list[dict] = []
-    drunk_this_turn: list[Ingredient] = []
+    drunk_this_batch: list[Ingredient] = []
 
     for asn in assignments:
         raw_name = asn.get("ingredient", "")
@@ -182,13 +209,12 @@ def take_ingredients(
         disposition = asn.get("disposition", "drink")
         cup_index = asn.get("cup_index", 0)
 
-        try:
-            ingredient = Ingredient[raw_name]
-        except KeyError:
-            raise GameException(f"Unknown ingredient: {raw_name}", status_code=400)
-
         # Remove from source
         if source == "display":
+            try:
+                ingredient = Ingredient[raw_name]
+            except KeyError:
+                raise GameException(f"Unknown ingredient: {raw_name}", status_code=400)
             if ingredient not in gs.open_display:
                 raise GameException(
                     f"{raw_name} is not in the open display", status_code=400
@@ -236,22 +262,28 @@ def take_ingredients(
                     "Only spirits and mixers may be drunk directly", status_code=400
                 )
             _drink_ingredient(gs, player_id, ingredient)
-            drunk_this_turn.append(ingredient)
+            drunk_this_batch.append(ingredient)
             record["disposition"] = "drink"
         else:
             raise GameException(f"Unknown disposition: {disposition}", status_code=400)
 
         taken_records.append(record)
 
-    # Apply drunk modifier for all ingredients drunk this turn in one batch
-    if drunk_this_turn:
-        _apply_drunk_modifier(gs, player_id, drunk_this_turn)
+    # Accumulate batch progress
+    gs.ingredients_taken_this_turn += len(assignments)
+    gs.drunk_ingredients_this_turn.extend(drunk_this_batch)
 
-    _replenish_display(gs)
-    gs.turn_number += 1
-    _advance_turn(gs)
+    turn_complete = gs.ingredients_taken_this_turn >= take_limit
 
-    payload = {"taken": taken_records}
+    if turn_complete:
+        # Apply drunk modifier once across all ingredients drunk this whole turn
+        if gs.drunk_ingredients_this_turn:
+            _apply_drunk_modifier(gs, player_id, gs.drunk_ingredients_this_turn)
+        _replenish_display(gs)
+        gs.turn_number += 1
+        _advance_turn(gs)  # also resets ingredients_taken_this_turn and drunk_ingredients_this_turn
+
+    payload = {"taken": taken_records, "turn_complete": turn_complete}
     return gs, payload
 
 
@@ -266,6 +298,7 @@ def sell_cup(
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
+    _require_no_take_in_progress(gs)
 
     if cup_index not in (0, 1):
         raise GameException("cup_index must be 0 or 1", status_code=400)
@@ -326,6 +359,7 @@ def drink_cup(
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
+    _require_no_take_in_progress(gs)
 
     if cup_index not in (0, 1):
         raise GameException("cup_index must be 0 or 1", status_code=400)
@@ -362,6 +396,7 @@ def go_for_a_wee(
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
+    _require_no_take_in_progress(gs)
 
     excreted = list(ps.bladder)
     # Return bladder contents to the bag
@@ -391,6 +426,7 @@ def claim_card(
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
+    _require_no_take_in_progress(gs)
 
     # Find the card in a row
     target_card: Card | None = None
@@ -463,6 +499,7 @@ def refresh_card_row(
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
+    _require_no_take_in_progress(gs)
 
     if ps.drunk_level < MIN_DRUNK_TO_REFRESH:
         raise GameException(
