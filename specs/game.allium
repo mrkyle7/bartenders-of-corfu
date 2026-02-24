@@ -90,7 +90,7 @@ entity PlayerState {
     status: active | hospitalised | wet      -- wet = bladder overflow; hospitalised = drunk out
 
     -- Derived
-    take_limit: drunk_level + config.base_take_count
+    take_count: drunk_level + config.base_take_count
     is_eliminated: status in {hospitalised, wet}
     bladder_used: bladder.count
 }
@@ -167,11 +167,11 @@ rule TakeIngredients {
     when: TakeIngredients(player, chosen)
     requires: player.status = active
     requires: it is player's turn
-    requires: board.available_ingredients.count >= player.take_limit
-        -- if fewer than take_limit ingredients exist across bag + display,
+    requires: board.available_ingredients.count >= player.take_count
+        -- if fewer than take_count ingredients exist across bag + display,
         -- this action is unavailable; player must choose another action.
         -- This check is performed only at the start of the first batch.
-    requires: chosen.count = player.take_limit across all batches this turn
+    requires: chosen.count = player.take_count across all batches this turn
     requires: chosen drawn from board.open_display ∪ board.ingredient_bag in any order
     -- Bag draws are random: the player cannot choose which ingredient they receive from
     -- board.ingredient_bag. The system selects a random ingredient from the bag on each
@@ -180,13 +180,13 @@ rule TakeIngredients {
     --
     -- Multi-batch API protocol:
     -- The player takes ingredients in one or more API calls (batches) until
-    -- take_limit total ingredients have been taken for this turn.
-    -- Each batch submits between 1 and (take_limit - already_taken) assignments.
+    -- take_count total ingredients have been taken for this turn.
+    -- Each batch submits between 1 and (take_count - already_taken) assignments.
     -- All ingredients in a batch must be assigned (PlaceIngredientInCup,
     -- DrinkIngredient, or DrawSpecialIngredient) — no ingredient may be held
     -- undecided or returned to the bag mid-turn.
     -- The system tracks ingredients_taken_this_turn in game state across batches.
-    -- The turn does NOT advance until the cumulative total reaches take_limit.
+    -- The turn does NOT advance until the cumulative total reaches take_count.
     -- While a batch is in progress (ingredients_taken_this_turn > 0), no other
     -- turn action (SellCup, DrinkCup, GoForAWee, ClaimCard, RefreshCardRow) may
     -- be performed; the player must complete the take first.
@@ -519,7 +519,7 @@ surface PlayerTurn {
         state.bladder.count
         state.bladder_capacity
         state.toilet_tokens
-        state.take_limit
+        state.take_count
         state.status
         state.karaoke_cards_claimed
         for cup in state.cups:
@@ -544,7 +544,7 @@ surface PlayerTurn {
         TakeIngredients(player, chosen)
             when state.status = active
             and board.active_player_id = player.id
-            and board.available_ingredients.count >= state.take_limit
+            and board.available_ingredients.count >= state.take_count
         SellCup(player, cup, declared_specials)
             when state.status = active
             and board.active_player_id = player.id
@@ -581,7 +581,7 @@ surface PlayerTurn {
     guarantee: drunk_level never goes below 0
     guarantee: bladder_capacity never goes below config.min_bladder_capacity
     guarantee: specials are never placed in cups or drunk directly; they always go to the player mat
-    guarantee: TakeIngredients is unavailable when bag + display together hold fewer than take_limit ingredients
+    guarantee: TakeIngredients is unavailable when bag + display together hold fewer than take_count ingredients
     guarantee: a player may not cast a VoteOnUndoTurn vote if they already voted on the same request
     guarantee: the proposer of an UndoRequest is already recorded as agree and cannot vote again
 }

@@ -567,6 +567,26 @@ def _game_action_precheck(
     return token_user, game, None
 
 
+class DrawFromBagRequest(BaseModel):
+    count: int
+
+
+@app.post("/v1/games/{game_id}/actions/draw-from-bag")
+async def action_draw_from_bag(game_id: str, body: DrawFromBagRequest, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.draw_from_bag(game, token_user.id, body.count)
+        logger.info("%s drew %d from bag in game %s", token_user.username, body.count, game_id)
+        return JSONResponse(content={"game_state": new_state.to_dict(), "drawn": payload["drawn"]})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in draw-from-bag for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
 class TakeIngredientsRequest(BaseModel):
     assignments: List[dict]
 

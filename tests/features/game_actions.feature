@@ -137,3 +137,21 @@ Feature: Game turn actions
     When player 1 sells cup 0 declaring specials "sugar,lemon"
     Then the game should be over
     And player 1 should be the winner
+
+  Scenario: Last player standing wins when opponent is hospitalised
+    Given it is player 1's turn
+    And player 2 has a drunk level of 5
+    And player 2's cup 0 contains 1 WHISKEY and 1 COLA
+    When player 1 goes for a wee
+    And player 2 drinks cup 0
+    Then the game should be over
+    And player 1 should be the winner
+
+  Scenario: Last player standing wins when opponent's bladder overflows
+    Given it is player 1's turn
+    And player 2 has 8 ingredients in their bladder
+    And player 2's cup 0 contains 1 COLA and 1 SODA
+    When player 1 goes for a wee
+    And player 2 drinks cup 0
+    Then the game should be over
+    And player 1 should be the winner

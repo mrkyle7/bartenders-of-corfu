@@ -5,8 +5,6 @@ from uuid import UUID, uuid4
 from supabase import create_client, Client
 from app.game import Game, Status
 from app.GameState import GameState
-from app.Ingredient import Ingredient
-from app.PlayerState import PlayerState
 from app.user import User
 from app.utils import bytesToHexString, hexStringToBytes
 

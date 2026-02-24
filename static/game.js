@@ -20,11 +20,11 @@ let _historyMoves  = [];     // cached moves from /history
 let _pendingUndo   = null;   // current pending undo request object
 
 // Modal state
-let _takeStep      = 0;      // 0 = pick, 1 = assign
-let _takeSelected  = [];     // [{ingredient, source}]  (source: 'display'|'bag')
-let _takeBagDrawn  = [];     // ingredients drawn from bag this session
-let _sellCupIndex  = null;
-let _drinkCupIndex = null;
+let _takeStep           = 0;   // 0 = pick, 1 = assign
+let _takeDisplaySelected = []; // [{ingredient, source:'display', idx}]
+let _takeBagPending      = []; // [{ingredient, source:'pending'}] — server-confirmed draws
+let _sellCupIndex        = null;
+let _drinkCupIndex       = null;
 
 // ─────────────────────────────────────────────────────────────
 // Constants / helpers
@@ -311,12 +311,13 @@ function renderTurnIndicator(game, gs) {
     }
     const currentPlayer = gs.player_turn;
     const isMyTurn = _me && currentPlayer === _me.id;
+    const turnDisplay = gs.turn_number !== null ? gs.turn_number + 1 : '?';
     if (isMyTurn) {
-        ind.textContent = `Your turn  •  Turn ${gs.turn_number !== null ? gs.turn_number : '?'}`;
+        ind.textContent = `Your turn  •  Turn ${turnDisplay}`;
         ind.className = 'gb-turn-indicator gb-my-turn';
     } else {
         const name = playerName(currentPlayer);
-        ind.textContent = `${name}'s turn  •  Turn ${gs.turn_number !== null ? gs.turn_number : '?'}`;
+        ind.textContent = `${name}'s turn  •  Turn ${turnDisplay}`;
         ind.className = 'gb-turn-indicator';
     }
 }
@@ -656,8 +657,8 @@ function renderMyStats(myState, gs) {
     // Toilet tokens
     statsEl.appendChild(makeStat('Toilet Tokens', myState.toilet_tokens ?? 4));
 
-    // Take limit
-    statsEl.appendChild(makeStat('Take Limit', myState.take_limit ?? 3));
+    // Take count
+    statsEl.appendChild(makeStat('Must Take', myState.take_count ?? 3));
 
     // Karaoke cards
     statsEl.appendChild(makeStat('Karaoke', `${myState.karaoke_cards_claimed ?? 0}/3`));
@@ -1124,22 +1125,40 @@ async function doRefreshRow(rowPosition, btn) {
 // ─────────────────────────────────────────────────────────────
 // Take Ingredients modal
 // ─────────────────────────────────────────────────────────────
+
 function openTakeModal(myState, gs) {
     _takeStep = 0;
-    _takeSelected = [];
-    _takeBagDrawn = [];
+    _takeDisplaySelected = [];
+    _takeBagPending = [];
+    clearModalError('gbTakeModalError');
 
-    const limit = myState.take_limit || 3;
-    el('gbTakeLimit').textContent = limit;
+    const totalLimit = myState.take_count || 3;
+    const alreadyTaken = gs.ingredients_taken_this_turn || 0;
+    const batchLimit = totalLimit - alreadyTaken;
+
+    // If the server already has pending bag draws (e.g. modal reopened mid-turn),
+    // skip straight to assignment.
+    const serverPending = gs.bag_draw_pending || [];
+    if (serverPending.length > 0) {
+        _takeBagPending = serverPending.map(ing => ({ ingredient: ing, source: 'pending' }));
+        _openAssignStep(myState);
+        openModal('gbTakeModal');
+        return;
+    }
+
+    // ── Step 0: select ──────────────────────────────────────────
+    el('gbTakeLimit').textContent = alreadyTaken > 0
+        ? `${batchLimit} (${alreadyTaken}/${totalLimit} already taken this turn)`
+        : batchLimit;
     el('gbTakeCount').textContent = 0;
     el('gbTakeStep0').classList.remove('hidden');
     el('gbTakeStep1').classList.add('hidden');
     el('gbTakeNextBtn').textContent = 'Next →';
     el('gbTakeNextBtn').disabled = false;
-    clearModalError('gbTakeModalError');
     updateStepDots(0);
+    renderTakeModalCups(myState);
 
-    // Populate open display picks
+    // Display picks
     const pickDisplayEl = el('gbPickDisplay');
     pickDisplayEl.innerHTML = '';
     const display = gs.open_display || [];
@@ -1150,138 +1169,164 @@ function openTakeModal(myState, gs) {
         pickDisplayEl.appendChild(em);
     } else {
         display.forEach((ing, idx) => {
-            const item = buildPickItem(ing, 'display', idx, limit, myState);
-            pickDisplayEl.appendChild(item);
+            pickDisplayEl.appendChild(_buildDisplayPickItem(ing, idx, batchLimit));
         });
     }
 
-    // Bag draw
+    // Bag draw controls
     const bagCount = (gs.bag_contents || []).length;
     el('gbBagPickInfo').textContent = `(${bagCount} in bag)`;
     el('gbPickBag').innerHTML = '';
     el('gbBagDrawStatus').textContent = '';
-    el('gbBtnDrawBag').disabled = bagCount === 0;
-    el('gbBtnDrawBag').onclick = () => drawFromBag(gs, myState, limit);
 
-    updateTakeStepLabel(0, limit, 0);
+    const drawCountEl = el('gbBagDrawCount');
+    drawCountEl.max = batchLimit;
+    drawCountEl.min = 1;
+    drawCountEl.value = Math.min(batchLimit, bagCount) || 1;
+    drawCountEl.disabled = false;
+
+    el('gbBtnDrawBag').disabled = bagCount === 0 || batchLimit === 0;
+    el('gbBtnDrawBag').onclick = () => _doDrawFromBag(myState, batchLimit);
+
+    _updateTakeCount();
+    el('gbTakeStepLabel').textContent =
+        `Step 1: Pick from the display and/or draw from the bag (up to ${batchLimit} total)`;
     openModal('gbTakeModal');
 }
 
-function buildPickItem(ing, source, idx, limit, myState) {
+function _buildDisplayPickItem(ing, idx, batchLimit) {
     const item = document.createElement('button');
     item.className = `gb-pick-item ${ingredientKind(ing)}`;
     item.setAttribute('type', 'button');
     item.setAttribute('role', 'checkbox');
     item.setAttribute('aria-checked', 'false');
-    item.setAttribute('aria-label', `${ingredientLabel(ing)} from ${source}`);
-    item.dataset.ingredient = ing;
-    item.dataset.source = source;
+    item.setAttribute('aria-label', `${ingredientLabel(ing)} from display`);
     item.dataset.idx = idx;
-
     const badge = makeIngredientBadge(ing);
     badge.style.pointerEvents = 'none';
     item.appendChild(badge);
-
-    item.onclick = () => togglePickItem(item, ing, source, limit, myState);
-    return item;
-}
-
-function togglePickItem(item, ing, source, limit, myState) {
-    const isSelected = item.classList.contains('selected');
-    const currentCount = _takeSelected.length;
-    const selectedFromSource = _takeSelected.filter(s => s.source === source && s.idx === parseInt(item.dataset.idx));
-
-    if (isSelected) {
-        // Deselect
-        const key = { ingredient: ing, source, idx: parseInt(item.dataset.idx) };
-        const pos = _takeSelected.findIndex(s => s.source === source && s.idx === key.idx);
-        if (pos !== -1) _takeSelected.splice(pos, 1);
-        item.classList.remove('selected');
-        item.setAttribute('aria-checked', 'false');
-    } else {
-        if (currentCount >= limit) {
-            clearModalError('gbTakeModalError');
-            showModalError('gbTakeModalError', `You can only take ${limit} ingredients.`);
+    item.onclick = () => {
+        const isSelected = item.classList.contains('selected');
+        const total = _takeDisplaySelected.length + _takeBagPending.length;
+        if (!isSelected && total >= batchLimit) {
+            showModalError('gbTakeModalError', `You can only take ${batchLimit} ingredients total.`);
             return;
         }
         clearModalError('gbTakeModalError');
-        _takeSelected.push({ ingredient: ing, source, idx: parseInt(item.dataset.idx) });
-        item.classList.add('selected');
-        item.setAttribute('aria-checked', 'true');
-    }
-
-    el('gbTakeCount').textContent = _takeSelected.length;
-}
-
-async function drawFromBag(gs, myState, limit) {
-    const bagCount = (gs.bag_contents || []).length;
-    const drawsLeft = limit - _takeSelected.length;
-    if (drawsLeft <= 0) {
-        showModalError('gbTakeModalError', `You've already selected ${limit} ingredients.`);
-        return;
-    }
-    if (bagCount === 0) {
-        showModalError('gbTakeModalError', 'The bag is empty!');
-        return;
-    }
-
-    // Peek a random ingredient from bag (client-side preview; actual assignment is server-side)
-    // We just show what was in the bag_contents array as a draw
-    const remaining = gs.bag_contents || [];
-    if (remaining.length === 0) {
-        el('gbBagDrawStatus').textContent = 'Bag is empty!';
-        return;
-    }
-
-    // Pick pseudo-random ingredient for preview (server decides actual)
-    const pickedIng = remaining[Math.floor(Math.random() * remaining.length)];
-    const idx = _takeBagDrawn.length; // ordinal of this bag draw
-
-    if (_takeSelected.length >= limit) {
-        showModalError('gbTakeModalError', `You can only take ${limit} ingredients.`);
-        return;
-    }
-
-    _takeBagDrawn.push({ ingredient: pickedIng, source: 'bag', idx });
-    _takeSelected.push({ ingredient: pickedIng, source: 'bag', idx });
-    el('gbTakeCount').textContent = _takeSelected.length;
-    el('gbBagDrawStatus').textContent = `Drew: ${ingredientLabel(pickedIng)}`;
-
-    // Show in bag picks area
-    const pickBagEl = el('gbPickBag');
-    const item = document.createElement('div');
-    item.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:0.82em;';
-    item.appendChild(makeIngredientBadge(pickedIng));
-
-    const removeBtn = document.createElement('button');
-    removeBtn.style.cssText = 'margin:0;padding:1px 5px;font-size:0.75em;background:#b91c1c;display:inline;box-shadow:none;';
-    removeBtn.textContent = '✕';
-    removeBtn.setAttribute('aria-label', `Remove drawn ${ingredientLabel(pickedIng)}`);
-    removeBtn.onclick = () => {
-        const pos = _takeSelected.findIndex(s => s.source === 'bag' && s.idx === idx);
-        if (pos !== -1) _takeSelected.splice(pos, 1);
-        el('gbTakeCount').textContent = _takeSelected.length;
-        item.remove();
-        clearModalError('gbTakeModalError');
+        if (isSelected) {
+            const pos = _takeDisplaySelected.findIndex(s => s.idx === idx);
+            if (pos !== -1) _takeDisplaySelected.splice(pos, 1);
+            item.classList.remove('selected');
+            item.setAttribute('aria-checked', 'false');
+        } else {
+            _takeDisplaySelected.push({ ingredient: ing, source: 'display', idx });
+            item.classList.add('selected');
+            item.setAttribute('aria-checked', 'true');
+        }
+        _updateTakeCount();
     };
-    item.appendChild(removeBtn);
-    pickBagEl.appendChild(item);
+    return item;
+}
 
-    if (_takeSelected.length < limit) {
+async function _doDrawFromBag(myState, batchLimit) {
+    const count = parseInt(el('gbBagDrawCount').value) || 0;
+    const alreadySelected = _takeDisplaySelected.length + _takeBagPending.length;
+    const remaining = batchLimit - alreadySelected;
+
+    if (count < 1 || count > remaining) {
+        showModalError('gbTakeModalError',
+            `Enter a number between 1 and ${remaining} (you have ${alreadySelected} already selected).`);
+        return;
+    }
+
+    clearModalError('gbTakeModalError');
+    el('gbBtnDrawBag').disabled = true;
+    el('gbBagDrawCount').disabled = true;
+    el('gbBagDrawStatus').textContent = 'Drawing…';
+
+    try {
+        const resp = await gameAction('draw-from-bag', { count });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showModalError('gbTakeModalError', d.error || 'Failed to draw from bag.');
+            el('gbBtnDrawBag').disabled = false;
+            el('gbBagDrawCount').disabled = false;
+            el('gbBagDrawStatus').textContent = '';
+            return;
+        }
+        const data = await resp.json();
+        const drawn = data.drawn || [];
+
+        // Store as pending (server-confirmed, cannot be removed)
+        _takeBagPending = drawn.map(ing => ({ ingredient: ing, source: 'pending' }));
+
+        // Show drawn ingredients as locked badges
+        const pickBagEl = el('gbPickBag');
+        pickBagEl.innerHTML = '';
+        drawn.forEach(ing => {
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'display:inline-flex;align-items:center;gap:3px;';
+            const badge = makeIngredientBadge(ing);
+            badge.title = `${ingredientLabel(ing)} (drawn from bag — locked)`;
+            wrap.appendChild(badge);
+            const lock = document.createElement('span');
+            lock.textContent = '🔒';
+            lock.style.cssText = 'font-size:0.7em;opacity:0.6;';
+            wrap.appendChild(lock);
+            pickBagEl.appendChild(wrap);
+        });
+
+        el('gbBagDrawStatus').textContent = `Drew ${drawn.length} ingredient${drawn.length !== 1 ? 's' : ''} — now assign them.`;
+        _updateTakeCount();
+
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showModalError('gbTakeModalError', 'Network error drawing from bag.');
         el('gbBtnDrawBag').disabled = false;
-    } else {
-        el('gbBtnDrawBag').disabled = true;
+        el('gbBagDrawCount').disabled = false;
+        el('gbBagDrawStatus').textContent = '';
     }
 }
 
-function updateTakeStepLabel(step, limit, count) {
-    if (step === 0) {
-        el('gbTakeStepLabel').textContent =
-            `Step 1: Select up to ${limit} ingredient${limit !== 1 ? 's' : ''} from the display or bag (${count}/${limit} selected)`;
-    } else {
-        el('gbTakeStepLabel').textContent =
-            'Step 2: Decide what to do with each ingredient — put in cup or drink it.';
-    }
+function _updateTakeCount() {
+    el('gbTakeCount').textContent = _takeDisplaySelected.length + _takeBagPending.length;
+}
+
+function renderTakeModalCups(myState) {
+    const cupsEl = el('gbTakeModalCups');
+    if (!cupsEl) return;
+    cupsEl.innerHTML = '';
+
+    const label = document.createElement('div');
+    label.style.cssText = 'font-weight:600;color:#6b3a0f;margin-bottom:4px;';
+    label.textContent = 'Your cups:';
+    cupsEl.appendChild(label);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:16px;flex-wrap:wrap;';
+
+    [{ key: 'cup1', label: 'Cup 1' }, { key: 'cup2', label: 'Cup 2' }].forEach(({ key, label: cupLabel }) => {
+        const cup = myState[key] || [];
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;';
+        const lbl = document.createElement('span');
+        lbl.style.cssText = 'color:#6b3a0f;white-space:nowrap;';
+        lbl.textContent = `${cupLabel} (${cup.length}/5): `;
+        div.appendChild(lbl);
+        if (cup.length === 0) {
+            const em = document.createElement('em');
+            em.style.color = '#8a5c2e';
+            em.textContent = 'empty';
+            div.appendChild(em);
+        } else {
+            cup.forEach(ing => {
+                const b = makeIngredientBadge(ing);
+                b.style.fontSize = '0.78em';
+                div.appendChild(b);
+            });
+        }
+        row.appendChild(div);
+    });
+    cupsEl.appendChild(row);
 }
 
 function updateStepDots(step) {
@@ -1294,31 +1339,32 @@ function updateStepDots(step) {
 
 function takeModalNext() {
     if (_takeStep === 0) {
-        if (_takeSelected.length === 0) {
-            showModalError('gbTakeModalError', 'Please select at least one ingredient.');
+        const total = _takeDisplaySelected.length + _takeBagPending.length;
+        if (total === 0) {
+            showModalError('gbTakeModalError', 'Select at least one ingredient before continuing.');
             return;
         }
         clearModalError('gbTakeModalError');
-        // Advance to step 1: assignment
-        _takeStep = 1;
-        el('gbTakeStep0').classList.add('hidden');
-        el('gbTakeStep1').classList.remove('hidden');
-        el('gbTakeNextBtn').textContent = 'Submit';
-        updateStepDots(1);
-
         const myState = _me && _game && _game.game_state
             ? _game.game_state.player_states[_me.id]
             : null;
-
-        buildAssignTable(myState);
-        updateTakeStepLabel(1, _takeSelected.length, _takeSelected.length);
+        _openAssignStep(myState);
     } else {
-        // Step 1: submit
         submitTakeIngredients();
     }
 }
 
-function buildAssignTable(myState) {
+function _openAssignStep(myState) {
+    _takeStep = 1;
+    el('gbTakeStep0').classList.add('hidden');
+    el('gbTakeStep1').classList.remove('hidden');
+    el('gbTakeNextBtn').textContent = 'Submit';
+    updateStepDots(1);
+    el('gbTakeStepLabel').textContent = 'Step 2: Decide what to do with each ingredient.';
+    _buildAssignTable(myState);
+}
+
+function _buildAssignTable(myState) {
     const tbody = el('gbAssignTableBody');
     tbody.innerHTML = '';
 
@@ -1326,23 +1372,28 @@ function buildAssignTable(myState) {
     const cup2Count = myState ? (myState.cup2 || []).length : 0;
     const CUP_MAX = 5;
 
-    _takeSelected.forEach((sel, i) => {
+    const allItems = [..._takeDisplaySelected, ..._takeBagPending];
+
+    allItems.forEach((sel, i) => {
         const tr = document.createElement('tr');
 
         const tdIng = document.createElement('td');
         tdIng.appendChild(makeIngredientBadge(sel.ingredient));
+        const srcLabel = document.createElement('span');
+        srcLabel.style.cssText = 'font-size:0.7em;color:#8a5c2e;margin-left:4px;';
+        srcLabel.textContent = sel.source === 'pending' ? '(bag)' : '(display)';
+        tdIng.appendChild(srcLabel);
         tr.appendChild(tdIng);
 
         const tdAssign = document.createElement('td');
         const kind = ingredientKind(sel.ingredient);
 
         if (kind === 'special') {
-            // Specials go to mat automatically (server rolls)
             const note = document.createElement('em');
             note.style.fontSize = '0.82em';
             note.textContent = 'Auto-placed on mat (server rolls)';
             tdAssign.appendChild(note);
-            sel.disposition = 'special';
+            sel.disposition = 'drink';
             sel.cup_index = null;
         } else {
             const select = document.createElement('select');
@@ -1350,7 +1401,6 @@ function buildAssignTable(myState) {
             select.id = `gbAssign_${i}`;
 
             const opts = [];
-            // Cup options
             if (cup1Count < CUP_MAX) opts.push({ val: 'cup:0', label: `Cup 1 (${cup1Count}/5)` });
             if (cup2Count < CUP_MAX) opts.push({ val: 'cup:1', label: `Cup 2 (${cup2Count}/5)` });
             opts.push({ val: 'drink', label: 'Drink it' });
@@ -1362,7 +1412,6 @@ function buildAssignTable(myState) {
                 select.appendChild(opt);
             });
 
-            // Default selection
             if (opts.length > 0) {
                 sel.disposition = opts[0].val.startsWith('cup') ? 'cup' : 'drink';
                 sel.cup_index   = opts[0].val.startsWith('cup') ? parseInt(opts[0].val.split(':')[1]) : null;
@@ -1392,7 +1441,8 @@ async function submitTakeIngredients() {
     const btn = el('gbTakeNextBtn');
     setButtonBusy(btn, true, 'Submitting…');
 
-    const assignments = _takeSelected.map(sel => {
+    const allItems = [..._takeDisplaySelected, ..._takeBagPending];
+    const assignments = allItems.map(sel => {
         const a = {
             ingredient: sel.ingredient,
             source: sel.source,
@@ -1406,7 +1456,7 @@ async function submitTakeIngredients() {
         const resp = await gameAction('take-ingredients', { assignments });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
-            showModalError('gbTakeModalError', d.detail || d.error || 'Failed to take ingredients.');
+            showModalError('gbTakeModalError', d.error || 'Failed to take ingredients.');
         } else {
             closeTakeModal();
             await refreshGame();
@@ -1421,8 +1471,8 @@ async function submitTakeIngredients() {
 
 function closeTakeModal() {
     closeModal('gbTakeModal');
-    _takeSelected = [];
-    _takeBagDrawn = [];
+    _takeDisplaySelected = [];
+    _takeBagPending = [];
     _takeStep = 0;
 }
 

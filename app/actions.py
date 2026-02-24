@@ -7,7 +7,6 @@ Turn advancement: after every action the turn advances to the next active
 (non-eliminated) player in turn_order.
 """
 
-import copy
 import random
 from uuid import UUID
 
@@ -55,6 +54,7 @@ def _advance_turn(gs: GameState) -> GameState:
     # Reset batch tracking whenever the turn advances
     gs.ingredients_taken_this_turn = 0
     gs.drunk_ingredients_this_turn = []
+    gs.bag_draw_pending = []
 
     if not gs.turn_order:
         return gs
@@ -77,10 +77,10 @@ def _advance_turn(gs: GameState) -> GameState:
 
 
 def _require_no_take_in_progress(gs: GameState):
-    """Raise if the current player is mid-way through a multi-batch TakeIngredients."""
-    if gs.ingredients_taken_this_turn > 0:
+    """Raise if the current player is mid-way through a TakeIngredients action."""
+    if gs.ingredients_taken_this_turn > 0 or gs.bag_draw_pending:
         raise GameException(
-            "Cannot perform this action while a take-ingredients batch is in progress; "
+            "Cannot perform this action while a take-ingredients action is in progress; "
             "complete the take first.",
             status_code=409,
         )
@@ -116,6 +116,17 @@ def _check_victory(gs: GameState, player_id: UUID) -> bool:
     return False
 
 
+def _check_last_player_standing(gs: GameState) -> bool:
+    """If only one active player remains, they win. Returns True if triggered."""
+    if gs.winner is not None:
+        return False
+    active = [pid for pid, ps in gs.player_states.items() if not ps.is_eliminated]
+    if len(active) == 1:
+        gs.winner = active[0]
+        return True
+    return False
+
+
 def _apply_drunk_modifier(gs: GameState, player_id: UUID, ingredients: list[Ingredient]):
     """Apply drunk level changes for a batch of drunk ingredients.
 
@@ -129,6 +140,7 @@ def _apply_drunk_modifier(gs: GameState, player_id: UUID, ingredients: list[Ingr
     if not spirits:
         ps.drunk_level = max(0, ps.drunk_level - len(mixers))
     _check_elimination(gs, player_id)
+    _check_last_player_standing(gs)
 
 
 def _drink_ingredient(gs: GameState, player_id: UUID, ingredient: Ingredient):
@@ -151,6 +163,62 @@ def _replace_card(gs: GameState, row: CardRow):
 # ─── Turn actions ─────────────────────────────────────────────────────────────
 
 
+def draw_from_bag(
+    gs: GameState,
+    player_id: UUID,
+    count: int,
+) -> tuple[GameState, dict]:
+    """DrawFromBag — reveals ingredients from the bag and holds them pending assignment.
+
+    Draws `count` ingredients randomly from the bag and stores them in
+    gs.bag_draw_pending. The player must then call take_ingredients with
+    source='pending' assignments to assign each drawn ingredient to a cup or drink.
+    No other action is permitted while bag_draw_pending is non-empty.
+    """
+    gs = _deep_copy_state(gs)
+    _require_turn(gs, player_id)
+    ps = gs.player_states[player_id]
+    _require_active(ps)
+
+    if gs.bag_draw_pending:
+        raise GameException(
+            "You have unassigned bag ingredients — assign them before drawing again.",
+            status_code=409,
+        )
+
+    take_count = ps.take_count
+    already_taken = gs.ingredients_taken_this_turn
+    remaining = take_count - already_taken
+
+    if remaining <= 0:
+        raise GameException(
+            "You have already taken the maximum ingredients for this turn.",
+            status_code=409,
+        )
+
+    if count < 1 or count > remaining:
+        raise GameException(
+            f"Must draw between 1 and {remaining} ingredient(s); got {count}.",
+            status_code=400,
+        )
+
+    if len(gs.bag_contents) < count:
+        raise GameException(
+            f"Not enough ingredients in bag (need {count}, have {len(gs.bag_contents)}).",
+            status_code=409,
+        )
+
+    drawn: list[Ingredient] = []
+    for _ in range(count):
+        ingredient = random.choice(gs.bag_contents)
+        gs.bag_contents.remove(ingredient)
+        drawn.append(ingredient)
+
+    gs.bag_draw_pending = drawn
+    payload = {"drawn": [i.name for i in drawn]}
+    return gs, payload
+
+
 def take_ingredients(
     gs: GameState,
     player_id: UUID,
@@ -158,11 +226,11 @@ def take_ingredients(
 ) -> tuple[GameState, dict]:
     """TakeIngredients action — supports multi-batch taking.
 
-    A player's turn allows them to take take_limit ingredients total.  They may
+    A player's turn requires them to take take_count ingredients total.  They may
     split this across multiple API calls (batches).  Each call takes 1 or more
     ingredients and must assign every ingredient before the next batch is sent.
     The turn only advances — and the drunk modifier is applied — after the total
-    across all batches reaches take_limit.
+    across all batches reaches take_count.
 
     assignments: list of {
         ingredient: str,   # Ingredient enum name (required for source="display")
@@ -179,19 +247,29 @@ def take_ingredients(
     ps = gs.player_states[player_id]
     _require_active(ps)
 
-    take_limit = ps.take_limit
+    take_count = ps.take_count
     already_taken = gs.ingredients_taken_this_turn
-    remaining = take_limit - already_taken
+    remaining = take_count - already_taken
 
-    # On the very first batch of the turn, verify enough ingredients exist
-    if already_taken == 0:
-        available_count = len(gs.bag_contents) + len(gs.open_display)
-        if available_count < take_limit:
+    # If there are pending bag ingredients, all must be assigned in this call.
+    if gs.bag_draw_pending:
+        pending_in_call = sum(1 for a in assignments if a.get("source") == "pending")
+        if pending_in_call != len(gs.bag_draw_pending):
             raise GameException(
-                f"Not enough ingredients available ({available_count} < {take_limit}). "
-                "Choose a different action.",
-                status_code=409,
+                f"Must assign all {len(gs.bag_draw_pending)} pending bag ingredient(s); "
+                f"got {pending_in_call} pending assignment(s).",
+                status_code=400,
             )
+    else:
+        # No pending draw — on the first batch verify enough ingredients exist
+        if already_taken == 0:
+            available_count = len(gs.bag_contents) + len(gs.open_display)
+            if available_count < take_count:
+                raise GameException(
+                    f"Not enough ingredients available ({available_count} < {take_count}). "
+                    "Choose a different action.",
+                    status_code=409,
+                )
 
     if len(assignments) == 0 or len(assignments) > remaining:
         raise GameException(
@@ -209,7 +287,7 @@ def take_ingredients(
         disposition = asn.get("disposition", "drink")
         cup_index = asn.get("cup_index", 0)
 
-        # Remove from source
+        # Resolve ingredient from source
         if source == "display":
             try:
                 ingredient = Ingredient[raw_name]
@@ -220,8 +298,21 @@ def take_ingredients(
                     f"{raw_name} is not in the open display", status_code=400
                 )
             gs.open_display.remove(ingredient)
+        elif source == "pending":
+            # Use the next ingredient from the pending draw (already removed from bag)
+            if not gs.bag_draw_pending:
+                raise GameException(
+                    "No pending bag ingredient to assign.", status_code=400
+                )
+            ingredient = gs.bag_draw_pending.pop(0)
+            raw_name = ingredient.name
         else:
-            # Bag draws are random — the player cannot choose which ingredient they receive
+            # Direct bag draw — only permitted when no pending draw exists
+            if gs.bag_draw_pending:
+                raise GameException(
+                    "Assign your pending bag ingredients before drawing more.",
+                    status_code=409,
+                )
             if not gs.bag_contents:
                 raise GameException("The bag is empty", status_code=400)
             ingredient = random.choice(gs.bag_contents)
@@ -273,7 +364,7 @@ def take_ingredients(
     gs.ingredients_taken_this_turn += len(assignments)
     gs.drunk_ingredients_this_turn.extend(drunk_this_batch)
 
-    turn_complete = gs.ingredients_taken_this_turn >= take_limit
+    turn_complete = gs.ingredients_taken_this_turn >= take_count
 
     if turn_complete:
         # Apply drunk modifier once across all ingredients drunk this whole turn

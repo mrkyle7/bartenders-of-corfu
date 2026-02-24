@@ -34,9 +34,10 @@ class GameState:
         card_rows: list[CardRow] | None = None,
         deck: list[dict] | None = None,
         turn_order: list[UUID] | None = None,
-        turn_number: int = 1,
+        turn_number: int = 0,
         ingredients_taken_this_turn: int = 0,
         drunk_ingredients_this_turn: list[Ingredient] | None = None,
+        bag_draw_pending: list[Ingredient] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -59,6 +60,11 @@ class GameState:
         # Applied as a single drunk-modifier calculation when the turn completes.
         self.drunk_ingredients_this_turn: list[Ingredient] = (
             drunk_ingredients_this_turn if drunk_ingredients_this_turn is not None else []
+        )
+        # Ingredients drawn from the bag (via draw-from-bag) awaiting cup/drink assignment.
+        # Cleared when take-ingredients assigns them or when the turn advances.
+        self.bag_draw_pending: list[Ingredient] = (
+            bag_draw_pending if bag_draw_pending is not None else []
         )
 
     @classmethod
@@ -118,12 +124,12 @@ class GameState:
             "turn_number": self.turn_number,
             "ingredients_taken_this_turn": self.ingredients_taken_this_turn,
             "drunk_ingredients_this_turn": [i.name for i in self.drunk_ingredients_this_turn],
+            "bag_draw_pending": [i.name for i in self.bag_draw_pending],
         }
 
     @classmethod
     def from_dict(cls, state_data: dict) -> "GameState":
         """Deserialise a GameState from a stored dict (DB JSONB)."""
-        from app.card import Card
 
         player_states = {}
         for player_str, ps_data in state_data.get("player_states", {}).items():
@@ -159,5 +165,8 @@ class GameState:
             ingredients_taken_this_turn=state_data.get("ingredients_taken_this_turn", 0),
             drunk_ingredients_this_turn=[
                 Ingredient[i] for i in state_data.get("drunk_ingredients_this_turn", [])
+            ],
+            bag_draw_pending=[
+                Ingredient[i] for i in state_data.get("bag_draw_pending", [])
             ],
         )

@@ -21,7 +21,6 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from app.api import app
 from app.Ingredient import Ingredient
-from app.PlayerState import MAX_CUP_INGREDIENTS
 
 # ─── Load scenarios from feature files ────────────────────────────────────────
 
@@ -351,39 +350,47 @@ def player_proposed_undo(ctx, n):
 # ─── When steps ───────────────────────────────────────────────────────────────
 
 
+def _draw_and_assign(token: str, game_id: str, count: int, disposition: str = "cup", cup_index: int = 0) -> tuple[dict, dict]:
+    """Two-step bag take: draw-from-bag then take-ingredients with source=pending."""
+    draw_resp = _client.post(
+        f"/v1/games/{game_id}/actions/draw-from-bag",
+        json={"count": count},
+        cookies=_auth(token),
+    )
+    assert draw_resp.status_code == 200, f"Draw failed: {draw_resp.text}"
+    drawn = draw_resp.json().get("drawn", [])
+    assignments = [
+        {"source": "pending", "disposition": disposition, "cup_index": cup_index}
+        for _ in drawn
+    ]
+    take_resp = _client.post(
+        f"/v1/games/{game_id}/actions/take-ingredients",
+        json={"assignments": assignments},
+        cookies=_auth(token),
+    )
+    return draw_resp, take_resp
+
+
 @when(parsers.parse("player {n:d} takes {count:d} ingredients from the bag placing all in cup {cup_index:d}"))
 def player_take_n_to_cup(ctx, n, count, cup_index):
     token, _ = _player(ctx, n)
     game = _get_game(token, ctx["game_id"])
     bag = game["game_state"]["bag_contents"]
     assert len(bag) >= count, f"Not enough in bag (need {count}, have {len(bag)})"
-    assignments = [
-        {"source": "bag", "disposition": "cup", "cup_index": cup_index}
-        for _ in range(count)
-    ]
-    resp = _client.post(
-        f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
-        json={"assignments": assignments},
-        cookies=_auth(token),
-    )
+    _, resp = _draw_and_assign(token, ctx["game_id"], count, disposition="cup", cup_index=cup_index)
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
 
 
 @when(parsers.re(r"player (?P<n>\d+) takes (?P<count>\d+) ingredients? from the bag"))
 def player_take_from_bag(ctx, n, count):
-    """Take count ingredients from the bag (single batch call, any size)."""
+    """Two-step bag take: draw then assign."""
     n, count = int(n), int(count)
     token, _ = _player(ctx, n)
     game = _get_game(token, ctx["game_id"])
     bag = game["game_state"]["bag_contents"]
     assert len(bag) >= count, f"Not enough in bag (need {count}, have {len(bag)})"
-    assignments = [{"source": "bag", "disposition": "cup", "cup_index": 0} for _ in range(count)]
-    resp = _client.post(
-        f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
-        json={"assignments": assignments},
-        cookies=_auth(token),
-    )
+    _, resp = _draw_and_assign(token, ctx["game_id"], count)
     assert resp.status_code == 200, f"Take failed: {resp.text}"
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
@@ -396,10 +403,19 @@ def player_place_in_cup(ctx, n, cup_index):
     bag = game["game_state"]["bag_contents"]
     if not bag:
         pytest.skip("Bag is empty")
-    assignments = [{"source": "bag", "disposition": "cup", "cup_index": cup_index}]
+    # Draw 1 from bag first (succeeds), then try to assign to the (full) cup
+    draw_resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/draw-from-bag",
+        json={"count": 1},
+        cookies=_auth(token),
+    )
+    if draw_resp.status_code != 200:
+        ctx["last_resp"] = draw_resp
+        ctx["last_status"] = draw_resp.status_code
+        return
     resp = _client.post(
         f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
-        json={"assignments": assignments},
+        json={"assignments": [{"source": "pending", "disposition": "cup", "cup_index": cup_index}]},
         cookies=_auth(token),
     )
     ctx["last_resp"] = resp
@@ -495,10 +511,10 @@ def player_try_take_ingredient(ctx, n):
     bag = game["game_state"]["bag_contents"]
     if not bag:
         pytest.skip("No bag contents")
-    assignments = [{"source": "bag", "disposition": "drink"}]
+    # Attempt the draw step — turn/player validation happens here
     resp = _client.post(
-        f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
-        json={"assignments": assignments},
+        f"/v1/games/{ctx['game_id']}/actions/draw-from-bag",
+        json={"count": 1},
         cookies=_auth(token),
     )
     ctx["last_resp"] = resp

@@ -117,6 +117,15 @@ class GameManager:
         db.update_game_state(game.id, new_state)
         return new_state
 
+    def draw_from_bag(
+        self, game: Game, player_id: UUID, count: int
+    ) -> tuple[GameState, dict]:
+        self._require_started(game)
+        new_state, payload = actions.draw_from_bag(game.game_state, player_id, count)
+        # Drawing from bag is not a completed turn — persist state without a move record
+        db.update_game_state(game.id, new_state)
+        return new_state, payload
+
     def take_ingredients(
         self, game: Game, player_id: UUID, assignments: list[dict]
     ) -> tuple[GameState, dict]:

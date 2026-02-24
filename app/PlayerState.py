@@ -43,8 +43,8 @@ class PlayerState:
         self.cards: list[dict] = cards if cards is not None else []
 
     @property
-    def take_limit(self) -> int:
-        """Number of ingredients to take per turn (drunk_level + base_take_count)."""
+    def take_count(self) -> int:
+        """Number of ingredients the player must take per turn (drunk_level + base_take_count)."""
         return self.drunk_level + BASE_TAKE_COUNT
 
     @property
@@ -65,7 +65,7 @@ class PlayerState:
             "player_id": str(self.player_id),
             "points": self.points,
             "drunk_level": self.drunk_level,
-            "take_limit": self.take_limit,
+            "take_count": self.take_count,
             "cup1": [ingredient.name for ingredient in self.cup1],
             "cup2": [ingredient.name for ingredient in self.cup2],
             "bladder": [ingredient.name for ingredient in self.bladder],
