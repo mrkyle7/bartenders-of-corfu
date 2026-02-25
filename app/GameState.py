@@ -59,7 +59,9 @@ class GameState:
         # Accumulates all ingredients drunk (disposition=drink) across batches this turn.
         # Applied as a single drunk-modifier calculation when the turn completes.
         self.drunk_ingredients_this_turn: list[Ingredient] = (
-            drunk_ingredients_this_turn if drunk_ingredients_this_turn is not None else []
+            drunk_ingredients_this_turn
+            if drunk_ingredients_this_turn is not None
+            else []
         )
         # Ingredients drawn from the bag (via draw-from-bag) awaiting cup/drink assignment.
         # Cleared when take-ingredients assigns them or when the turn advances.
@@ -123,7 +125,9 @@ class GameState:
             "turn_order": [str(pid) for pid in self.turn_order],
             "turn_number": self.turn_number,
             "ingredients_taken_this_turn": self.ingredients_taken_this_turn,
-            "drunk_ingredients_this_turn": [i.name for i in self.drunk_ingredients_this_turn],
+            "drunk_ingredients_this_turn": [
+                i.name for i in self.drunk_ingredients_this_turn
+            ],
             "bag_draw_pending": [i.name for i in self.bag_draw_pending],
         }
 
@@ -162,13 +166,17 @@ class GameState:
             winner=UUID(state_data["winner"]) if state_data.get("winner") else None,
             bag_contents=[Ingredient[i] for i in state_data.get("bag_contents", [])],
             player_states=player_states,
-            player_turn=UUID(state_data["player_turn"]) if state_data.get("player_turn") else None,
+            player_turn=UUID(state_data["player_turn"])
+            if state_data.get("player_turn")
+            else None,
             open_display=[Ingredient[i] for i in state_data.get("open_display", [])],
             card_rows=card_rows,
             deck=deck_dicts,
             turn_order=turn_order,
             turn_number=state_data.get("turn_number", 0),
-            ingredients_taken_this_turn=state_data.get("ingredients_taken_this_turn", 0),
+            ingredients_taken_this_turn=state_data.get(
+                "ingredients_taken_this_turn", 0
+            ),
             drunk_ingredients_this_turn=[
                 Ingredient[i] for i in state_data.get("drunk_ingredients_this_turn", [])
             ],

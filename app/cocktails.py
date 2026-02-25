@@ -7,12 +7,23 @@ from collections import Counter
 
 from app.Ingredient import Ingredient, SpecialType
 
-_SPIRITS = {Ingredient.WHISKEY, Ingredient.GIN, Ingredient.RUM, Ingredient.TEQUILA, Ingredient.VODKA}
+_SPIRITS = {
+    Ingredient.WHISKEY,
+    Ingredient.GIN,
+    Ingredient.RUM,
+    Ingredient.TEQUILA,
+    Ingredient.VODKA,
+}
 _MIXERS = {Ingredient.SODA, Ingredient.TONIC, Ingredient.COLA, Ingredient.CRANBERRY}
 
 # Valid spirit → valid mixers for non-cocktail standard drinks
 VALID_PAIRINGS: dict[Ingredient, set[Ingredient]] = {
-    Ingredient.VODKA: {Ingredient.COLA, Ingredient.SODA, Ingredient.TONIC, Ingredient.CRANBERRY},
+    Ingredient.VODKA: {
+        Ingredient.COLA,
+        Ingredient.SODA,
+        Ingredient.TONIC,
+        Ingredient.CRANBERRY,
+    },
     Ingredient.RUM: {Ingredient.COLA},
     Ingredient.WHISKEY: {Ingredient.COLA, Ingredient.SODA},
     Ingredient.GIN: {Ingredient.TONIC},
@@ -88,7 +99,9 @@ _RECIPES: list[tuple[Counter, Counter, Counter, int, str]] = [
 ]
 
 
-def drink_points(cup_ingredients: list[Ingredient], declared_specials: list[str]) -> int | None:
+def drink_points(
+    cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> int | None:
     """Return points for selling the cup, or None if the cup is not sellable.
 
     Categories checked in order (first match wins):
@@ -120,7 +133,11 @@ def drink_points(cup_ingredients: list[Ingredient], declared_specials: list[str]
 
     # Check cocktail recipes (Long Island first, then rest)
     for r_spirits, r_mixers, r_specials, pts, _name in _RECIPES:
-        if spirits_count == r_spirits and mixers_count == r_mixers and specials_count == r_specials:
+        if (
+            spirits_count == r_spirits
+            and mixers_count == r_mixers
+            and specials_count == r_specials
+        ):
             return pts
 
     # Non-cocktail drinks: specials are not permitted

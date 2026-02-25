@@ -106,7 +106,12 @@ class GameManager:
             raise GameException("Game is not in progress", status_code=409)
 
     def _apply_action(
-        self, game: Game, player_id: UUID, action_type: str, new_state: GameState, payload: dict
+        self,
+        game: Game,
+        player_id: UUID,
+        action_type: str,
+        new_state: GameState,
+        payload: dict,
     ) -> GameState:
         """Persist the move record and updated game state atomically (best-effort)."""
         state_before = game.game_state.to_dict()
@@ -200,7 +205,9 @@ class GameManager:
 
         ps = game.game_state.player_states.get(player_id)
         if ps and ps.is_eliminated:
-            raise GameException("Eliminated players cannot propose undo", status_code=409)
+            raise GameException(
+                "Eliminated players cannot propose undo", status_code=409
+            )
 
         if db.get_pending_undo(game.id):
             raise GameException(
@@ -220,11 +227,15 @@ class GameManager:
         self._require_started(game)
         pending = db.get_pending_undo(game.id)
         if pending is None or pending["id"] != request_id:
-            raise GameException("Undo request not found or no longer pending", status_code=404)
+            raise GameException(
+                "Undo request not found or no longer pending", status_code=404
+            )
 
         existing_votes: dict = pending.get("votes") or {}
         if str(player_id) in existing_votes:
-            raise GameException("You have already voted on this undo request", status_code=409)
+            raise GameException(
+                "You have already voted on this undo request", status_code=409
+            )
 
         updated = db.vote_on_undo(request_id, player_id, vote)
         if updated is None:
@@ -250,6 +261,8 @@ class GameManager:
         """Restore game state to just before the target turn."""
         state_dict = db.get_state_before_turn(game.id, target_turn_number)
         if state_dict is None:
-            raise GameException("Cannot restore state: snapshot not found", status_code=500)
+            raise GameException(
+                "Cannot restore state: snapshot not found", status_code=500
+            )
         restored_state = GameState.from_dict(state_dict)
         db.update_game_state(game.id, restored_state)

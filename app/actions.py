@@ -17,7 +17,13 @@ from app.GameState import OPEN_DISPLAY_SIZE, GameState
 from app.Ingredient import Ingredient, SpecialType
 from app.PlayerState import MAX_CUP_INGREDIENTS, MIN_BLADDER_CAPACITY, PlayerState
 
-_SPIRITS = {Ingredient.WHISKEY, Ingredient.GIN, Ingredient.RUM, Ingredient.TEQUILA, Ingredient.VODKA}
+_SPIRITS = {
+    Ingredient.WHISKEY,
+    Ingredient.GIN,
+    Ingredient.RUM,
+    Ingredient.TEQUILA,
+    Ingredient.VODKA,
+}
 _MIXERS = {Ingredient.SODA, Ingredient.TONIC, Ingredient.COLA, Ingredient.CRANBERRY}
 
 SCORE_TO_WIN = 40
@@ -127,7 +133,9 @@ def _check_last_player_standing(gs: GameState) -> bool:
     return False
 
 
-def _apply_drunk_modifier(gs: GameState, player_id: UUID, ingredients: list[Ingredient]):
+def _apply_drunk_modifier(
+    gs: GameState, player_id: UUID, ingredients: list[Ingredient]
+):
     """Apply drunk level changes for a batch of drunk ingredients.
 
     You only sober up if ALL ingredients in the batch are mixers (no spirits).
@@ -156,6 +164,7 @@ def _replace_card(gs: GameState, row: CardRow):
     """Draw one card from the deck into the row, if deck has cards."""
     if gs._deck_dicts:
         from app.card import Card
+
         card_dict = gs._deck_dicts.pop(0)
         row.cards.append(Card.from_dict(card_dict))
 
@@ -372,7 +381,9 @@ def take_ingredients(
             _apply_drunk_modifier(gs, player_id, gs.drunk_ingredients_this_turn)
         _replenish_display(gs)
         gs.turn_number += 1
-        _advance_turn(gs)  # also resets ingredients_taken_this_turn and drunk_ingredients_this_turn
+        _advance_turn(
+            gs
+        )  # also resets ingredients_taken_this_turn and drunk_ingredients_this_turn
 
     payload = {"taken": taken_records, "turn_complete": turn_complete}
     return gs, payload
@@ -468,7 +479,10 @@ def drink_cup(
     gs.turn_number += 1
     _advance_turn(gs)
 
-    payload = {"cup_index": cup_index, "ingredients": [i.name for i in drunk_ingredients]}
+    payload = {
+        "cup_index": cup_index,
+        "ingredients": [i.name for i in drunk_ingredients],
+    }
     return gs, payload
 
 

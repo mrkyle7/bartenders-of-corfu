@@ -367,21 +367,15 @@ entity MoveRecord {
     game: session/Game
     turn_number: Integer          -- monotonically increasing per game; 1-based; never reused
     player_id: UUID               -- player who performed the action
-    action: RecordedAction        -- serialised payload capturing all action arguments
+    action: RecordedAction        -- typed discriminated union capturing all action arguments
     timestamp: Timestamp
 }
 
-value RecordedAction {
-    -- Exactly one variant is set per record.
-    take_ingredients: TakenIngredientsRecord?
-    sell_cup: SoldCupRecord?
-    drink_cup: DrunkCupRecord?
-    go_for_a_wee: WeeRecord?
-    claim_card: ClaimedCardRecord?
-    refresh_card_row: RefreshedRowRecord?
+entity RecordedAction {
+    kind: TakenIngredients | SoldCup | DrunkCup | WentForAWee | ClaimedCard | RefreshedRow
 }
 
-value TakenIngredientsRecord {
+variant TakenIngredients : RecordedAction {
     taken: List<{
         ingredient: Ingredient,
         disposition: placed_in_cup | drunk_directly | drawn_as_special,
@@ -390,27 +384,27 @@ value TakenIngredientsRecord {
     }>
 }
 
-value SoldCupRecord {
+variant SoldCup : RecordedAction {
     cup_index: Integer
     ingredients: List<Ingredient>
     declared_specials: List<Special>
     points_earned: Integer
 }
 
-value DrunkCupRecord {
+variant DrunkCup : RecordedAction {
     cup_index: Integer
     ingredients: List<Ingredient>
 }
 
-value WeeRecord {}
+variant WentForAWee : RecordedAction {}
 
-value ClaimedCardRecord {
+variant ClaimedCard : RecordedAction {
     card_id: UUID
     is_karaoke: Boolean
     row_position: Integer
 }
 
-value RefreshedRowRecord {
+variant RefreshedRow : RecordedAction {
     row_position: Integer
 }
 

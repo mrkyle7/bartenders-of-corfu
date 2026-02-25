@@ -37,5 +37,12 @@ class SpecialType(Enum):
     def roll(cls) -> "SpecialType":
         """Simulate rolling the special die — equal probability for each face."""
         return random.choice(
-            [cls.BITTERS, cls.COINTREAU, cls.LEMON, cls.SUGAR, cls.VERMOUTH, cls.NOTHING]
+            [
+                cls.BITTERS,
+                cls.COINTREAU,
+                cls.LEMON,
+                cls.SUGAR,
+                cls.VERMOUTH,
+                cls.NOTHING,
+            ]
         )

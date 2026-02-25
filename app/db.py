@@ -323,6 +323,7 @@ class Db:
         state_before: dict,
     ) -> bool:
         """Append an immutable MoveRecord to game_moves."""
+        action = {"type": action_type, **action_payload}
         response = (
             self.supabase.table("game_moves")
             .insert(
@@ -331,8 +332,7 @@ class Db:
                     "game_id": str(game_id),
                     "turn_number": turn_number,
                     "player_id": str(player_id),
-                    "action_type": action_type,
-                    "action_payload": action_payload,
+                    "action": action,
                     "state_before": state_before,
                 }
             )
@@ -344,7 +344,7 @@ class Db:
         """Return all MoveRecords for a game, ordered by turn_number ascending."""
         response = (
             self.supabase.table("game_moves")
-            .select("id, turn_number, player_id, action_type, action_payload, created_at")
+            .select("id, turn_number, player_id, action, created_at")
             .eq("game_id", str(game_id))
             .order("turn_number", desc=False)
             .execute()

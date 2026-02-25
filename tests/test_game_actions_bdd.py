@@ -40,7 +40,11 @@ def _register(username: str) -> tuple[str, str]:
     """Register a user and return (token, user_id)."""
     resp = _client.post(
         "/register",
-        json={"username": username, "email": f"{username}@bdd.test", "password": "Password1"},
+        json={
+            "username": username,
+            "email": f"{username}@bdd.test",
+            "password": "Password1",
+        },
     )
     assert resp.status_code == 201, resp.text
     return resp.cookies["userjwt"], resp.json()["id"]
@@ -170,7 +174,9 @@ def player_empty_cup(ctx, n, cup_index):
     token, pid = _player(ctx, n)
     game = _get_game(token, ctx["game_id"])
     ps = game["game_state"]["player_states"][pid]
-    assert ps["cups"][cup_index]["ingredients"] == [], f"Cup {cup_index} should already be empty after game start"
+    assert ps["cups"][cup_index]["ingredients"] == [], (
+        f"Cup {cup_index} should already be empty after game start"
+    )
 
 
 @given("the bag contains no special tokens")
@@ -182,7 +188,9 @@ def bag_no_specials(ctx):
     _patch_game_state(ctx["game_id"], patch)
 
 
-@given(parsers.parse("player {n:d}'s cup {cup_index:d} is full with {count:d} ingredients"))
+@given(
+    parsers.parse("player {n:d}'s cup {cup_index:d} is full with {count:d} ingredients")
+)
 def player_cup_full(ctx, n, cup_index, count):
     _, pid = _player(ctx, n)
 
@@ -276,7 +284,10 @@ def player_has_points(ctx, n, points):
     _patch_game_state(ctx["game_id"], patch)
 
 
-@given(parsers.parse("a card with cost {count:d} {kind} is available in row {row:d}"), target_fixture="available_card_id")
+@given(
+    parsers.parse("a card with cost {count:d} {kind} is available in row {row:d}"),
+    target_fixture="available_card_id",
+)
 def card_in_row(ctx, count, kind, row):
     _KIND_NORMALIZE = {"spirits": "spirit", "mixers": "mixer", "specials": "special"}
     kind_norm = _KIND_NORMALIZE.get(kind, kind)
@@ -287,19 +298,33 @@ def card_in_row(ctx, count, kind, row):
         if r["position"] == row:
             for card in r["cards"]:
                 reqs = card["cost"]
-                for req in reqs:
-                    if req["kind"] == kind_norm and req["count"] <= count:
-                        ctx["target_card_id"] = card["id"]
-                        return card["id"]
+                # Only reuse an existing card if its entire cost is covered by
+                # `count` of `kind` — cards with additional requirements (e.g.
+                # [mixer:1, spirit:1]) would fail the claim with a 400.
+                if (
+                    len(reqs) == 1
+                    and reqs[0]["kind"] == kind_norm
+                    and reqs[0]["count"] <= count
+                ):
+                    ctx["target_card_id"] = card["id"]
+                    return card["id"]
     # No matching card found — patch the game state to insert one
     import uuid as _uuid
     from app.card import Card as _Card, IngredientRequirement as _Req
+
     new_card_id = str(_uuid.uuid4())
 
     def patch(gs):
         for r in gs.card_rows:
             if r.position == row:
-                r.cards.insert(0, _Card(id=new_card_id, is_karaoke=False, cost=[_Req(kind=kind_norm, count=count)]))
+                r.cards.insert(
+                    0,
+                    _Card(
+                        id=new_card_id,
+                        is_karaoke=False,
+                        cost=[_Req(kind=kind_norm, count=count)],
+                    ),
+                )
                 break
         return gs
 
@@ -308,18 +333,31 @@ def card_in_row(ctx, count, kind, row):
     return new_card_id
 
 
-@given(parsers.parse("a karaoke card with cost {count:d} {kind} is available in row {row:d}"), target_fixture="available_card_id")
+@given(
+    parsers.parse(
+        "a karaoke card with cost {count:d} {kind} is available in row {row:d}"
+    ),
+    target_fixture="available_card_id",
+)
 def karaoke_card_in_row(ctx, count, kind, row):
     _KIND_NORMALIZE = {"spirits": "spirit", "mixers": "mixer", "specials": "special"}
     kind_norm = _KIND_NORMALIZE.get(kind, kind)
     import uuid as _uuid
     from app.card import Card as _Card, IngredientRequirement as _Req
+
     new_card_id = str(_uuid.uuid4())
 
     def patch(gs):
         for r in gs.card_rows:
             if r.position == row:
-                r.cards.insert(0, _Card(id=new_card_id, is_karaoke=True, cost=[_Req(kind=kind_norm, count=count)]))
+                r.cards.insert(
+                    0,
+                    _Card(
+                        id=new_card_id,
+                        is_karaoke=True,
+                        cost=[_Req(kind=kind_norm, count=count)],
+                    ),
+                )
                 break
         return gs
 
@@ -361,7 +399,9 @@ def player_proposed_undo(ctx, n):
 # ─── When steps ───────────────────────────────────────────────────────────────
 
 
-def _draw_and_assign(token: str, game_id: str, count: int, disposition: str = "cup", cup_index: int = 0) -> tuple[dict, dict]:
+def _draw_and_assign(
+    token: str, game_id: str, count: int, disposition: str = "cup", cup_index: int = 0
+) -> tuple[dict, dict]:
     """Two-step bag take: draw-from-bag then take-ingredients with source=pending."""
     draw_resp = _client.post(
         f"/v1/games/{game_id}/actions/draw-from-bag",
@@ -382,13 +422,19 @@ def _draw_and_assign(token: str, game_id: str, count: int, disposition: str = "c
     return draw_resp, take_resp
 
 
-@when(parsers.parse("player {n:d} takes {count:d} ingredients from the bag placing all in cup {cup_index:d}"))
+@when(
+    parsers.parse(
+        "player {n:d} takes {count:d} ingredients from the bag placing all in cup {cup_index:d}"
+    )
+)
 def player_take_n_to_cup(ctx, n, count, cup_index):
     token, _ = _player(ctx, n)
     game = _get_game(token, ctx["game_id"])
     bag = game["game_state"]["bag_contents"]
     assert len(bag) >= count, f"Not enough in bag (need {count}, have {len(bag)})"
-    _, resp = _draw_and_assign(token, ctx["game_id"], count, disposition="cup", cup_index=cup_index)
+    _, resp = _draw_and_assign(
+        token, ctx["game_id"], count, disposition="cup", cup_index=cup_index
+    )
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
 
@@ -426,7 +472,11 @@ def player_place_in_cup(ctx, n, cup_index):
         return
     resp = _client.post(
         f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
-        json={"assignments": [{"source": "pending", "disposition": "cup", "cup_index": cup_index}]},
+        json={
+            "assignments": [
+                {"source": "pending", "disposition": "cup", "cup_index": cup_index}
+            ]
+        },
         cookies=_auth(token),
     )
     ctx["last_resp"] = resp
@@ -445,7 +495,11 @@ def player_sell_cup_no_specials(ctx, n, cup_index):
     ctx["last_status"] = resp.status_code
 
 
-@when(parsers.parse('player {n:d} sells cup {cup_index:d} declaring specials "{specials}"'))
+@when(
+    parsers.parse(
+        'player {n:d} sells cup {cup_index:d} declaring specials "{specials}"'
+    )
+)
 def player_sell_cup_specials(ctx, n, cup_index, specials):
     token, _ = _player(ctx, n)
     special_list = [s.strip() for s in specials.split(",")]
@@ -620,14 +674,22 @@ def it_is_player_turn_then(ctx, n):
 def cup_contains_count(ctx, cup_index, count):
     ps = _player_state(ctx, 1)
     ingredients = ps["cups"][cup_index]["ingredients"]
-    assert len(ingredients) == count, f"Expected {count} in cup {cup_index}, got {len(ingredients)}"
+    assert len(ingredients) == count, (
+        f"Expected {count} in cup {cup_index}, got {len(ingredients)}"
+    )
 
 
-@then(parsers.parse("player {n:d}'s cup {cup_index:d} should contain {count:d} ingredients"))
+@then(
+    parsers.parse(
+        "player {n:d}'s cup {cup_index:d} should contain {count:d} ingredients"
+    )
+)
 def player_cup_contains_count(ctx, n, cup_index, count):
     ps = _player_state(ctx, n)
     ingredients = ps["cups"][cup_index]["ingredients"]
-    assert len(ingredients) == count, f"Expected {count} in player {n}'s cup {cup_index}, got {len(ingredients)}"
+    assert len(ingredients) == count, (
+        f"Expected {count} in player {n}'s cup {cup_index}, got {len(ingredients)}"
+    )
 
 
 @then(parsers.parse("cup {cup_index:d} should be empty"))
@@ -641,7 +703,9 @@ def cup_empty(ctx, cup_index):
 def player_cup_empty(ctx, n, cup_index):
     ps = _player_state(ctx, n)
     ingredients = ps["cups"][cup_index]["ingredients"]
-    assert ingredients == [], f"Expected player {n}'s cup {cup_index} empty, got {ingredients}"
+    assert ingredients == [], (
+        f"Expected player {n}'s cup {cup_index} empty, got {ingredients}"
+    )
 
 
 @then("a move record should be created for the game")
@@ -665,7 +729,9 @@ def player_has_points_check(ctx, n, points):
 @then(parsers.parse("player {n:d}'s bladder should contain {count:d} ingredients"))
 def player_bladder_count_check(ctx, n, count):
     ps = _player_state(ctx, n)
-    assert len(ps["bladder"]) == count, f"Expected bladder count {count}, got {len(ps['bladder'])}"
+    assert len(ps["bladder"]) == count, (
+        f"Expected bladder count {count}, got {len(ps['bladder'])}"
+    )
 
 
 @then(parsers.parse("player {n:d}'s bladder should be empty"))
@@ -677,7 +743,9 @@ def player_bladder_empty(ctx, n):
 @then(parsers.parse("player {n:d}'s drunk level should be {level:d}"))
 def player_drunk_level_check(ctx, n, level):
     ps = _player_state(ctx, n)
-    assert ps["drunk_level"] == level, f"Expected drunk_level {level}, got {ps['drunk_level']}"
+    assert ps["drunk_level"] == level, (
+        f"Expected drunk_level {level}, got {ps['drunk_level']}"
+    )
 
 
 @then(parsers.parse("player {n:d}'s toilet tokens should decrease by 1"))
@@ -694,7 +762,9 @@ def player_toilet_tokens_decrease(ctx, n):
 @then(parsers.parse("player {n:d} should have {count:d} cards"))
 def player_has_cards(ctx, n, count):
     ps = _player_state(ctx, n)
-    assert len(ps["cards"]) == count, f"Expected {count} card(s), got {len(ps['cards'])}"
+    assert len(ps["cards"]) == count, (
+        f"Expected {count} card(s), got {len(ps['cards'])}"
+    )
 
 
 @then(parsers.parse("row {row:d} should be refreshed with new cards"))
@@ -713,7 +783,9 @@ def row_has_card_count(ctx, row, count):
     rows = game["game_state"]["card_rows"]
     for r in rows:
         if r["position"] == row:
-            assert len(r["cards"]) == count, f"Row {row}: expected {count} card(s), got {len(r['cards'])}"
+            assert len(r["cards"]) == count, (
+                f"Row {row}: expected {count} card(s), got {len(r['cards'])}"
+            )
             return
     pytest.fail(f"Row {row} not found")
 
@@ -743,7 +815,9 @@ def player_is_winner(ctx, n):
 
 @then("an undo request should be pending for the game")
 def undo_pending(ctx):
-    assert ctx["last_status"] == 200, f"Expected 200, got {ctx['last_status']}: {ctx['last_resp'].text}"
+    assert ctx["last_status"] == 200, (
+        f"Expected 200, got {ctx['last_status']}: {ctx['last_resp'].text}"
+    )
     data = ctx["last_resp"].json()
     assert data["undo_request"]["status"] == "pending"
 
@@ -766,7 +840,9 @@ def undo_approved(ctx):
 @then("the game state should be restored to before the last turn")
 def state_restored(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
-    pre_turn = ctx.get("pre_undo_game", {}).get("game_state", {}).get("turn_number", 999)
+    pre_turn = (
+        ctx.get("pre_undo_game", {}).get("game_state", {}).get("turn_number", 999)
+    )
     current_turn = game["game_state"]["turn_number"]
     assert current_turn < pre_turn, (
         f"Expected turn_number to decrease after undo, got {current_turn} (was {pre_turn})"
@@ -801,7 +877,8 @@ def history_has_1_move(ctx):
 def move_has_action_and_player(ctx):
     moves = ctx["last_resp"].json()["moves"]
     move = moves[0]
-    assert "action_type" in move
+    assert "action" in move
+    assert "type" in move["action"]
     assert "player_id" in move
 
 

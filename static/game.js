@@ -958,14 +958,15 @@ function renderHistoryLog(moves) {
 }
 
 function formatAction(move) {
-    switch (move.action_type) {
-        case 'take-ingredients': return 'Took ingredients';
-        case 'sell-cup': return `Sold cup ${(move.action_payload?.cup_index ?? '') + 1}`;
-        case 'drink-cup': return `Drank cup ${(move.action_payload?.cup_index ?? '') + 1}`;
-        case 'go-for-a-wee': return 'Went for a wee';
-        case 'claim-card': return 'Claimed a card';
-        case 'refresh-card-row': return `Refreshed row ${move.action_payload?.row_position ?? ''}`;
-        default: return move.action_type || '?';
+    const a = move.action || {};
+    switch (a.type) {
+        case 'take_ingredients': return 'Took ingredients';
+        case 'sell_cup':         return `Sold cup ${(a.cup_index ?? '') + 1}`;
+        case 'drink_cup':        return `Drank cup ${(a.cup_index ?? '') + 1}`;
+        case 'go_for_a_wee':    return 'Went for a wee';
+        case 'claim_card':       return 'Claimed a card';
+        case 'refresh_card_row': return `Refreshed row ${a.row_position ?? ''}`;
+        default:                 return a.type || '?';
     }
 }
 

@@ -171,7 +171,9 @@ def test_host_sees_start_game_button(page, base_url, new_user, new_game):
     assert btn.is_visible()
 
 
-def test_non_host_no_start_game_button(page, base_url, new_user, new_game, other_user_and_jwt):
+def test_non_host_no_start_game_button(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
     """A non-host player does not see the Start Game button."""
     _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
 
@@ -186,7 +188,9 @@ def test_non_host_no_start_game_button(page, base_url, new_user, new_game, other
     assert page.locator("#gbBtnStartGame").count() == 0
 
 
-def test_start_game_transitions_to_board(page, base_url, new_user, new_game, other_user_and_jwt):
+def test_start_game_transitions_to_board(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
     """Host clicks Start Game; lobby disappears and the game board renders."""
     _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
 

@@ -11,7 +11,9 @@ MIN_BLADDER_CAPACITY = 4
 
 class Cup:
     def __init__(self, ingredients: list[Ingredient] | None = None):
-        self.ingredients: list[Ingredient] = ingredients if ingredients is not None else []
+        self.ingredients: list[Ingredient] = (
+            ingredients if ingredients is not None else []
+        )
 
     @property
     def spirit_count(self) -> int:
