@@ -34,11 +34,11 @@ entity Ingredient {
 }
 
 variant Spirit : Ingredient {
-    spirit_type: whisky | rum | vodka | gin | tequila
+    spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
 }
 
 variant Mixer : Ingredient {
-    mixer_type: cola | soda_water | tonic_water | cranberry
+    mixer_type: COLA | SODA | TONIC | CRANBERRY
 }
 
 variant Special : Ingredient {
@@ -58,19 +58,19 @@ variant Special : Ingredient {
 -- physically enter the cup.
 --
 -- Name              Spirits               Mixers        Specials            Pts
--- Mojito            2×rum                 1×soda_water  1×sugar              10
--- Old Fashioned     3×whisky              —             1×bitters            10
--- Margarita         2×tequila             —             1×cointreau,         10
+-- Mojito            2×RUM                 1×SODA        1×sugar              10
+-- Old Fashioned     3×WHISKEY             —             1×bitters            10
+-- Margarita         2×TEQUILA             —             1×cointreau,         10
 --                                                        1×lemon
--- Cosmopolitan      1×vodka               1×cranberry   1×cointreau,         10
+-- Cosmopolitan      1×VODKA               1×CRANBERRY   1×cointreau,         10
 --                                                        1×lemon
--- Gin Martini       3×gin                 —             1×vermouth           10
--- Vodka Martini     3×vodka               —             1×vermouth           10
--- Tom Collins       1×gin                 1×soda_water  1×lemon, 1×sugar     10
--- Manhattan         2×whisky              —             1×vermouth,          10
+-- Gin Martini       3×GIN                 —             1×vermouth           10
+-- Vodka Martini     3×VODKA               —             1×vermouth           10
+-- Tom Collins       1×GIN                 1×SODA        1×lemon, 1×sugar     10
+-- Manhattan         2×WHISKEY             —             1×vermouth,          10
 --                                                        1×bitters
--- Long Island       1×gin, 1×vodka,       1×cola        1×sugar, 1×lemon     15
---   Iced Tea        1×tequila, 1×rum
+-- Long Island       1×GIN, 1×VODKA,       1×COLA        1×sugar, 1×lemon     15
+--   Iced Tea        1×TEQUILA, 1×RUM
 
 -- ─── Per-player state ─────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ entity PlayerState {
     game: session/Game
     player_id: UUID                          -- a member of session/Game.players
 
-    score: Integer
+    points: Integer
     drunk_level: Integer                     -- 0 = sober
     bladder: List<Ingredient>                -- drunk ingredients not yet excreted
     bladder_capacity: Integer                -- starts at config.initial_bladder_capacity
@@ -111,13 +111,13 @@ entity Cup {
 
 entity BoardState {
     game: session/Game
-    ingredient_bag: List<Ingredient>
+    bag_contents: List<Ingredient>
     open_display: List<Ingredient>           -- up to config.open_display_size; may be fewer if bag empty
     card_rows: List<CardRow>                 -- exactly 3 rows; each holds up to 3 cards
-    active_player_id: UUID                   -- whose turn it is
+    player_turn: UUID                        -- whose turn it is
 
     -- Derived
-    available_ingredients: ingredient_bag + open_display
+    available_ingredients: bag_contents + open_display
 }
 
 entity CardRow {
@@ -154,11 +154,11 @@ value IngredientRequirement {
 -- Exact match for cocktails: no extra spirits, mixers, or specials beyond the recipe.
 --
 -- Valid spirit↔mixer pairings:
---   vodka   → cola, soda_water, tonic_water, cranberry
---   rum     → cola
---   whisky  → cola, soda_water
---   gin     → tonic_water
---   tequila → (slammer only; no valid mixer pairings)
+--   VODKA   → COLA, SODA, TONIC, CRANBERRY
+--   RUM     → COLA
+--   WHISKEY → COLA, SODA
+--   GIN     → TONIC
+--   TEQUILA → (slammer only; no valid mixer pairings)
 
 -- ─── Turn actions ─────────────────────────────────────────────────────────────
 -- On each turn an active player takes exactly ONE of the following actions.
@@ -172,9 +172,9 @@ rule TakeIngredients {
         -- this action is unavailable; player must choose another action.
         -- This check is performed only at the start of the first batch.
     requires: chosen.count = player.take_count across all batches this turn
-    requires: chosen drawn from board.open_display ∪ board.ingredient_bag in any order
+    requires: chosen drawn from board.open_display ∪ board.bag_contents in any order
     -- Bag draws are random: the player cannot choose which ingredient they receive from
-    -- board.ingredient_bag. The system selects a random ingredient from the bag on each
+    -- board.bag_contents. The system selects a random ingredient from the bag on each
     -- bag draw. The player may only choose specific ingredients when taking from
     -- board.open_display (where all contents are visible).
     --
@@ -213,7 +213,7 @@ rule DrawSpecialIngredient {
     if rolled_result != nothing:
         ensures: player.special_ingredients = player.special_ingredients + [Special(rolled_result)]
     if rolled_result = nothing:
-        ensures: the special token is returned to board.ingredient_bag
+        ensures: the special token is returned to board.bag_contents
     -- Specials may never be drunk directly; they always go to the player mat.
 }
 
@@ -260,11 +260,11 @@ rule SellCup {
     requires: (cup, declared_specials) is a valid sellable drink
         -- exact recipe match for cocktails; spirit+mixer matrix for standard drinks
     let points = drink_points(cup, declared_specials)
-    ensures: player.score = player.score + points
+    ensures: player.points = player.points + points
     ensures: player.special_ingredients = player.special_ingredients - declared_specials
     let sold_ingredients = cup.ingredients (before sale)
     ensures: cup.ingredients = []
-    ensures: board.ingredient_bag = board.ingredient_bag + sold_ingredients + declared_specials
+    ensures: board.bag_contents = board.bag_contents + sold_ingredients + declared_specials
     ensures: CheckVictory(player)
 }
 
@@ -293,7 +293,7 @@ rule GoForAWee {
     -- Bladder ingredients (including those from DrinkCup) are returned to the bag.
     let excreted = player.bladder
     ensures: player.bladder = []
-    ensures: board.ingredient_bag = board.ingredient_bag + excreted
+    ensures: board.bag_contents = board.bag_contents + excreted
     -- Sober up 1 level.
     ensures: player.drunk_level = max(0, player.drunk_level - 1)
     -- Breaking the seal: each wee places one toilet token, shrinking bladder capacity by 1.
@@ -343,8 +343,8 @@ rule ReplenishDisplay {
     when: ReplenishDisplay(board)
     let deficit = config.open_display_size - board.open_display.count
     requires: deficit > 0
-    let fill = min(deficit, board.ingredient_bag.count)
-    ensures: board.open_display refilled by fill ingredients randomly selected from board.ingredient_bag
+    let fill = min(deficit, board.bag_contents.count)
+    ensures: board.open_display refilled by fill ingredients randomly selected from board.bag_contents
     -- Selection is random: the fill ingredients are chosen uniformly at random from
     -- the bag, preserving the blind-draw nature of the ingredient bag.
     -- Display may remain below config.open_display_size if the bag is empty.
@@ -478,7 +478,7 @@ rule ExecuteUndoTurn {
     -- immediately before the target turn began.
     ensures: BoardState is restored to its state at the start of request.target_turn_number
     ensures: all PlayerState records are restored to their state at the start of request.target_turn_number
-    ensures: BoardState.active_player_id is restored to the player who performed the undone turn
+    ensures: BoardState.player_turn is restored to the player who performed the undone turn
     -- The MoveRecord for the undone turn is NOT removed; it is retained for audit purposes.
     -- Subsequent actions will produce new MoveRecords continuing from the restored state.
 }
@@ -496,7 +496,7 @@ rule CheckVictory {
     -- if another player also meets a condition on the same turn, the active player wins.
     when: CheckVictory(player)
     requires: player.status = active
-    if player.score >= config.score_to_win:
+    if player.points >= config.score_to_win:
         ensures: session/Game.status = ended
         ensures: session/Game.winner = player.player_id
     if player.karaoke_cards_claimed >= config.karaoke_cards_to_win:
@@ -514,7 +514,7 @@ surface PlayerTurn {
         and game.status = started
 
     exposes:
-        state.score
+        state.points
         state.drunk_level
         state.bladder.count
         state.bladder_capacity
@@ -543,26 +543,26 @@ surface PlayerTurn {
     provides:
         TakeIngredients(player, chosen)
             when state.status = active
-            and board.active_player_id = player.id
+            and board.player_turn = player.id
             and board.available_ingredients.count >= state.take_count
         SellCup(player, cup, declared_specials)
             when state.status = active
-            and board.active_player_id = player.id
+            and board.player_turn = player.id
             and cup in state.cups
         DrinkCup(player, cup)
             when state.status = active
-            and board.active_player_id = player.id
+            and board.player_turn = player.id
             and cup in state.cups
             and not cup.is_empty
         GoForAWee(player)
             when state.status = active
-            and board.active_player_id = player.id
+            and board.player_turn = player.id
         ClaimCard(player, card)
             when state.status = active
-            and board.active_player_id = player.id
+            and board.player_turn = player.id
         RefreshCardRow(player, row)
             when state.status = active
-            and board.active_player_id = player.id
+            and board.player_turn = player.id
             and state.drunk_level >= config.min_drunk_to_refresh
         ProposeUndoTurn(player)
             when state.status = active
@@ -592,12 +592,12 @@ surface BoardView {
     context board: BoardState where game.status = started
 
     exposes:
-        board.active_player_id
+        board.player_turn
         for i in board.open_display:
             i.kind
             i.spirit_type?
             i.mixer_type?
-        board.ingredient_bag.count         -- bag size is public; specific contents are hidden
+        board.bag_contents.count         -- bag size is public; specific contents are hidden
         for row in board.card_rows:
             row.position
             for card in row.cards:
@@ -609,7 +609,7 @@ surface BoardView {
 
     related:
         PlayerTurn(player)
-            when board.active_player_id = player.id
+            when board.player_turn = player.id
 }
 
 surface GameReplay {

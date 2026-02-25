@@ -334,8 +334,8 @@ def take_ingredients(
         elif disposition == "cup":
             if cup_index not in (0, 1):
                 raise GameException("cup_index must be 0 or 1", status_code=400)
-            cup = ps.cup1 if cup_index == 0 else ps.cup2
-            if len(cup) >= MAX_CUP_INGREDIENTS:
+            cup = ps.cups[cup_index]
+            if cup.is_full:
                 raise GameException(
                     f"Cup {cup_index} is full (max {MAX_CUP_INGREDIENTS})",
                     status_code=400,
@@ -344,7 +344,7 @@ def take_ingredients(
                 raise GameException(
                     "Only spirits and mixers may be placed in cups", status_code=400
                 )
-            cup.append(ingredient)
+            cup.ingredients.append(ingredient)
             record["disposition"] = "cup"
             record["cup_index"] = cup_index
         elif disposition == "drink":
@@ -394,8 +394,8 @@ def sell_cup(
     if cup_index not in (0, 1):
         raise GameException("cup_index must be 0 or 1", status_code=400)
 
-    cup = ps.cup1 if cup_index == 0 else ps.cup2
-    if not cup:
+    cup = ps.cups[cup_index]
+    if cup.is_empty:
         raise GameException("Cup is empty", status_code=400)
 
     # Validate declared specials are on the player's mat
@@ -407,13 +407,13 @@ def sell_cup(
             )
         mat.remove(s)
 
-    pts = drink_points(cup, declared_specials)
+    pts = drink_points(cup.ingredients, declared_specials)
     if pts is None:
         raise GameException(
             "This combination of ingredients cannot be sold", status_code=400
         )
 
-    sold_ingredients = list(cup)
+    sold_ingredients = list(cup.ingredients)
     # Return sold ingredients + declared specials to the bag
     gs.bag_contents.extend(sold_ingredients)
     for s in declared_specials:
@@ -421,10 +421,7 @@ def sell_cup(
         gs.bag_contents.append(Ingredient.SPECIAL)
         ps.special_ingredients.remove(s)
 
-    if cup_index == 0:
-        ps.cup1 = []
-    else:
-        ps.cup2 = []
+    cup.ingredients = []
 
     ps.points += pts
     _check_victory(gs, player_id)
@@ -455,21 +452,18 @@ def drink_cup(
     if cup_index not in (0, 1):
         raise GameException("cup_index must be 0 or 1", status_code=400)
 
-    cup = ps.cup1 if cup_index == 0 else ps.cup2
-    if not cup:
+    cup = ps.cups[cup_index]
+    if cup.is_empty:
         raise GameException("Cup is empty", status_code=400)
 
-    drunk_ingredients = list(cup)
+    drunk_ingredients = list(cup.ingredients)
     for ingredient in drunk_ingredients:
         _drink_ingredient(gs, player_id, ingredient)
     # Drunk cup ingredients go to the bladder (not the bag) — handled by _drink_ingredient
     # Apply drunk modifier in one batch: only sober up if all ingredients are mixers
     _apply_drunk_modifier(gs, player_id, drunk_ingredients)
 
-    if cup_index == 0:
-        ps.cup1 = []
-    else:
-        ps.cup2 = []
+    cup.ingredients = []
 
     gs.turn_number += 1
     _advance_turn(gs)
@@ -564,9 +558,8 @@ def claim_card(
     if target_card.is_karaoke:
         ps.karaoke_cards_claimed += 1
 
-    # Replace card from deck (if not karaoke — karaoke cards are never discarded)
-    if not target_card.is_karaoke:
-        _replace_card(gs, target_row)
+    # Replace the claimed card's slot from the deck (if any cards remain)
+    _replace_card(gs, target_row)
 
     _check_victory(gs, player_id)
     gs.turn_number += 1

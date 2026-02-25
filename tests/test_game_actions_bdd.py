@@ -170,8 +170,7 @@ def player_empty_cup(ctx, n, cup_index):
     token, pid = _player(ctx, n)
     game = _get_game(token, ctx["game_id"])
     ps = game["game_state"]["player_states"][pid]
-    cup_key = "cup1" if cup_index == 0 else "cup2"
-    assert ps[cup_key] == [], f"Cup {cup_index} should already be empty after game start"
+    assert ps["cups"][cup_index]["ingredients"] == [], f"Cup {cup_index} should already be empty after game start"
 
 
 @given("the bag contains no special tokens")
@@ -189,11 +188,7 @@ def player_cup_full(ctx, n, cup_index, count):
 
     def patch(gs):
         ps = gs.player_states[UUID(pid)]
-        ingredients = [Ingredient.VODKA] * count
-        if cup_index == 0:
-            ps.cup1 = ingredients
-        else:
-            ps.cup2 = ingredients
+        ps.cups[cup_index].ingredients = [Ingredient.VODKA] * count
         return gs
 
     _patch_game_state(ctx["game_id"], patch)
@@ -206,10 +201,7 @@ def player_cup_contains(ctx, n, cup_index, spec):
 
     def patch(gs):
         ps = gs.player_states[UUID(pid)]
-        if cup_index == 0:
-            ps.cup1 = ingredients
-        else:
-            ps.cup2 = ingredients
+        ps.cups[cup_index].ingredients = ingredients
         for ing in ingredients:
             if ing in gs.bag_contents:
                 gs.bag_contents.remove(ing)
@@ -225,8 +217,7 @@ def player_cup_also_contains(ctx, n, cup_index, spec):
 
     def patch(gs):
         ps = gs.player_states[UUID(pid)]
-        cup = ps.cup1 if cup_index == 0 else ps.cup2
-        cup.extend(extra)
+        ps.cups[cup_index].ingredients.extend(extra)
         for ing in extra:
             if ing in gs.bag_contents:
                 gs.bag_contents.remove(ing)
@@ -309,6 +300,26 @@ def card_in_row(ctx, count, kind, row):
         for r in gs.card_rows:
             if r.position == row:
                 r.cards.insert(0, _Card(id=new_card_id, is_karaoke=False, cost=[_Req(kind=kind_norm, count=count)]))
+                break
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+    ctx["target_card_id"] = new_card_id
+    return new_card_id
+
+
+@given(parsers.parse("a karaoke card with cost {count:d} {kind} is available in row {row:d}"), target_fixture="available_card_id")
+def karaoke_card_in_row(ctx, count, kind, row):
+    _KIND_NORMALIZE = {"spirits": "spirit", "mixers": "mixer", "specials": "special"}
+    kind_norm = _KIND_NORMALIZE.get(kind, kind)
+    import uuid as _uuid
+    from app.card import Card as _Card, IngredientRequirement as _Req
+    new_card_id = str(_uuid.uuid4())
+
+    def patch(gs):
+        for r in gs.card_rows:
+            if r.position == row:
+                r.cards.insert(0, _Card(id=new_card_id, is_karaoke=True, cost=[_Req(kind=kind_norm, count=count)]))
                 break
         return gs
 
@@ -608,29 +619,29 @@ def it_is_player_turn_then(ctx, n):
 @then(parsers.parse("cup {cup_index:d} should contain {count:d} ingredients"))
 def cup_contains_count(ctx, cup_index, count):
     ps = _player_state(ctx, 1)
-    cup_key = "cup1" if cup_index == 0 else "cup2"
-    assert len(ps[cup_key]) == count, f"Expected {count} in cup {cup_index}, got {len(ps[cup_key])}"
+    ingredients = ps["cups"][cup_index]["ingredients"]
+    assert len(ingredients) == count, f"Expected {count} in cup {cup_index}, got {len(ingredients)}"
 
 
 @then(parsers.parse("player {n:d}'s cup {cup_index:d} should contain {count:d} ingredients"))
 def player_cup_contains_count(ctx, n, cup_index, count):
     ps = _player_state(ctx, n)
-    cup_key = "cup1" if cup_index == 0 else "cup2"
-    assert len(ps[cup_key]) == count, f"Expected {count} in player {n}'s cup {cup_index}, got {len(ps[cup_key])}"
+    ingredients = ps["cups"][cup_index]["ingredients"]
+    assert len(ingredients) == count, f"Expected {count} in player {n}'s cup {cup_index}, got {len(ingredients)}"
 
 
 @then(parsers.parse("cup {cup_index:d} should be empty"))
 def cup_empty(ctx, cup_index):
     ps = _player_state(ctx, 1)
-    cup_key = "cup1" if cup_index == 0 else "cup2"
-    assert ps[cup_key] == [], f"Expected cup {cup_index} empty, got {ps[cup_key]}"
+    ingredients = ps["cups"][cup_index]["ingredients"]
+    assert ingredients == [], f"Expected cup {cup_index} empty, got {ingredients}"
 
 
 @then(parsers.parse("player {n:d}'s cup {cup_index:d} should be empty"))
 def player_cup_empty(ctx, n, cup_index):
     ps = _player_state(ctx, n)
-    cup_key = "cup1" if cup_index == 0 else "cup2"
-    assert ps[cup_key] == [], f"Expected player {n}'s cup {cup_index} empty, got {ps[cup_key]}"
+    ingredients = ps["cups"][cup_index]["ingredients"]
+    assert ingredients == [], f"Expected player {n}'s cup {cup_index} empty, got {ingredients}"
 
 
 @then("a move record should be created for the game")
@@ -694,6 +705,17 @@ def row_refreshed(ctx, row):
         if r["position"] == row:
             return
     pytest.fail(f"Row {row} not found after refresh")
+
+
+@then(parsers.parse("row {row:d} should have {count:d} cards"))
+def row_has_card_count(ctx, row, count):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    rows = game["game_state"]["card_rows"]
+    for r in rows:
+        if r["position"] == row:
+            assert len(r["cards"]) == count, f"Row {row}: expected {count} card(s), got {len(r['cards'])}"
+            return
+    pytest.fail(f"Row {row} not found")
 
 
 @then(parsers.parse("the action should be rejected with a {code:d} error"))

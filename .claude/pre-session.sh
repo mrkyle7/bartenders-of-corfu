@@ -92,4 +92,8 @@ fi
 
 export SUPABASE_URL="$API_URL"
 export SUPABASE_KEY="$SECRET_KEY"
+
+# Record the current HEAD SHA so the stop hook can detect whether code changed this session
+git rev-parse HEAD 2>/dev/null > /tmp/claude_session_head || true
+
 echo "Session ready. SUPABASE_URL=$SUPABASE_URL" >&2

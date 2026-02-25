@@ -4,7 +4,7 @@ from uuid import UUID
 
 from app.card import CardRow, build_deck, deal_initial_rows
 from app.Ingredient import Ingredient
-from app.PlayerState import PlayerState
+from app.PlayerState import Cup, PlayerState
 from app.user import User
 
 OPEN_DISPLAY_SIZE = 5
@@ -133,12 +133,18 @@ class GameState:
 
         player_states = {}
         for player_str, ps_data in state_data.get("player_states", {}).items():
+            if "cups" in ps_data:
+                cups = [Cup.from_dict(c) for c in ps_data["cups"]]
+            else:
+                cups = [
+                    Cup(ingredients=[Ingredient[i] for i in ps_data.get("cup1", [])]),
+                    Cup(ingredients=[Ingredient[i] for i in ps_data.get("cup2", [])]),
+                ]
             player_states[UUID(player_str)] = PlayerState(
                 player_id=UUID(ps_data["player_id"]),
                 points=ps_data["points"],
                 drunk_level=ps_data["drunk_level"],
-                cup1=[Ingredient[i] for i in ps_data.get("cup1", [])],
-                cup2=[Ingredient[i] for i in ps_data.get("cup2", [])],
+                cups=cups,
                 bladder=[Ingredient[i] for i in ps_data.get("bladder", [])],
                 bladder_capacity=ps_data.get("bladder_capacity", 8),
                 toilet_tokens=ps_data.get("toilet_tokens", 4),

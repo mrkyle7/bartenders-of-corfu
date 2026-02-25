@@ -45,6 +45,7 @@ Feature: Game turn actions
 
   Scenario: Placing too many ingredients in a cup is rejected
     Given it is player 1's turn
+    And the bag contains no special tokens
     And player 1's cup 0 is full with 5 ingredients
     When player 1 tries to place an ingredient in cup 0
     Then the action should be rejected with a 400 error
@@ -103,6 +104,14 @@ Feature: Game turn actions
     When player 1 claims that card
     Then player 1 should have 1 card
     And a move record should be created for the game
+
+  Scenario: Claiming a karaoke card replaces the slot from the deck
+    Given it is player 1's turn
+    And a karaoke card with cost 1 mixer is available in row 1
+    And player 1 has 1 mixer in their bladder
+    When player 1 claims that card
+    Then player 1 should have 1 card
+    And row 1 should have 4 cards
 
   Scenario: Player cannot claim a card they cannot afford
     Given it is player 1's turn

@@ -20,16 +20,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/run-all-tests.sh"
-          }
-        ]
-      }
     ]
   },
   "enabledPlugins": {
