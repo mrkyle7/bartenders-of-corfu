@@ -25,6 +25,13 @@ Feature: Game turn actions
     Then it should be player 2's turn
     And a move record should be created for the game
 
+  Scenario: Multi-batch take records all ingredients in the history payload
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    When player 1 takes 1 ingredient from the bag
+    And player 1 takes 2 ingredients from the bag
+    Then the move history should record 3 taken ingredients
+
   Scenario: Player takes ingredients in two batches after player 1's go
     Given it is player 1's turn
     And the bag contains no special tokens
@@ -164,3 +171,43 @@ Feature: Game turn actions
     And player 2 drinks cup 0
     Then the game should be over
     And player 1 should be the winner
+
+  Scenario: Player wins by claiming the third karaoke card
+    Given it is player 1's turn
+    And player 1 has claimed 2 karaoke cards
+    And a karaoke card with cost 1 mixer is available in row 1
+    And player 1 has 1 mixer in their bladder
+    When player 1 claims that card
+    Then the game should be over
+    And player 1 should be the winner
+
+  Scenario: RefreshCardRow is blocked while a take-ingredients batch is in progress
+    Given it is player 1's turn
+    And player 1 has a drunk level of 3
+    And the bag contains no special tokens
+    When player 1 takes 1 ingredient from the bag
+    And player 1 tries to refresh card row 1
+    Then the action should be rejected with a 409 error
+
+  Scenario: SellCup is blocked while a take-ingredients batch is in progress
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    When player 1 takes 1 ingredient from the bag
+    And player 1 tries to sell cup 0
+    Then the action should be rejected with a 409 error
+
+  Scenario: DrinkCup is blocked while a take-ingredients batch is in progress
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    When player 1 takes 1 ingredient from the bag
+    And player 1 tries to drink cup 0
+    Then the action should be rejected with a 409 error
+
+  Scenario: ClaimCard is blocked while a take-ingredients batch is in progress
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And a card with cost 1 mixer is available in row 1
+    And player 1 has 1 mixer in their bladder
+    When player 1 takes 1 ingredient from the bag
+    And player 1 tries to claim that card
+    Then the action should be rejected with a 409 error

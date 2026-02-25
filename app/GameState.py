@@ -38,6 +38,7 @@ class GameState:
         ingredients_taken_this_turn: int = 0,
         drunk_ingredients_this_turn: list[Ingredient] | None = None,
         bag_draw_pending: list[Ingredient] | None = None,
+        taken_records_this_turn: list[dict] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -67,6 +68,11 @@ class GameState:
         # Cleared when take-ingredients assigns them or when the turn advances.
         self.bag_draw_pending: list[Ingredient] = (
             bag_draw_pending if bag_draw_pending is not None else []
+        )
+        # Accumulates all taken records across batches this turn; included in
+        # the final move payload when turn_complete=True. Reset on turn advance.
+        self.taken_records_this_turn: list[dict] = (
+            taken_records_this_turn if taken_records_this_turn is not None else []
         )
 
     @classmethod
@@ -129,6 +135,7 @@ class GameState:
                 i.name for i in self.drunk_ingredients_this_turn
             ],
             "bag_draw_pending": [i.name for i in self.bag_draw_pending],
+            "taken_records_this_turn": self.taken_records_this_turn,
         }
 
     @classmethod
@@ -183,4 +190,5 @@ class GameState:
             bag_draw_pending=[
                 Ingredient[i] for i in state_data.get("bag_draw_pending", [])
             ],
+            taken_records_this_turn=state_data.get("taken_records_this_turn", []),
         )

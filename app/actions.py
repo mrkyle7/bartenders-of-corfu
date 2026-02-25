@@ -61,6 +61,7 @@ def _advance_turn(gs: GameState) -> GameState:
     gs.ingredients_taken_this_turn = 0
     gs.drunk_ingredients_this_turn = []
     gs.bag_draw_pending = []
+    gs.taken_records_this_turn = []
 
     if not gs.turn_order:
         return gs
@@ -372,8 +373,12 @@ def take_ingredients(
     # Accumulate batch progress
     gs.ingredients_taken_this_turn += len(assignments)
     gs.drunk_ingredients_this_turn.extend(drunk_this_batch)
+    gs.taken_records_this_turn.extend(taken_records)
 
     turn_complete = gs.ingredients_taken_this_turn >= take_count
+
+    # Snapshot all accumulated records before _advance_turn clears the list.
+    all_taken = list(gs.taken_records_this_turn)
 
     if turn_complete:
         # Apply drunk modifier once across all ingredients drunk this whole turn
@@ -383,9 +388,11 @@ def take_ingredients(
         gs.turn_number += 1
         _advance_turn(
             gs
-        )  # also resets ingredients_taken_this_turn and drunk_ingredients_this_turn
+        )  # resets ingredients_taken_this_turn, drunk_ingredients_this_turn, taken_records_this_turn
 
-    payload = {"taken": taken_records, "turn_complete": turn_complete}
+    # Emit all records accumulated across batches so the move history reflects
+    # everything taken this turn, not just the most recent batch.
+    payload = {"taken": all_taken, "turn_complete": turn_complete}
     return gs, payload
 
 

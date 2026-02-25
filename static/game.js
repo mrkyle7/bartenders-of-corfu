@@ -969,14 +969,41 @@ function renderHistoryLog(moves) {
     }
     // Show most recent first
     [...moves].reverse().forEach(move => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'gb-history-item';
+
         const entry = document.createElement('div');
-        entry.className = 'gb-history-entry';
+        entry.className = 'gb-history-entry gb-history-expandable';
+        entry.setAttribute('aria-expanded', 'false');
+        entry.setAttribute('role', 'button');
+        entry.setAttribute('tabindex', '0');
         entry.innerHTML =
+            `<span class="gb-history-chevron" aria-hidden="true">&#9654;</span> ` +
             `<span class="gb-history-turn">Turn ${move.turn_number}</span> &bull; ` +
             `<span class="gb-history-player">${escHtml(playerName(move.player_id))}</span> &bull; ` +
             `<span class="gb-history-action">${escHtml(formatAction(move))}</span> ` +
             `<span class="gb-history-time">${formatTime(move.created_at)}</span>`;
-        log.appendChild(entry);
+
+        const detail = document.createElement('div');
+        detail.className = 'gb-history-detail';
+        detail.setAttribute('aria-hidden', 'true');
+        detail.innerHTML = formatActionDetail(move);
+
+        const toggle = () => {
+            const expanded = entry.getAttribute('aria-expanded') === 'true';
+            entry.setAttribute('aria-expanded', String(!expanded));
+            entry.classList.toggle('expanded', !expanded);
+            detail.setAttribute('aria-hidden', String(expanded));
+            detail.classList.toggle('open', !expanded);
+        };
+        entry.addEventListener('click', toggle);
+        entry.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+
+        wrapper.appendChild(entry);
+        wrapper.appendChild(detail);
+        log.appendChild(wrapper);
     });
 }
 
@@ -991,6 +1018,85 @@ function formatAction(move) {
         case 'refresh_card_row': return `Refreshed row ${a.row_position ?? ''}`;
         default:                 return a.type || '?';
     }
+}
+
+function formatActionDetail(move) {
+    const a = move.action || {};
+    switch (a.type) {
+        case 'take_ingredients': return _detailTakeIngredients(a);
+        case 'sell_cup':         return _detailSellCup(a);
+        case 'drink_cup':        return _detailDrinkCup(a);
+        case 'go_for_a_wee':    return _detailGoForAWee(a);
+        case 'claim_card':       return _detailClaimCard(a);
+        case 'refresh_card_row': return _detailRefreshCardRow(a);
+        default:                 return '<em>No details available</em>';
+    }
+}
+
+function _ingBadgesHtml(names) {
+    if (!names || names.length === 0) return '<em>none</em>';
+    return names.map(n =>
+        `<span class="gb-ingredient gb-ing-${ingredientKind(n)}">${escHtml(ingredientLabel(n))}</span>`
+    ).join(' ');
+}
+
+function _detailRow(label, content) {
+    return `<div class="gb-detail-row"><span class="gb-detail-label">${escHtml(label)}</span>${content}</div>`;
+}
+
+function _detailTakeIngredients(a) {
+    const taken = a.taken || [];
+    if (taken.length === 0) return '<em>No ingredients recorded</em>';
+    const cups = [[], []];
+    const drunk = [];
+    const specials = [];
+    taken.forEach(t => {
+        if (t.disposition === 'cup') cups[t.cup_index || 0].push(t.ingredient);
+        else if (t.disposition === 'drink') drunk.push(t.ingredient);
+        else if (t.disposition === 'special') specials.push(t.special_type || t.ingredient);
+    });
+    const rows = [];
+    if (cups[0].length) rows.push(_detailRow('Cup 1:', _ingBadgesHtml(cups[0])));
+    if (cups[1].length) rows.push(_detailRow('Cup 2:', _ingBadgesHtml(cups[1])));
+    if (drunk.length)   rows.push(_detailRow('Drank:', _ingBadgesHtml(drunk)));
+    if (specials.length) rows.push(_detailRow('Special rolls:',
+        specials.map(s => `<span class="gb-special-badge">${escHtml(s)}</span>`).join(' ')));
+    return rows.join('');
+}
+
+function _detailSellCup(a) {
+    const cupNum = (a.cup_index ?? 0) + 1;
+    const pts = a.points_earned ?? 0;
+    const specials = a.declared_specials || [];
+    let html = _detailRow(`Cup ${cupNum}:`, _ingBadgesHtml(a.ingredients));
+    if (specials.length) html += _detailRow('Specials:',
+        specials.map(s => `<span class="gb-special-badge">${escHtml(s)}</span>`).join(' '));
+    html += _detailRow('Earned:', `<span class="gb-points-badge">+${pts} pts</span>`);
+    return html;
+}
+
+function _detailDrinkCup(a) {
+    const cupNum = (a.cup_index ?? 0) + 1;
+    return _detailRow(`Cup ${cupNum}:`, _ingBadgesHtml(a.ingredients));
+}
+
+function _detailGoForAWee(a) {
+    const excreted = a.excreted || [];
+    if (excreted.length === 0) return '<div class="gb-detail-row"><em>Bladder was empty</em></div>';
+    return _detailRow('Flushed:', _ingBadgesHtml(excreted));
+}
+
+function _detailClaimCard(a) {
+    const row = a.row_position ?? '?';
+    const karaokeTag = a.is_karaoke
+        ? ' <span class="gb-karaoke-badge">&#127908; Karaoke</span>' : '';
+    return _detailRow('Row:', `${row}${karaokeTag}`);
+}
+
+function _detailRefreshCardRow(a) {
+    const row = a.row_position ?? '?';
+    const n = a.cards_removed ?? '?';
+    return _detailRow('Row:', `${row} &mdash; ${n} card${n !== 1 ? 's' : ''} swapped out`);
 }
 
 function escHtml(str) {

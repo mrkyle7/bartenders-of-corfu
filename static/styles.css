@@ -940,20 +940,89 @@ input {
 }
 
 /* ---------- History log ---------- */
+.gb-history-item {
+    border-bottom: 1px solid rgba(212,160,23,0.18);
+}
+.gb-history-item:last-child { border-bottom: none; }
+
 .gb-history-entry {
     font-size: 0.78em;
     color: #4a2c0e;
-    padding: 3px 0;
-    border-bottom: 1px solid rgba(212,160,23,0.18);
+    padding: 3px 2px;
     line-height: 1.4;
 }
 
-.gb-history-entry:last-child { border-bottom: none; }
+.gb-history-expandable {
+    cursor: pointer;
+    user-select: none;
+    border-radius: 3px;
+    transition: background 0.1s;
+}
+.gb-history-expandable:hover { background: rgba(212,160,23,0.1); }
+.gb-history-expandable:focus-visible { outline: 2px solid #d4a017; outline-offset: 1px; }
+
+.gb-history-chevron {
+    display: inline-block;
+    font-size: 0.65em;
+    color: #a07840;
+    transition: transform 0.15s;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+.gb-history-expandable.expanded .gb-history-chevron { transform: rotate(90deg); }
 
 .gb-history-turn { color: #8a5c2e; font-weight: bold; }
 .gb-history-player { color: #4b7ca8; }
 .gb-history-action { font-style: italic; }
 .gb-history-time { color: #a0724a; font-size: 0.9em; }
+
+.gb-history-detail {
+    display: none;
+    font-size: 0.76em;
+    padding: 4px 8px 6px 22px;
+    background: rgba(253,246,227,0.7);
+    border-left: 2px solid rgba(212,160,23,0.35);
+    margin-bottom: 2px;
+}
+.gb-history-detail.open { display: block; }
+
+.gb-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin: 2px 0;
+    color: #4a2c0e;
+}
+.gb-detail-label {
+    font-weight: 600;
+    color: #6b3a0f;
+    min-width: 72px;
+}
+
+.gb-points-badge {
+    background: #15803d;
+    color: #fff;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 0.92em;
+}
+.gb-karaoke-badge {
+    background: #7c3aed;
+    color: #fff;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.88em;
+}
+.gb-special-badge {
+    background: #c2410c;
+    color: #fff;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.88em;
+    text-transform: capitalize;
+}
 
 /* ---------- Replay controls ---------- */
 .gb-replay-controls {

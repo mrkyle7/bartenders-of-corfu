@@ -47,3 +47,14 @@ Feature: Undo turn
   Scenario: Game state can be replayed to any turn
     When player 1 requests the state at turn 0
     Then the returned state should be the initial game state
+
+  Scenario: An eliminated player cannot propose an undo
+    Given player 2 is eliminated
+    When player 2 proposes to undo the last turn
+    Then the action should be rejected with a 409 error
+
+  Scenario: Undo approval threshold excludes eliminated players
+    Given player 2 is eliminated
+    And player 1 has proposed to undo the last turn
+    When player 2 votes agree on the undo
+    Then the undo request should be approved

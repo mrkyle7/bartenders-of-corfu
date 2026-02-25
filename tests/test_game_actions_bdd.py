@@ -19,6 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from app.GameState import GameState
 from app.api import app
 from app.Ingredient import Ingredient
 
@@ -183,6 +184,15 @@ def player_empty_cup(ctx, n, cup_index):
 def bag_no_specials(ctx):
     def patch(gs):
         gs.bag_contents = [i for i in gs.bag_contents if not i.value.special]
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+@given("the open display contains {spec}")
+def set_open_display(ctx, spec):
+    ingredients = _parse_ingredient_spec(spec)
+    def patch(gs: GameState):
+        gs.open_display = ingredients
         return gs
 
     _patch_game_state(ctx["game_id"], patch)
@@ -385,6 +395,30 @@ def player_bladder_kind(ctx, n, count, kind):
     _patch_game_state(ctx["game_id"], patch)
 
 
+@given(parsers.parse("player {n:d} has claimed {count:d} karaoke cards"))
+def player_has_karaoke_cards(ctx, n, count):
+    _, pid = _player(ctx, n)
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.karaoke_cards_claimed = count
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given(parsers.parse("player {n:d} is eliminated"))
+def player_is_eliminated(ctx, n):
+    _, pid = _player(ctx, n)
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.status = "hospitalised"
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
 @given(parsers.parse("player {n:d} has proposed to undo the last turn"))
 def player_proposed_undo(ctx, n):
     token, _ = _player(ctx, n)
@@ -523,6 +557,15 @@ def player_drink_cup(ctx, n, cup_index):
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
 
+
+@when(parsers.parse("player {n:d} tries to sell cup {cup_index:d}"))
+def player_try_sell_cup(ctx, n, cup_index):
+    player_sell_cup_no_specials(ctx, n, cup_index)
+
+
+@when(parsers.parse("player {n:d} tries to drink cup {cup_index:d}"))
+def player_try_drink_cup(ctx, n, cup_index):
+    player_drink_cup(ctx, n, cup_index)
 
 @when(parsers.parse("player {n:d} goes for a wee"))
 def player_go_for_a_wee(ctx, n):
@@ -717,6 +760,22 @@ def move_record_created(ctx):
     assert resp.status_code == 200, resp.text
     moves = resp.json()["moves"]
     assert len(moves) >= 1, "Expected at least one move record"
+
+
+@then(parsers.parse("the move history should record {count:d} taken ingredients"))
+def move_history_taken_count(ctx, count):
+    resp = _client.get(
+        f"/v1/games/{ctx['game_id']}/history",
+        cookies=_auth(ctx["p1_token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    moves = resp.json()["moves"]
+    take_moves = [m for m in moves if m["action"]["type"] == "take_ingredients"]
+    assert len(take_moves) == 1, f"Expected 1 take_ingredients move, got {len(take_moves)}"
+    taken = take_moves[0]["action"].get("taken", [])
+    assert len(taken) == count, (
+        f"Expected {count} taken ingredient records, got {len(taken)}: {taken}"
+    )
 
 
 @then(parsers.parse("player {n:d} should have {points:d} point"))
