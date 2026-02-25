@@ -12,6 +12,9 @@ Covers:
   - host sees #gbBtnStartGame in the lobby
   - non-host does not see #gbBtnStartGame
   - clicking Start Game transitions the game to the board view
+  - cup ingredients shown as badges when cup has contents
+  - empty cup shows no ingredient badges
+  - other player's cup ingredients shown as badges
 """
 
 from tests.ui.conftest import _api_register, _api_post, _unique
@@ -204,3 +207,97 @@ def test_start_game_transitions_to_board(
     # Board content should become visible; lobby panel should be hidden
     page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
     assert not page.locator("#gbLobbyPanel").is_visible()
+
+
+# ---------------------------------------------------------------------------
+# Cup content rendering
+# ---------------------------------------------------------------------------
+
+
+def _start_game_with_two_players(base_url, new_game, host_jwt, other_jwt):
+    """Join and start a 2-player game; return game_id."""
+    _api_post(base_url, f"/v1/games/{new_game}/join", other_jwt)
+    _api_post(base_url, f"/v1/games/{new_game}/start", host_jwt)
+    return new_game
+
+
+def _put_ingredient_in_cup(base_url, game_id, jwt, cup_index=0):
+    """Draw take_count (3) ingredients from the bag and assign them all to cup_index.
+
+    Drawing and assigning the full take_count ends the turn so the next player can act.
+    """
+    take_count = 3  # BASE_TAKE_COUNT at drunk_level 0
+    _api_post(
+        base_url,
+        f"/v1/games/{game_id}/actions/draw-from-bag",
+        jwt,
+        {"count": take_count},
+    )
+    _api_post(
+        base_url,
+        f"/v1/games/{game_id}/actions/take-ingredients",
+        jwt,
+        {
+            "assignments": [
+                {"source": "pending", "disposition": "cup", "cup_index": cup_index}
+                for _ in range(take_count)
+            ]
+        },
+    )
+
+
+def test_cup_shows_ingredient_badges_when_filled(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """After putting an ingredient in cup 1, the game board renders an ingredient badge."""
+    game_id = _start_game_with_two_players(
+        base_url, new_game, new_user["jwt"], other_user_and_jwt["jwt"]
+    )
+    _put_ingredient_in_cup(base_url, game_id, new_user["jwt"], cup_index=0)
+
+    page.goto(_game_url(base_url, game_id))
+    page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
+
+    # At least one ingredient badge should appear inside the cup ingredients area
+    badges = page.locator("#gbMyCups .gb-cup-ingredients .gb-ingredient")
+    badges.first.wait_for(state="visible", timeout=5000)
+    assert badges.count() >= 1
+
+
+def test_empty_cup_shows_no_ingredient_badges(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """On a freshly started game both cups are empty — no ingredient badges shown."""
+    _start_game_with_two_players(
+        base_url, new_game, new_user["jwt"], other_user_and_jwt["jwt"]
+    )
+
+    page.goto(_game_url(base_url, new_game))
+    page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
+
+    assert page.locator("#gbMyCups .gb-cup-ingredients .gb-ingredient").count() == 0
+    # Empty hint text should be present
+    empty_hints = page.locator("#gbMyCups .gb-cup-empty-hint")
+    assert empty_hints.count() == 2
+
+
+def test_other_player_cup_shows_ingredient_badges(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """After both players take a turn, the other player's cup badges are visible."""
+    game_id = _start_game_with_two_players(
+        base_url, new_game, new_user["jwt"], other_user_and_jwt["jwt"]
+    )
+    # Host takes their turn (ends it), then other_user takes theirs
+    _put_ingredient_in_cup(base_url, game_id, new_user["jwt"], cup_index=0)
+    _put_ingredient_in_cup(base_url, game_id, other_user_and_jwt["jwt"], cup_index=0)
+
+    # View game as host — other player's card should show ingredient badges
+    page.goto(_game_url(base_url, game_id))
+    page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
+
+    other_sheet = page.locator(".gb-other-sheet")
+    other_sheet.wait_for(state="visible", timeout=5000)
+    badges = other_sheet.locator(".gb-ingredient")
+    badges.first.wait_for(state="visible", timeout=5000)
+    assert badges.count() >= 1

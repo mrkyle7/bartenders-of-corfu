@@ -652,6 +652,12 @@ function renderMyStats(myState, gs) {
     bladderLabel.textContent = `${bladder.length}/${cap}`;
     barWrap.appendChild(bladderLabel);
     bladderStat.querySelector('strong').after(barWrap);
+    if (bladder.length > 0) {
+        const bladderContents = document.createElement('div');
+        bladderContents.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;';
+        bladder.forEach(ing => bladderContents.appendChild(makeIngredientBadge(ing)));
+        bladderStat.appendChild(bladderContents);
+    }
     statsEl.appendChild(bladderStat);
 
     // Toilet tokens
@@ -684,10 +690,9 @@ function renderMyCups(myState, isMyTurn, game, gs) {
     const cupsEl = el('gbMyCups');
     cupsEl.innerHTML = '';
 
-    // The API uses cup1, cup2 (arrays of ingredient names)
     const cupData = [
-        { index: 0, contents: myState.cup1 || [] },
-        { index: 1, contents: myState.cup2 || [] },
+        { index: 0, contents: (myState.cups?.[0]?.ingredients) || [] },
+        { index: 1, contents: (myState.cups?.[1]?.ingredients) || [] },
     ];
 
     cupData.forEach(({ index, contents }) => {
@@ -799,15 +804,33 @@ function buildOtherSheet(pid, pState, gs) {
         <span>Pts: <strong>${pState.points || 0}</strong></span>
         <span>Drunk: <strong>${pState.drunk_level || 0}/5</strong></span>
         <span>Bladder: <strong>${(pState.bladder||[]).length}/${pState.bladder_capacity||8}</strong></span>
-        <span>Karaoke: <strong>${pState.karaoke_cards_claimed||0}/3</strong></span>
-        <span>Cards: <strong>${(pState.cards||[]).length}</strong></span>
     `;
+    const bladderContents = pState.bladder || [];
+    if (bladderContents.length > 0) {
+        const bladderRow = document.createElement('div');
+        bladderRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;';
+        bladderContents.forEach(ing => {
+            const b = makeIngredientBadge(ing);
+            b.style.fontSize = '0.65em';
+            b.style.padding = '1px 5px';
+            bladderRow.appendChild(b);
+        });
+        stats.appendChild(bladderRow);
+    }
+    [
+        `Karaoke: <strong>${pState.karaoke_cards_claimed||0}/3</strong>`,
+        `Cards: <strong>${(pState.cards||[]).length}</strong>`,
+    ].forEach(html => {
+        const s = document.createElement('span');
+        s.innerHTML = html;
+        stats.appendChild(s);
+    });
     div.appendChild(stats);
 
     // Compact cup display
     const cupRow = document.createElement('div');
     cupRow.className = 'gb-other-cup-row';
-    [pState.cup1 || [], pState.cup2 || []].forEach((cup, i) => {
+    [(pState.cups?.[0]?.ingredients) || [], (pState.cups?.[1]?.ingredients) || []].forEach((cup, i) => {
         const cupBadge = document.createElement('span');
         cupBadge.style.cssText = 'font-size:0.72em;color:#6b3a0f;margin-right:8px';
         cupBadge.textContent = `Cup${i+1}: `;
@@ -1305,8 +1328,8 @@ function renderTakeModalCups(myState) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;gap:16px;flex-wrap:wrap;';
 
-    [{ key: 'cup1', label: 'Cup 1' }, { key: 'cup2', label: 'Cup 2' }].forEach(({ key, label: cupLabel }) => {
-        const cup = myState[key] || [];
+    [{ index: 0, label: 'Cup 1' }, { index: 1, label: 'Cup 2' }].forEach(({ index, label: cupLabel }) => {
+        const cup = (myState.cups?.[index]?.ingredients) || [];
         const div = document.createElement('div');
         div.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;';
         const lbl = document.createElement('span');
@@ -1369,8 +1392,8 @@ function _buildAssignTable(myState) {
     const tbody = el('gbAssignTableBody');
     tbody.innerHTML = '';
 
-    const cup1Count = myState ? (myState.cup1 || []).length : 0;
-    const cup2Count = myState ? (myState.cup2 || []).length : 0;
+    const cup1Count = myState ? ((myState.cups?.[0]?.ingredients) || []).length : 0;
+    const cup2Count = myState ? ((myState.cups?.[1]?.ingredients) || []).length : 0;
     const CUP_MAX = 5;
 
     const allItems = [..._takeDisplaySelected, ..._takeBagPending];

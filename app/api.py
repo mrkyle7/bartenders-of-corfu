@@ -212,35 +212,21 @@ async def list_games(
 
 @app.get("/v1/games/{game_id}")
 async def get_game(game_id: str, request: Request):
-    token = request.cookies.get("userjwt")
-    if token is None:
-        return JSONResponse(
-            status_code=401, content={"error": "Please log in to view a game"}
-        )
+    token_user, err = _require_auth(request)
+    if err:
+        return err
     try:
-        user = jwt_handler.verify(token)
-        if user:
-            game = gameManager.get_game_by_id(UUID(game_id))
-            if user.id not in game.players:
-                return JSONResponse(
-                    status_code=403,
-                    content={"error": "User is not a member of this game"},
-                )
-            else:
-                logger.info(f"{user.username} get game info for ID {game_id}")
-                return JSONResponse(content=game.to_dict())
-        else:
-            logger.warning("Invalid or expired token")
-            response = JSONResponse(
-                content={"error": "Invalid or expired token"}, status_code=401
+        game = gameManager.get_game_by_id(UUID(game_id))
+        if token_user.id not in game.players:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "User is not a member of this game"},
             )
-            response.delete_cookie(key="userjwt")
-            return response
+        logger.info(f"{token_user.username} get game info for ID {game_id}")
+        return JSONResponse(content=game.to_dict())
     except Exception:
         logger.exception("Failed to validate user on get game")
-        return JSONResponse(
-            status_code=401, content={"error": "Please re-login in to view a game"}
-        )
+        return JSONResponse(status_code=500, content={"error": "Failed to get game"})
 
 
 @app.post("/v1/games")
