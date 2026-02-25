@@ -17,7 +17,7 @@ Covers:
   - other player's cup ingredients shown as badges
 """
 
-from tests.ui.conftest import _api_register, _api_post, _unique
+from tests.ui.conftest import _api_register, _api_get, _api_post, _unique
 
 
 def _game_url(base_url: str, game_id: str) -> str:
@@ -301,3 +301,124 @@ def test_other_player_cup_shows_ingredient_badges(
     badges = other_sheet.locator(".gb-ingredient")
     badges.first.wait_for(state="visible", timeout=5000)
     assert badges.count() >= 1
+
+
+# ---------------------------------------------------------------------------
+# Take modal auto-open (partial batch continuation and page refresh)
+# ---------------------------------------------------------------------------
+
+
+def _take_partial_batch(base_url, game_id, jwt, count=1):
+    """Draw `count` ingredients from the bag and assign them, leaving the turn incomplete."""
+    _api_post(
+        base_url,
+        f"/v1/games/{game_id}/actions/draw-from-bag",
+        jwt,
+        {"count": count},
+    )
+    _api_post(
+        base_url,
+        f"/v1/games/{game_id}/actions/take-ingredients",
+        jwt,
+        {
+            "assignments": [
+                {"source": "pending", "disposition": "cup", "cup_index": 0}
+                for _ in range(count)
+            ]
+        },
+    )
+
+
+def _ensure_host_turn(base_url, game_id, host_jwt, host_user_id, other_jwt, other_user_id):
+    """If the other player goes first (turn order is random), complete their turn so it
+    becomes the host's turn before the browser test begins."""
+    game = _api_get(base_url, f"/v1/games/{game_id}", host_jwt)
+    if game["game_state"]["player_turn"] == other_user_id:
+        _put_ingredient_in_cup(base_url, game_id, other_jwt, cup_index=0)
+
+
+def test_take_modal_auto_opens_on_page_load_when_mid_taking(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """If the page is refreshed mid-turn (some ingredients taken but not all),
+    the take modal should auto-open to prompt the player to continue."""
+    game_id = _start_game_with_two_players(
+        base_url, new_game, new_user["jwt"], other_user_and_jwt["jwt"]
+    )
+    # Turn order is random — ensure it is the host's turn before the partial take
+    _ensure_host_turn(
+        base_url, game_id,
+        new_user["jwt"], new_user["user"]["id"],
+        other_user_and_jwt["jwt"], other_user_and_jwt["user"]["id"],
+    )
+    # Host takes 1 of 3 required ingredients — turn is still theirs
+    _take_partial_batch(base_url, game_id, new_user["jwt"], count=1)
+
+    # Navigate to the game page (simulating a page refresh after a partial take)
+    page.goto(_game_url(base_url, game_id))
+    page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
+
+    # Take modal should auto-open because ingredients_taken_this_turn=1 < take_count=3
+    modal = page.locator("#gbTakeModal")
+    modal.wait_for(state="visible", timeout=8000)
+    assert modal.is_visible()
+
+    # Step label should indicate 2 remaining with 1 already taken
+    limit_text = page.locator("#gbTakeLimit").inner_text()
+    assert "1/3" in limit_text
+
+
+def test_take_modal_auto_reopens_after_partial_batch_submit(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """After submitting a partial batch of ingredients via the UI,
+    the take modal should automatically re-open to prompt for the remainder."""
+    game_id = _start_game_with_two_players(
+        base_url, new_game, new_user["jwt"], other_user_and_jwt["jwt"]
+    )
+    # Turn order is random — ensure it is the host's turn before browser interaction
+    _ensure_host_turn(
+        base_url, game_id,
+        new_user["jwt"], new_user["user"]["id"],
+        other_user_and_jwt["jwt"], other_user_and_jwt["user"]["id"],
+    )
+
+    # Navigate as host (whose turn it is)
+    page.goto(_game_url(base_url, game_id))
+    page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
+
+    # Open the take modal manually
+    take_btn = page.locator("#gbBtnTakeIngredients")
+    take_btn.wait_for(state="visible", timeout=5000)
+    take_btn.click()
+
+    modal = page.locator("#gbTakeModal")
+    modal.wait_for(state="visible", timeout=5000)
+
+    # Draw 1 ingredient from the bag (not the full 3 required)
+    draw_count_input = page.locator("#gbBagDrawCount")
+    draw_count_input.fill("1")
+    page.locator("#gbBtnDrawBag").click()
+
+    # Wait for the draw confirmation to appear
+    page.wait_for_function(
+        "document.getElementById('gbBagDrawStatus').textContent.includes('Drew')",
+        timeout=5000,
+    )
+
+    # Advance to the assignment step
+    page.locator("#gbTakeNextBtn").click()
+
+    # Assignment table should be visible — submit with default assignment (Cup 1)
+    page.locator("#gbAssignTableBody tr").first.wait_for(state="visible", timeout=5000)
+    page.locator("#gbTakeNextBtn").click()
+
+    # The modal closes while the API call completes, then auto-re-opens.
+    # Wait for close first, then re-open.
+    modal.wait_for(state="hidden", timeout=8000)
+    modal.wait_for(state="visible", timeout=8000)
+    assert modal.is_visible()
+
+    # The limit text should reflect that 1 has already been taken (2 remaining)
+    limit_text = page.locator("#gbTakeLimit").inner_text()
+    assert "1/3" in limit_text

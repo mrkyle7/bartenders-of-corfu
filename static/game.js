@@ -295,6 +295,9 @@ function renderAll(game, replayState = null) {
     el('gbBoardContent').classList.remove('hidden');
     el('gbMySheetLoading').classList.add('hidden');
     el('gbMySheetContent').classList.remove('hidden');
+
+    // Auto-open take modal if mid-taking (handles page refresh and batch continuation)
+    _maybeAutoOpenTakeModal(game, gs, isReplay);
 }
 
 function renderTurnIndicator(game, gs) {
@@ -1255,6 +1258,22 @@ async function doRefreshRow(rowPosition, btn) {
 // ─────────────────────────────────────────────────────────────
 // Take Ingredients modal
 // ─────────────────────────────────────────────────────────────
+
+function _maybeAutoOpenTakeModal(game, gs, isReplay) {
+    if (isReplay || !_me || game.status !== 'STARTED') return;
+    if (gs.player_turn !== _me.id) return;
+    // Don't re-open if already visible
+    const modal = el('gbTakeModal');
+    if (modal && !modal.classList.contains('hidden')) return;
+    const myState = gs.player_states?.[_me.id];
+    if (!myState) return;
+    const totalLimit = myState.take_count || 3;
+    const alreadyTaken = gs.ingredients_taken_this_turn || 0;
+    const bagDrawPending = (gs.bag_draw_pending || []).length > 0;
+    if ((alreadyTaken > 0 && alreadyTaken < totalLimit) || bagDrawPending) {
+        openTakeModal(myState, gs);
+    }
+}
 
 function openTakeModal(myState, gs) {
     _takeStep = 0;

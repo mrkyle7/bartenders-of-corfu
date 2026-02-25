@@ -88,6 +88,19 @@ def _api_register(base_url: str, username: str) -> tuple[dict, str]:
         return user, jwt
 
 
+def _api_get(base_url: str, path: str, jwt: str) -> dict:
+    """Make an authenticated GET request and return parsed JSON."""
+    req = urllib.request.Request(
+        f"{base_url}{path}",
+        headers={"Cookie": f"userjwt={jwt}"},
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return json.loads(exc.read())
+
+
 def _api_post(base_url: str, path: str, jwt: str, body: dict | None = None) -> dict:
     """Make an authenticated POST request and return parsed JSON."""
     data = json.dumps(body).encode() if body else b""
