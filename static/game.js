@@ -194,6 +194,7 @@ async function refreshGame(quiet = false) {
         const game = await resp.json();
         await resolvePlayerNames(game.players);
         _game = game;
+        _pendingUndo = game.pending_undo || null;
         renderAll(game);
         schedulePoll(game);
     } catch (e) {
@@ -1681,7 +1682,7 @@ async function voteUndo(vote, agreeBtn, disagreeBtn) {
                 _pendingUndo = null;
                 setTimeout(() => { if (_game) renderUndoSection(_game, false); }, 2100);
             } else {
-                _pendingUndo = data.undo_request || _pendingUndo;
+                _pendingUndo = { ..._pendingUndo, ...(data.undo_request || {}) };
                 if (_game) renderUndoSection(_game, false);
             }
         }

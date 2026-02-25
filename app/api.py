@@ -223,7 +223,10 @@ async def get_game(game_id: str, request: Request):
                 content={"error": "User is not a member of this game"},
             )
         logger.info(f"{token_user.username} get game info for ID {game_id}")
-        return JSONResponse(content=game.to_dict())
+        game_dict = game.to_dict()
+        pending = db.get_pending_undo(game.id)
+        game_dict["pending_undo"] = _format_undo_request(pending) if pending else None
+        return JSONResponse(content=game_dict)
     except Exception:
         logger.exception("Failed to validate user on get game")
         return JSONResponse(status_code=500, content={"error": "Failed to get game"})
@@ -767,6 +770,24 @@ async def get_state_at_turn(game_id: str, turn_number: int, request: Request):
         return JSONResponse(status_code=500, content={"error": "Failed to fetch state"})
 
 
+# ─── Undo helpers ─────────────────────────────────────────────────────────────
+
+
+def _format_undo_request(req: dict) -> dict:
+    """Convert a raw undo_request DB record to the frontend-friendly format."""
+    votes: dict = req.get("votes") or {}
+    agree_votes = [pid for pid, v in votes.items() if v == "agree"]
+    disagree_votes = [pid for pid, v in votes.items() if v == "disagree"]
+    return {
+        "id": req["id"],
+        "status": req["status"].upper(),
+        "proposed_by": req["proposed_by"],
+        "target_turn_number": req.get("target_turn_number"),
+        "agree_votes": agree_votes,
+        "disagree_votes": disagree_votes,
+    }
+
+
 # ─── Undo endpoints ───────────────────────────────────────────────────────────
 
 
@@ -778,7 +799,7 @@ async def propose_undo(game_id: str, request: Request):
     try:
         undo_req = gameManager.propose_undo(game, token_user.id)
         logger.info("%s proposed undo in game %s", token_user.username, game_id)
-        return JSONResponse(content={"undo_request": undo_req})
+        return JSONResponse(content={"undo_request": _format_undo_request(undo_req)})
     except GameException as e:
         return JSONResponse(status_code=e.status_code, content={"error": str(e)})
     except Exception:
@@ -807,7 +828,15 @@ async def vote_undo(game_id: str, body: UndoVoteRequest, request: Request):
         logger.info(
             "%s voted '%s' on undo in game %s", token_user.username, body.vote, game_id
         )
-        return JSONResponse(content=result)
+        status = result.get("status", "").upper()
+        votes: dict = result.get("votes") or {}
+        undo_request = {
+            "id": body.request_id,
+            "status": status,
+            "agree_votes": [pid for pid, v in votes.items() if v == "agree"],
+            "disagree_votes": [pid for pid, v in votes.items() if v == "disagree"],
+        }
+        return JSONResponse(content={"undo_request": undo_request})
     except GameException as e:
         return JSONResponse(status_code=e.status_code, content={"error": str(e)})
     except Exception:
