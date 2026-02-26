@@ -253,6 +253,12 @@ def test_cup_shows_ingredient_badges_when_filled(
     game_id = _start_game_with_two_players(
         base_url, new_game, new_user["jwt"], other_user_and_jwt["jwt"]
     )
+    # Turn order is randomised — ensure the host goes first so their cup gets filled.
+    _ensure_host_turn(
+        base_url, game_id,
+        new_user["jwt"], new_user["user"]["id"],
+        other_user_and_jwt["jwt"], other_user_and_jwt["user"]["id"],
+    )
     _put_ingredient_in_cup(base_url, game_id, new_user["jwt"], cup_index=0)
 
     page.goto(_game_url(base_url, game_id))
@@ -413,12 +419,11 @@ def test_take_modal_auto_reopens_after_partial_batch_submit(
     page.locator("#gbAssignTableBody tr").first.wait_for(state="visible", timeout=5000)
     page.locator("#gbTakeNextBtn").click()
 
-    # The modal closes while the API call completes, then auto-re-opens.
-    # Wait for close first, then re-open.
-    modal.wait_for(state="hidden", timeout=8000)
-    modal.wait_for(state="visible", timeout=8000)
-    assert modal.is_visible()
+    # After submitting, the modal closes briefly then auto-re-opens at step 0.
+    # #gbTakeLimit lives inside #gbTakeStep0 which is hidden during step 1 (assign step).
+    # Waiting for it to become visible avoids the close→reopen race condition.
+    limit_el = page.locator("#gbTakeLimit")
+    limit_el.wait_for(state="visible", timeout=8000)
 
     # The limit text should reflect that 1 has already been taken (2 remaining)
-    limit_text = page.locator("#gbTakeLimit").inner_text()
-    assert "1/3" in limit_text
+    assert "1/3" in limit_el.inner_text()
