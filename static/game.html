@@ -24,6 +24,9 @@
                 <div class="gb-header-title">Bartenders of Corfu</div>
                 <div class="gb-header-gameid" id="gbGameId" aria-label="Game ID"></div>
             </div>
+            <button class="gb-menu-btn" onclick="openMenu()" aria-label="View cocktail menu and scoring">
+                Menu
+            </button>
             <div id="gbTurnIndicator" class="gb-turn-indicator" aria-live="polite" aria-atomic="true">Loading…</div>
             <div id="gbWinnerBanner" class="gb-winner-banner" role="status" aria-live="polite"></div>
             <div id="gbErrorBar" class="gb-error-bar" role="alert" aria-live="assertive"></div>
@@ -299,6 +302,156 @@
                 </button>
             </div>
             <div id="gbDrinkModalError" class="gb-error-bar" style="margin-top:8px"></div>
+        </div>
+    </div>
+
+    <!-- ===== COCKTAIL MENU MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbMenuModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbMenuModalTitle"
+         tabindex="-1" onclick="if(event.target===this)closeMenu()">
+        <div class="gb-modal gb-menu-modal">
+            <button class="gb-modal-close" onclick="closeMenu()" aria-label="Close cocktail menu">&#x2715;</button>
+            <div class="gb-modal-title" id="gbMenuModalTitle">Cocktail Menu &amp; Scoring</div>
+            <div class="gb-modal-step-label">First match wins &mdash; reach <strong>40 pts</strong> to win the game.</div>
+
+            <!-- Cocktails section -->
+            <div class="gb-modal-section">
+                <div class="gb-modal-section-title">Cocktails</div>
+                <table class="gb-menu-table" aria-label="Cocktail recipes and points">
+                    <thead>
+                        <tr>
+                            <th scope="col">Drink</th>
+                            <th scope="col">Spirits</th>
+                            <th scope="col">Mixers</th>
+                            <th scope="col">Specials</th>
+                            <th scope="col">Pts</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="gb-menu-row gb-menu-highlight">
+                            <td class="gb-menu-name">Long Island Iced Tea</td>
+                            <td><span class="gb-ingredient spirit">1×Gin</span> <span class="gb-ingredient spirit">1×Vodka</span> <span class="gb-ingredient spirit">1×Tequila</span> <span class="gb-ingredient spirit">1×Rum</span></td>
+                            <td><span class="gb-ingredient mixer">1×Cola</span></td>
+                            <td><span class="gb-ingredient special">sugar</span> <span class="gb-ingredient special">lemon</span></td>
+                            <td class="gb-menu-pts">15</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Mojito</td>
+                            <td><span class="gb-ingredient spirit">2×Rum</span></td>
+                            <td><span class="gb-ingredient mixer">1×Soda Water</span></td>
+                            <td><span class="gb-ingredient special">sugar</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Old Fashioned</td>
+                            <td><span class="gb-ingredient spirit">3×Whiskey</span></td>
+                            <td class="gb-menu-none">&mdash;</td>
+                            <td><span class="gb-ingredient special">bitters</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Margarita</td>
+                            <td><span class="gb-ingredient spirit">2×Tequila</span></td>
+                            <td class="gb-menu-none">&mdash;</td>
+                            <td><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Cosmopolitan</td>
+                            <td><span class="gb-ingredient spirit">1×Vodka</span></td>
+                            <td><span class="gb-ingredient mixer">1×Cranberry</span></td>
+                            <td><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Gin Martini</td>
+                            <td><span class="gb-ingredient spirit">3×Gin</span></td>
+                            <td class="gb-menu-none">&mdash;</td>
+                            <td><span class="gb-ingredient special">vermouth</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Vodka Martini</td>
+                            <td><span class="gb-ingredient spirit">3×Vodka</span></td>
+                            <td class="gb-menu-none">&mdash;</td>
+                            <td><span class="gb-ingredient special">vermouth</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Tom Collins</td>
+                            <td><span class="gb-ingredient spirit">1×Gin</span></td>
+                            <td><span class="gb-ingredient mixer">1×Soda Water</span></td>
+                            <td><span class="gb-ingredient special">lemon</span> <span class="gb-ingredient special">sugar</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                        <tr class="gb-menu-row">
+                            <td class="gb-menu-name">Manhattan</td>
+                            <td><span class="gb-ingredient spirit">2×Whiskey</span></td>
+                            <td class="gb-menu-none">&mdash;</td>
+                            <td><span class="gb-ingredient special">vermouth</span> <span class="gb-ingredient special">bitters</span></td>
+                            <td class="gb-menu-pts">10</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Simple drinks section -->
+            <div class="gb-modal-section">
+                <div class="gb-modal-section-title">Simple Drinks</div>
+                <div class="gb-menu-simple-list">
+                    <div class="gb-menu-simple-row">
+                        <span class="gb-menu-simple-name">Tequila Slammer</span>
+                        <span class="gb-menu-simple-desc">Exactly <span class="gb-ingredient spirit">2×Tequila</span>, no mixers, no specials</span>
+                        <span class="gb-menu-pts">3</span>
+                    </div>
+                    <div class="gb-menu-simple-row">
+                        <span class="gb-menu-simple-name">Double Spirit</span>
+                        <span class="gb-menu-simple-desc">2 spirits (same type) + &ge;1 valid mixer</span>
+                        <span class="gb-menu-pts">3</span>
+                    </div>
+                    <div class="gb-menu-simple-row">
+                        <span class="gb-menu-simple-name">Single Spirit</span>
+                        <span class="gb-menu-simple-desc">1 spirit + &ge;1 valid mixer</span>
+                        <span class="gb-menu-pts">1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Valid pairings section -->
+            <div class="gb-modal-section">
+                <div class="gb-modal-section-title">Valid Spirit &rarr; Mixer Pairings</div>
+                <div class="gb-menu-pairings">
+                    <div class="gb-menu-pairing-row">
+                        <span class="gb-ingredient spirit gb-menu-spirit">Vodka</span>
+                        <span class="gb-menu-arrow">&rarr;</span>
+                        <span class="gb-ingredient mixer">Cola</span>
+                        <span class="gb-ingredient mixer">Soda Water</span>
+                        <span class="gb-ingredient mixer">Tonic Water</span>
+                        <span class="gb-ingredient mixer">Cranberry</span>
+                    </div>
+                    <div class="gb-menu-pairing-row">
+                        <span class="gb-ingredient spirit gb-menu-spirit">Rum</span>
+                        <span class="gb-menu-arrow">&rarr;</span>
+                        <span class="gb-ingredient mixer">Cola</span>
+                    </div>
+                    <div class="gb-menu-pairing-row">
+                        <span class="gb-ingredient spirit gb-menu-spirit">Whiskey</span>
+                        <span class="gb-menu-arrow">&rarr;</span>
+                        <span class="gb-ingredient mixer">Cola</span>
+                        <span class="gb-ingredient mixer">Soda Water</span>
+                    </div>
+                    <div class="gb-menu-pairing-row">
+                        <span class="gb-ingredient spirit gb-menu-spirit">Gin</span>
+                        <span class="gb-menu-arrow">&rarr;</span>
+                        <span class="gb-ingredient mixer">Tonic Water</span>
+                    </div>
+                    <div class="gb-menu-pairing-row">
+                        <span class="gb-ingredient spirit gb-menu-spirit">Tequila</span>
+                        <span class="gb-menu-arrow">&rarr;</span>
+                        <em class="gb-menu-slammer-note">Slammer only (no valid mixer)</em>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

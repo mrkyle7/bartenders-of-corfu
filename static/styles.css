@@ -1351,6 +1351,153 @@ input {
 
 .gb-winner-banner.visible { display: block; }
 
+/* ---------- Menu button (header) ---------- */
+.gb-menu-btn {
+    background: linear-gradient(135deg, #d4a017, #b8860b);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    flex-shrink: 0;
+    box-shadow: 0 1px 4px rgba(74,44,14,0.25);
+    transition: opacity 0.15s;
+}
+.gb-menu-btn:hover { opacity: 0.88; transform: none; }
+
+/* ---------- Cocktail menu modal ---------- */
+.gb-menu-modal {
+    max-width: 680px;
+}
+
+.gb-menu-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82em;
+}
+
+.gb-menu-table th {
+    background: rgba(212,160,23,0.18);
+    color: #4a2c0e;
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 2px solid rgba(212,160,23,0.4);
+}
+
+.gb-menu-table th:last-child,
+.gb-menu-table td:last-child { text-align: center; }
+
+.gb-menu-row td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(212,160,23,0.18);
+    vertical-align: middle;
+    line-height: 1.6;
+}
+
+.gb-menu-row:nth-child(even) td { background: rgba(212,160,23,0.05); }
+.gb-menu-row:last-child td { border-bottom: none; }
+
+.gb-menu-highlight td {
+    background: rgba(212,160,23,0.14) !important;
+    font-weight: 600;
+}
+
+.gb-menu-name { white-space: nowrap; color: #4a2c0e; font-weight: 600; }
+
+.gb-menu-pts {
+    font-weight: bold;
+    font-size: 1em;
+    color: #4a2c0e;
+    white-space: nowrap;
+}
+
+.gb-menu-highlight .gb-menu-pts {
+    color: #b8860b;
+    font-size: 1.1em;
+}
+
+.gb-menu-none { color: #aaa; font-style: italic; }
+
+/* Simple drinks list */
+.gb-menu-simple-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.gb-menu-simple-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: rgba(212,160,23,0.07);
+    border: 1px solid rgba(212,160,23,0.2);
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.gb-menu-simple-name {
+    font-weight: 600;
+    color: #4a2c0e;
+    white-space: nowrap;
+    min-width: 110px;
+    font-size: 0.88em;
+}
+
+.gb-menu-simple-desc {
+    flex: 1;
+    font-size: 0.83em;
+    color: #6b3a0f;
+}
+
+.gb-menu-simple-row .gb-menu-pts {
+    font-size: 0.95em;
+    background: rgba(212,160,23,0.2);
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.gb-menu-simple-row .gb-menu-pts::after { content: ' pts'; font-weight: normal; font-size: 0.8em; }
+
+/* Pairings */
+.gb-menu-pairings {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.gb-menu-pairing-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(212,160,23,0.15);
+}
+
+.gb-menu-pairing-row:last-child { border-bottom: none; }
+
+.gb-menu-spirit { min-width: 72px; text-align: center; }
+
+.gb-menu-arrow {
+    color: #b8860b;
+    font-size: 1.1em;
+    font-weight: bold;
+    margin: 0 2px;
+}
+
+.gb-menu-slammer-note {
+    color: #8a5c2e;
+    font-size: 0.82em;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
     .gb-main {

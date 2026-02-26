@@ -607,7 +607,7 @@ function renderMyStats(myState, gs) {
     statsEl.innerHTML = '';
 
     // Points
-    statsEl.appendChild(makeStat('Points', myState.points || 0));
+    statsEl.appendChild(makeStat('Points', `${myState.points || 0}/40`));
 
     // Drunk meter
     const drunkLevel = myState.drunk_level || 0;
@@ -804,7 +804,7 @@ function buildOtherSheet(pid, pState, gs) {
     const stats = document.createElement('div');
     stats.className = 'gb-other-stats';
     stats.innerHTML = `
-        <span>Pts: <strong>${pState.points || 0}</strong></span>
+        <span>Pts: <strong>${pState.points || 0}/40</strong></span>
         <span>Drunk: <strong>${pState.drunk_level || 0}/5</strong></span>
         <span>Bladder: <strong>${(pState.bladder||[]).length}/${pState.bladder_capacity||8}</strong></span>
     `;
@@ -1624,6 +1624,12 @@ function closeTakeModal() {
     _takeBagPending = [];
     _takeStep = 0;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Cocktail Menu modal
+// ─────────────────────────────────────────────────────────────
+function openMenu() { openModal('gbMenuModal'); }
+function closeMenu() { closeModal('gbMenuModal'); }
 
 // ─────────────────────────────────────────────────────────────
 // Sell Cup modal
