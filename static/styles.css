@@ -1351,8 +1351,20 @@ input {
 
 .gb-winner-banner.visible { display: block; }
 
-/* ---------- Menu button (header) ---------- */
-.gb-menu-btn {
+/* ---------- Header action buttons ---------- */
+.gb-header-btns {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* Pull turn indicator back to the right of the buttons */
+.gb-header-btns ~ .gb-turn-indicator {
+    margin-left: 0;
+}
+
+.gb-header-btn {
     background: linear-gradient(135deg, #d4a017, #b8860b);
     color: #fff;
     border: none;
@@ -1366,11 +1378,11 @@ input {
     box-shadow: 0 1px 4px rgba(74,44,14,0.25);
     transition: opacity 0.15s;
 }
-.gb-menu-btn:hover { opacity: 0.88; transform: none; }
+.gb-header-btn:hover { opacity: 0.88; transform: none; }
 
 /* ---------- Cocktail menu modal ---------- */
 .gb-menu-modal {
-    max-width: 680px;
+    max-width: min(680px, calc(100vw - 32px));
 }
 
 .gb-menu-table {
@@ -1498,6 +1510,123 @@ input {
     font-size: 0.82em;
 }
 
+/* ---------- Rules modal ---------- */
+.gb-rules-modal {
+    max-width: min(560px, calc(100vw - 32px));
+}
+
+.gb-rules-section {
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(212,160,23,0.2);
+}
+
+.gb-rules-section:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.gb-rules-heading {
+    font-size: 0.82em;
+    font-weight: bold;
+    color: #6b3a0f;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+}
+
+.gb-rules-subhead {
+    font-size: 0.78em;
+    font-weight: bold;
+    color: #8a5c2e;
+    margin: 8px 0 4px;
+}
+
+.gb-rules-section p {
+    font-size: 0.85em;
+    color: #4a2c0e;
+    margin: 0 0 6px;
+    line-height: 1.55;
+}
+
+.gb-rules-list {
+    font-size: 0.84em;
+    color: #4a2c0e;
+    margin: 0 0 6px;
+    padding-left: 18px;
+    line-height: 1.6;
+}
+
+.gb-rules-note {
+    font-size: 0.78em !important;
+    color: #8a5c2e !important;
+    font-style: italic;
+}
+
+/* ---------- Cocktail table — mobile card layout ---------- */
+@media (max-width: 540px) {
+    .gb-menu-table thead { display: none; }
+
+    .gb-menu-table,
+    .gb-menu-table tbody { display: block; }
+
+    .gb-menu-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto auto auto;
+        gap: 2px 8px;
+        padding: 8px;
+        margin-bottom: 8px;
+        border: 1px solid rgba(212,160,23,0.3);
+        border-radius: 8px;
+        background: rgba(212,160,23,0.04);
+    }
+
+    .gb-menu-row:nth-child(even) td { background: none; }
+
+    .gb-menu-row td {
+        display: block;
+        padding: 0;
+        border-bottom: none;
+    }
+
+    /* Name: top-left, bold */
+    .gb-menu-row td:nth-child(1) {
+        grid-column: 1;
+        grid-row: 1;
+        font-size: 0.9em;
+    }
+
+    /* Pts: top-right, spans rows */
+    .gb-menu-row td:nth-child(5) {
+        grid-column: 2;
+        grid-row: 1 / 5;
+        align-self: center;
+        text-align: center;
+        font-size: 1.1em;
+        padding-left: 4px;
+    }
+
+    .gb-menu-row td:nth-child(5)::after { content: ' pts'; font-size: 0.65em; font-weight: normal; display: block; }
+
+    /* Spirits, mixers, specials: stack below name */
+    .gb-menu-row td:nth-child(2),
+    .gb-menu-row td:nth-child(3),
+    .gb-menu-row td:nth-child(4) {
+        grid-column: 1;
+        font-size: 0.82em;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+    }
+
+    /* Hide "—" cells on mobile — they add no value when stacked */
+    .gb-menu-row td.gb-menu-none { display: none; }
+
+    .gb-menu-highlight { border-color: rgba(212,160,23,0.7) !important; background: rgba(212,160,23,0.1) !important; }
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
     .gb-main {
@@ -1533,6 +1662,19 @@ input {
         font-size: 0.78em;
         padding: 6px 10px;
     }
+
+    /* Compact header buttons on mobile */
+    .gb-header-btn {
+        padding: 3px 8px;
+        font-size: 0.75em;
+    }
+
+    /* Keep header single-row: hide title, show only logo+gameid+btns+turn */
+    .gb-header-title { display: none; }
+
+    /* Prevent winner/error bars from breaking the header row */
+    .gb-winner-banner,
+    .gb-error-bar { width: 100%; order: 10; }
 }
 
 @media (max-width: 320px) {

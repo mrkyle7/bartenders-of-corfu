@@ -830,6 +830,29 @@ function buildOtherSheet(pid, pState, gs) {
     });
     div.appendChild(stats);
 
+    // Special ingredients on mat
+    const specials = pState.special_ingredients || [];
+    const specialRow = document.createElement('div');
+    specialRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;align-items:center;';
+    const specialLabel = document.createElement('span');
+    specialLabel.style.cssText = 'font-size:0.72em;color:#6b3a0f;margin-right:2px';
+    specialLabel.textContent = 'Specials:';
+    specialRow.appendChild(specialLabel);
+    if (specials.length === 0) {
+        const empty = document.createElement('em');
+        empty.style.cssText = 'font-size:0.72em;color:#8a5c2e';
+        empty.textContent = 'none';
+        specialRow.appendChild(empty);
+    } else {
+        specials.forEach(s => {
+            const b = makeIngredientBadge(s);
+            b.style.fontSize = '0.65em';
+            b.style.padding = '1px 5px';
+            specialRow.appendChild(b);
+        });
+    }
+    stats.appendChild(specialRow);
+
     // Compact cup display
     const cupRow = document.createElement('div');
     cupRow.className = 'gb-other-cup-row';
@@ -1630,6 +1653,12 @@ function closeTakeModal() {
 // ─────────────────────────────────────────────────────────────
 function openMenu() { openModal('gbMenuModal'); }
 function closeMenu() { closeModal('gbMenuModal'); }
+
+// ─────────────────────────────────────────────────────────────
+// Rules modal
+// ─────────────────────────────────────────────────────────────
+function openRules() { openModal('gbRulesModal'); }
+function closeRules() { closeModal('gbRulesModal'); }
 
 // ─────────────────────────────────────────────────────────────
 // Sell Cup modal

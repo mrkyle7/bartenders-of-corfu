@@ -24,9 +24,10 @@
                 <div class="gb-header-title">Bartenders of Corfu</div>
                 <div class="gb-header-gameid" id="gbGameId" aria-label="Game ID"></div>
             </div>
-            <button class="gb-menu-btn" onclick="openMenu()" aria-label="View cocktail menu and scoring">
-                Menu
-            </button>
+            <div class="gb-header-btns">
+                <button class="gb-header-btn" onclick="openMenu()" aria-label="View cocktail menu and scoring">Menu</button>
+                <button class="gb-header-btn" onclick="openRules()" aria-label="View game rules">Rules</button>
+            </div>
             <div id="gbTurnIndicator" class="gb-turn-indicator" aria-live="polite" aria-atomic="true">Loading…</div>
             <div id="gbWinnerBanner" class="gb-winner-banner" role="status" aria-live="polite"></div>
             <div id="gbErrorBar" class="gb-error-bar" role="alert" aria-live="assertive"></div>
@@ -329,67 +330,67 @@
                     </thead>
                     <tbody>
                         <tr class="gb-menu-row gb-menu-highlight">
-                            <td class="gb-menu-name">Long Island Iced Tea</td>
-                            <td><span class="gb-ingredient spirit">1×Gin</span> <span class="gb-ingredient spirit">1×Vodka</span> <span class="gb-ingredient spirit">1×Tequila</span> <span class="gb-ingredient spirit">1×Rum</span></td>
-                            <td><span class="gb-ingredient mixer">1×Cola</span></td>
-                            <td><span class="gb-ingredient special">sugar</span> <span class="gb-ingredient special">lemon</span></td>
-                            <td class="gb-menu-pts">15</td>
+                            <td class="gb-menu-name" data-label="Drink">Long Island Iced Tea</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">1×Gin</span> <span class="gb-ingredient spirit">1×Vodka</span> <span class="gb-ingredient spirit">1×Tequila</span> <span class="gb-ingredient spirit">1×Rum</span></td>
+                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Cola</span></td>
+                            <td data-label="Specials"><span class="gb-ingredient special">sugar</span> <span class="gb-ingredient special">lemon</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">15</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Mojito</td>
-                            <td><span class="gb-ingredient spirit">2×Rum</span></td>
-                            <td><span class="gb-ingredient mixer">1×Soda Water</span></td>
-                            <td><span class="gb-ingredient special">sugar</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Mojito</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">2×Rum</span></td>
+                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Soda Water</span></td>
+                            <td data-label="Specials"><span class="gb-ingredient special">sugar</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Old Fashioned</td>
-                            <td><span class="gb-ingredient spirit">3×Whiskey</span></td>
-                            <td class="gb-menu-none">&mdash;</td>
-                            <td><span class="gb-ingredient special">bitters</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Old Fashioned</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">3×Whiskey</span></td>
+                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
+                            <td data-label="Specials"><span class="gb-ingredient special">bitters</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Margarita</td>
-                            <td><span class="gb-ingredient spirit">2×Tequila</span></td>
-                            <td class="gb-menu-none">&mdash;</td>
-                            <td><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Margarita</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">2×Tequila</span></td>
+                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
+                            <td data-label="Specials"><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Cosmopolitan</td>
-                            <td><span class="gb-ingredient spirit">1×Vodka</span></td>
-                            <td><span class="gb-ingredient mixer">1×Cranberry</span></td>
-                            <td><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Cosmopolitan</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">1×Vodka</span></td>
+                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Cranberry</span></td>
+                            <td data-label="Specials"><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Gin Martini</td>
-                            <td><span class="gb-ingredient spirit">3×Gin</span></td>
-                            <td class="gb-menu-none">&mdash;</td>
-                            <td><span class="gb-ingredient special">vermouth</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Gin Martini</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">3×Gin</span></td>
+                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
+                            <td data-label="Specials"><span class="gb-ingredient special">vermouth</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Vodka Martini</td>
-                            <td><span class="gb-ingredient spirit">3×Vodka</span></td>
-                            <td class="gb-menu-none">&mdash;</td>
-                            <td><span class="gb-ingredient special">vermouth</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Vodka Martini</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">3×Vodka</span></td>
+                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
+                            <td data-label="Specials"><span class="gb-ingredient special">vermouth</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Tom Collins</td>
-                            <td><span class="gb-ingredient spirit">1×Gin</span></td>
-                            <td><span class="gb-ingredient mixer">1×Soda Water</span></td>
-                            <td><span class="gb-ingredient special">lemon</span> <span class="gb-ingredient special">sugar</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Tom Collins</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">1×Gin</span></td>
+                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Soda Water</span></td>
+                            <td data-label="Specials"><span class="gb-ingredient special">lemon</span> <span class="gb-ingredient special">sugar</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                         <tr class="gb-menu-row">
-                            <td class="gb-menu-name">Manhattan</td>
-                            <td><span class="gb-ingredient spirit">2×Whiskey</span></td>
-                            <td class="gb-menu-none">&mdash;</td>
-                            <td><span class="gb-ingredient special">vermouth</span> <span class="gb-ingredient special">bitters</span></td>
-                            <td class="gb-menu-pts">10</td>
+                            <td class="gb-menu-name" data-label="Drink">Manhattan</td>
+                            <td data-label="Spirits"><span class="gb-ingredient spirit">2×Whiskey</span></td>
+                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
+                            <td data-label="Specials"><span class="gb-ingredient special">vermouth</span> <span class="gb-ingredient special">bitters</span></td>
+                            <td class="gb-menu-pts" data-label="Pts">10</td>
                         </tr>
                     </tbody>
                 </table>
@@ -451,6 +452,83 @@
                         <em class="gb-menu-slammer-note">Slammer only (no valid mixer)</em>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== RULES MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbRulesModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbRulesModalTitle"
+         tabindex="-1" onclick="if(event.target===this)closeRules()">
+        <div class="gb-modal gb-rules-modal">
+            <button class="gb-modal-close" onclick="closeRules()" aria-label="Close rules">&#x2715;</button>
+            <div class="gb-modal-title" id="gbRulesModalTitle">How to Play</div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Objective</div>
+                <p>Be the first to sell <strong>40&nbsp;pts</strong> worth of drinks &mdash; or claim <strong>3&nbsp;karaoke cards</strong> for an instant win.</p>
+            </div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Your Turn &mdash; choose one action</div>
+                <ul class="gb-rules-list">
+                    <li><strong>Take Ingredients</strong> &mdash; take from the display or bag</li>
+                    <li><strong>Sell a Cup</strong> &mdash; sell a valid drink for points</li>
+                    <li><strong>Drink a Cup</strong> &mdash; drink the full contents of a cup</li>
+                    <li><strong>Go for a Wee</strong> &mdash; empty bladder, sober up 1 level</li>
+                    <li><strong>Claim a Card</strong> &mdash; pay bladder cost, keep the card</li>
+                    <li><strong>Refresh a Row</strong> &mdash; discard &amp; replace a card row (drunk &ge;3 only)</li>
+                </ul>
+            </div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Take Ingredients</div>
+                <p>Take exactly <strong>3 + your drunk level</strong> ingredients per turn. Draw from the open display (visible) or blindly from the bag, in any order.</p>
+                <p>You must decide what to do with each batch before drawing more. For every ingredient:</p>
+                <ul class="gb-rules-list">
+                    <li><strong>Cup</strong> &mdash; place in one of your cups (max 5 per cup)</li>
+                    <li><strong>Drink</strong> &mdash; goes to your bladder; adjusts drunk level at end of turn</li>
+                    <li><strong>Special token</strong> &mdash; roll the die: Bitters / Cointreau / Lemon / Sugar / Vermouth / Nothing. Specials go on your player mat (not in cups).</li>
+                </ul>
+                <div class="gb-rules-subhead">Drunk level changes (applied once after all ingredients)</div>
+                <ul class="gb-rules-list">
+                    <li>Drank any spirits &rarr; drunk level <strong>+1 per spirit</strong> (mixers have no effect)</li>
+                    <li>Drank only mixers &rarr; drunk level <strong>&minus;1 per mixer</strong> (minimum 0)</li>
+                    <li>Drunk level <strong>&gt; 5</strong> &rarr; hospitalised, out of the game</li>
+                    <li>Bladder overflows &rarr; you wet yourself, out of the game</li>
+                </ul>
+            </div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Sell a Cup</div>
+                <p>Sell a valid combination of spirits and mixers. Ingredients return to the bag. See the <strong>Menu</strong> for cocktail recipes (10&ndash;15 pts), pairings, and simple drink scores.</p>
+                <ul class="gb-rules-list">
+                    <li>Single spirit + valid mixer(s): <strong>1 pt</strong></li>
+                    <li>2 spirits (same) + valid mixer(s): <strong>3 pts</strong></li>
+                    <li>Tequila Slammer (exactly 2&times;Tequila): <strong>3 pts</strong></li>
+                    <li>Cocktail: <strong>10 pts</strong> &nbsp;|&nbsp; Long Island Iced Tea: <strong>15 pts</strong></li>
+                </ul>
+                <p class="gb-rules-note">Max 2 spirits for non-cocktail drinks. Cocktails require exactly the listed spirits, mixers, and declared specials &mdash; no extras.</p>
+            </div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Go for a Wee</div>
+                <p>Empty your bladder &mdash; all ingredients return to the bag. Sober up 1 level. Each wee uses one toilet token, shrinking bladder capacity by 1 (minimum&nbsp;4). You may wee even with an empty bladder.</p>
+            </div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Claim a Card</div>
+                <p>Pay the card&rsquo;s cost using ingredients currently in your bladder. Keep the card permanently for its special ability. A new card is drawn to replace it. If the deck is empty, the slot stays empty.</p>
+            </div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Refresh a Row of Cards</div>
+                <p>Only available when drunk &ge; 3. Discard all non-karaoke cards in a chosen row and replace them from the deck. Karaoke cards are never removed from the display.</p>
+            </div>
+
+            <div class="gb-rules-section">
+                <div class="gb-rules-heading">Drink a Cup</div>
+                <p>Drink the entire contents of one of your cups. The same drunk and bladder rules apply as when taking ingredients.</p>
             </div>
         </div>
     </div>
