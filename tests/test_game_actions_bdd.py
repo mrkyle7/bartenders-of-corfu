@@ -771,10 +771,11 @@ def move_history_taken_count(ctx, count):
     assert resp.status_code == 200, resp.text
     moves = resp.json()["moves"]
     take_moves = [m for m in moves if m["action"]["type"] == "take_ingredients"]
-    assert len(take_moves) == 1, f"Expected 1 take_ingredients move, got {len(take_moves)}"
-    taken = take_moves[0]["action"].get("taken", [])
-    assert len(taken) == count, (
-        f"Expected {count} taken ingredient records, got {len(taken)}: {taken}"
+    # Each batch is now its own move record; sum taken across all batches.
+    all_taken = [item for m in take_moves for item in m["action"].get("taken", [])]
+    assert len(all_taken) == count, (
+        f"Expected {count} taken ingredient records across {len(take_moves)} move(s), "
+        f"got {len(all_taken)}: {all_taken}"
     )
 
 
@@ -899,12 +900,13 @@ def undo_approved(ctx):
 @then("the game state should be restored to before the last turn")
 def state_restored(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
-    pre_turn = (
-        ctx.get("pre_undo_game", {}).get("game_state", {}).get("turn_number", 999)
-    )
-    current_turn = game["game_state"]["turn_number"]
-    assert current_turn < pre_turn, (
-        f"Expected turn_number to decrease after undo, got {current_turn} (was {pre_turn})"
+    # After undoing player 1's turn, it should be player 1's turn again.
+    # Turn numbers are never reused (spec guarantee), so we assert functional
+    # state restoration rather than turn_number decreasing.
+    player_turn = game["game_state"]["player_turn"]
+    p1_id = ctx["p1_id"]
+    assert player_turn == p1_id, (
+        f"Expected player_turn to be restored to p1 ({p1_id}), got {player_turn}"
     )
 
 

@@ -313,16 +313,30 @@ class Db:
         )
         return len(response.data) == 1
 
+    def get_next_move_number(self, game_id: UUID, turn_number: int) -> int:
+        """Return the next move_number for (game_id, turn_number), starting at 1."""
+        resp = (
+            self.supabase.table("game_moves")
+            .select("move_number")
+            .eq("game_id", str(game_id))
+            .eq("turn_number", turn_number)
+            .order("move_number", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return (resp.data[0]["move_number"] + 1) if resp.data else 1
+
     def add_game_move(
         self,
         game_id: UUID,
         turn_number: int,
+        move_number: int,
         player_id: UUID,
         action_type: str,
         action_payload: dict,
         state_before: dict,
     ) -> bool:
-        """Append an immutable MoveRecord to game_moves."""
+        """Append a MoveRecord to game_moves."""
         action = {"type": action_type, **action_payload}
         response = (
             self.supabase.table("game_moves")
@@ -331,6 +345,7 @@ class Db:
                     "id": str(uuid4()),
                     "game_id": str(game_id),
                     "turn_number": turn_number,
+                    "move_number": move_number,
                     "player_id": str(player_id),
                     "action": action,
                     "state_before": state_before,
@@ -341,12 +356,13 @@ class Db:
         return len(response.data) == 1
 
     def get_game_moves(self, game_id: UUID) -> list[dict]:
-        """Return all MoveRecords for a game, ordered by turn_number ascending."""
+        """Return all MoveRecords for a game, ordered by (turn_number, move_number) ascending."""
         response = (
             self.supabase.table("game_moves")
-            .select("id, turn_number, player_id, action, created_at")
+            .select("id, turn_number, move_number, player_id, action, created_at")
             .eq("game_id", str(game_id))
             .order("turn_number", desc=False)
+            .order("move_number", desc=False)
             .execute()
         )
         return response.data or []
@@ -355,7 +371,9 @@ class Db:
         """Return the reconstructed game state immediately after turn_number completed.
 
         turn_number=0  → initial state (before any moves)
-        turn_number=N  → state_before from move N+1, or latest_state if N is the last turn
+        turn_number=N  → state_before from the first move of internal turn_number N
+                         (each move stores the pre-action turn_number, so move N's
+                         state_before is the state after the previous turn completed)
         """
         if turn_number == 0:
             # Return the initial state snapshot
@@ -369,12 +387,15 @@ class Db:
                 return None
             return resp.data[0].get("initial_state")
 
-        # State after turn N = state_before of turn N+1
+        # State after the N-th completed turn = state_before of the first move
+        # that uses internal turn_number N (the next turn's opening state).
         next_move = (
             self.supabase.table("game_moves")
             .select("state_before")
             .eq("game_id", str(game_id))
-            .eq("turn_number", turn_number + 1)
+            .eq("turn_number", turn_number)
+            .order("move_number", desc=False)
+            .limit(1)
             .execute()
         )
         if next_move.data:
@@ -461,15 +482,29 @@ class Db:
         return len(resp.data) == 1
 
     def get_state_before_turn(self, game_id: UUID, turn_number: int) -> dict | None:
-        """Return state_before from the MoveRecord for the given turn_number."""
+        """Return the state_before from the first move of the given turn_number."""
         resp = (
             self.supabase.table("game_moves")
             .select("state_before")
             .eq("game_id", str(game_id))
             .eq("turn_number", turn_number)
+            .order("move_number", desc=False)
+            .limit(1)
             .execute()
         )
         return resp.data[0]["state_before"] if resp.data else None
+
+    def get_max_turn_number(self, game_id: UUID) -> int:
+        """Return the highest turn_number recorded in game_moves for this game, or 0."""
+        resp = (
+            self.supabase.table("game_moves")
+            .select("turn_number")
+            .eq("game_id", str(game_id))
+            .order("turn_number", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return resp.data[0]["turn_number"] if resp.data else 0
 
     def add_player_to_game(self, game_id: UUID, player_id: UUID) -> str:
         """Add a player to an existing game. Returns a text code: 'ok' | 'not_found' | 'not_new' | 'duplicate' | 'full'"""

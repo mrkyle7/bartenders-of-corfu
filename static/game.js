@@ -194,6 +194,7 @@ async function refreshGame(quiet = false) {
         const game = await resp.json();
         await resolvePlayerNames(game.players);
         _game = game;
+        _pendingUndo = game.pending_undo || null;
         renderAll(game);
         schedulePoll(game);
     } catch (e) {
@@ -232,8 +233,8 @@ function schedulePoll(game) {
     if (!game || game.status !== 'STARTED') return;
     const gs = game.game_state || {};
     const myTurn = _me && gs.player_turn === _me.id;
-    // Poll only when it's not our turn (opponent waiting), every 3s
-    if (!myTurn) {
+    // Poll when it's not our turn, or when an undo vote is pending (any player needs updates)
+    if (!myTurn || _pendingUndo) {
         _pollTimer = setTimeout(() => refreshGame(true), 3000);
     }
 }
@@ -895,25 +896,33 @@ function renderUndoSection(game, isReplay) {
     const content = el('gbUndoContent');
     content.innerHTML = '';
 
-    if (_pendingUndo && _pendingUndo.status === 'PENDING') {
+    if (_pendingUndo && _pendingUndo.status === 'pending') {
         // Show pending vote UI
         const info = document.createElement('div');
         info.className = 'gb-undo-info';
-        info.textContent = `${playerName(_pendingUndo.proposed_by)} proposed an undo.`;
+        info.textContent = `${playerName(_pendingUndo.proposed_by)} proposed to undo turn ${_pendingUndo.target_turn_number + 1}.`;
         content.appendChild(info);
 
-        const votes = document.createElement('div');
-        votes.className = 'gb-undo-votes';
-        votes.textContent =
-            `Agree: ${(_pendingUndo.agree_votes || []).length}  •  ` +
-            `Disagree: ${(_pendingUndo.disagree_votes || []).length}`;
-        content.appendChild(votes);
+        // Per-player vote status
+        const voteMap = _pendingUndo.votes || {};
+        const votesEl = document.createElement('div');
+        votesEl.className = 'gb-undo-votes';
+        (game.players || []).forEach(pid => {
+            const v = voteMap[pid];
+            const row = document.createElement('div');
+            row.className = 'gb-undo-vote-row';
+            const icon = document.createElement('span');
+            icon.className = 'gb-undo-vote-icon ' + (v === 'agree' ? 'agree' : v === 'disagree' ? 'disagree' : 'waiting');
+            icon.textContent = v === 'agree' ? '✓' : v === 'disagree' ? '✗' : '…';
+            row.appendChild(icon);
+            const name = document.createElement('span');
+            name.textContent = ' ' + playerName(pid);
+            row.appendChild(name);
+            votesEl.appendChild(row);
+        });
+        content.appendChild(votesEl);
 
-        const alreadyVoted =
-            (_me && (
-                (_pendingUndo.agree_votes || []).includes(_me.id) ||
-                (_pendingUndo.disagree_votes || []).includes(_me.id)
-            ));
+        const alreadyVoted = _me && (_me.id in voteMap);
 
         const btns = document.createElement('div');
         btns.className = 'gb-undo-btns';
@@ -1005,7 +1014,7 @@ function renderHistoryLog(moves) {
         entry.setAttribute('tabindex', '0');
         entry.innerHTML =
             `<span class="gb-history-chevron" aria-hidden="true">&#9654;</span> ` +
-            `<span class="gb-history-turn">Turn ${move.turn_number}</span> &bull; ` +
+            `<span class="gb-history-turn">Turn ${move.turn_number + 1}</span> &bull; ` +
             `<span class="gb-history-player">${escHtml(playerName(move.player_id))}</span> &bull; ` +
             `<span class="gb-history-action">${escHtml(formatAction(move))}</span> ` +
             `<span class="gb-history-time">${formatTime(move.created_at)}</span>`;
@@ -1042,6 +1051,8 @@ function formatAction(move) {
         case 'go_for_a_wee':    return 'Went for a wee';
         case 'claim_card':       return 'Claimed a card';
         case 'refresh_card_row': return `Refreshed row ${a.row_position ?? ''}`;
+        case 'undo':             return `Undo (turn ${(a.target_turn_number ?? 0) + 1})`;
+        case 'draw_from_bag':    return 'Drew from bag';
         default:                 return a.type || '?';
     }
 }
@@ -1055,6 +1066,8 @@ function formatActionDetail(move) {
         case 'go_for_a_wee':    return _detailGoForAWee(a);
         case 'claim_card':       return _detailClaimCard(a);
         case 'refresh_card_row': return _detailRefreshCardRow(a);
+        case 'undo':             return `<em>Undid turn ${(a.target_turn_number ?? 0) + 1}</em>`;
+        case 'draw_from_bag':    return `<em>Drew ${(a.drawn || []).length} item(s) from the bag</em>`;
         default:                 return '<em>No details available</em>';
     }
 }
@@ -1831,18 +1844,18 @@ async function voteUndo(vote, agreeBtn, disagreeBtn) {
             setButtonBusy(disagreeBtn, false);
         } else {
             const data = await resp.json();
-            const status = (data.undo_request || {}).status;
-            if (status === 'APPROVED') {
+            const status = data.status;
+            if (status === 'approved') {
                 flash('gbUndoFlash', 'success', 'Undo applied!', 2000);
                 _pendingUndo = null;
                 setTimeout(async () => { await refreshGame(); await refreshHistory(); }, 2100);
-            } else if (status === 'REJECTED') {
+            } else if (status === 'rejected') {
                 flash('gbUndoFlash', 'error', 'Undo rejected.', 2000);
                 _pendingUndo = null;
-                setTimeout(() => { if (_game) renderUndoSection(_game, false); }, 2100);
+                setTimeout(async () => { await refreshGame(); }, 2100);
             } else {
-                _pendingUndo = data.undo_request || _pendingUndo;
-                if (_game) renderUndoSection(_game, false);
+                // Still pending — refresh from server to get updated vote counts
+                await refreshGame();
             }
         }
     } catch (e) {

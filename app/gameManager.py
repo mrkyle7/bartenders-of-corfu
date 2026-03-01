@@ -113,11 +113,16 @@ class GameManager:
         new_state: GameState,
         payload: dict,
     ) -> GameState:
-        """Persist the move record and updated game state atomically (best-effort)."""
+        """Persist the move record and updated game state.
+
+        Uses the pre-action turn_number so all moves within a logical turn share
+        the same turn_number. move_number is the next sequence within that turn.
+        """
         state_before = game.game_state.to_dict()
-        turn_number = new_state.turn_number  # already incremented by the action
+        turn_number = game.game_state.turn_number  # pre-action, shared across the turn
+        move_number = db.get_next_move_number(game.id, turn_number)
         db.add_game_move(
-            game.id, turn_number, player_id, action_type, payload, state_before
+            game.id, turn_number, move_number, player_id, action_type, payload, state_before
         )
         db.update_game_state(game.id, new_state)
         return new_state
@@ -127,8 +132,7 @@ class GameManager:
     ) -> tuple[GameState, dict]:
         self._require_started(game)
         new_state, payload = actions.draw_from_bag(game.game_state, player_id, count)
-        # Drawing from bag is not a completed turn — persist state without a move record
-        db.update_game_state(game.id, new_state)
+        self._apply_action(game, player_id, "draw_from_bag", new_state, payload)
         return new_state, payload
 
     def take_ingredients(
@@ -138,12 +142,7 @@ class GameManager:
         new_state, payload = actions.take_ingredients(
             game.game_state, player_id, assignments
         )
-        if payload.get("turn_complete"):
-            # Only record a move when the full take-ingredients turn is complete
-            self._apply_action(game, player_id, "take_ingredients", new_state, payload)
-        else:
-            # Intermediate batch: persist state change without creating a move record
-            db.update_game_state(game.id, new_state)
+        self._apply_action(game, player_id, "take_ingredients", new_state, payload)
         return new_state, payload
 
     def sell_cup(
@@ -197,6 +196,9 @@ class GameManager:
         return db.get_state_at_turn(game_id, turn_number)
 
     # ─── Undo ─────────────────────────────────────────────────────────────────
+
+    def get_pending_undo(self, game_id: UUID) -> dict | None:
+        return db.get_pending_undo(game_id)
 
     def propose_undo(self, game: Game, player_id: UUID) -> dict:
         self._require_started(game)
@@ -252,17 +254,42 @@ class GameManager:
             if all(votes.get(str(pid)) == "agree" for pid in active_players):
                 # Execute the undo
                 db.approve_undo(request_id, votes)
-                self._execute_undo(game, pending["target_turn_number"])
+                self._execute_undo(
+                    game,
+                    pending["target_turn_number"],
+                    UUID(pending["proposed_by"]),
+                )
                 return {"status": "approved", "message": "Undo applied"}
 
         return {"status": updated["status"], "votes": updated.get("votes")}
 
-    def _execute_undo(self, game: Game, target_turn_number: int):
-        """Restore game state to just before the target turn."""
+    def _execute_undo(
+        self, game: Game, target_turn_number: int, proposed_by: UUID
+    ):
+        """Restore game state to just before the target turn.
+
+        Restores from the state_before of the first move of the target turn —
+        which is always a clean turn-start state (batch fields reset by _advance_turn).
+        Records an "undo" move, then sets turn_number to max_recorded + 1 so no
+        future move collides with existing records for the undone turn.
+        """
         state_dict = db.get_state_before_turn(game.id, target_turn_number)
         if state_dict is None:
             raise GameException(
                 "Cannot restore state: snapshot not found", status_code=500
             )
+        # Record the undo as its own move before restoring
+        current_max = db.get_max_turn_number(game.id)
+        undo_turn_number = current_max + 1
+        db.add_game_move(
+            game.id,
+            undo_turn_number,
+            1,
+            proposed_by,
+            "undo",
+            {"target_turn_number": target_turn_number},
+            state_dict,
+        )
         restored_state = GameState.from_dict(state_dict)
+        restored_state.turn_number = undo_turn_number + 1
         db.update_game_state(game.id, restored_state)

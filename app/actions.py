@@ -377,9 +377,6 @@ def take_ingredients(
 
     turn_complete = gs.ingredients_taken_this_turn >= take_count
 
-    # Snapshot all accumulated records before _advance_turn clears the list.
-    all_taken = list(gs.taken_records_this_turn)
-
     if turn_complete:
         # Apply drunk modifier once across all ingredients drunk this whole turn
         if gs.drunk_ingredients_this_turn:
@@ -390,9 +387,8 @@ def take_ingredients(
             gs
         )  # resets ingredients_taken_this_turn, drunk_ingredients_this_turn, taken_records_this_turn
 
-    # Emit all records accumulated across batches so the move history reflects
-    # everything taken this turn, not just the most recent batch.
-    payload = {"taken": all_taken, "turn_complete": turn_complete}
+    # Each batch is its own move record, so only emit this batch's records.
+    payload = {"taken": taken_records, "turn_complete": turn_complete}
     return gs, payload
 
 

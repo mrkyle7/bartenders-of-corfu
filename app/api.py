@@ -223,7 +223,9 @@ async def get_game(game_id: str, request: Request):
                 content={"error": "User is not a member of this game"},
             )
         logger.info(f"{token_user.username} get game info for ID {game_id}")
-        return JSONResponse(content=game.to_dict())
+        result = game.to_dict()
+        result["pending_undo"] = gameManager.get_pending_undo(game.id)
+        return JSONResponse(content=result)
     except Exception:
         logger.exception("Failed to validate user on get game")
         return JSONResponse(status_code=500, content={"error": "Failed to get game"})
