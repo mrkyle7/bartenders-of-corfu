@@ -397,6 +397,7 @@ async def login(userLogin: UserLogin):
                 httponly=True,
                 secure=False,
                 samesite="Strict",
+                max_age=14 * 24 * 60 * 60,  # 14 days in seconds
             )
             return response
         else:
