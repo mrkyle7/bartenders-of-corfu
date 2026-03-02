@@ -177,6 +177,14 @@ async function load() {
 
     await refreshGame();
     await refreshHistory();
+
+    // Auto-enter replay if ?turn= is in the URL
+    const turnParam = sp.get('turn');
+    if (turnParam !== null && _replayTurns.length > 0) {
+        const turnNumber = parseInt(turnParam, 10) - 1;  // convert display (1-indexed) to stored turn_number
+        const cursor = _replayTurns.indexOf(turnNumber);
+        if (cursor !== -1) await replayGoTo(cursor);
+    }
 }
 
 async function refreshGame(quiet = false) {
@@ -230,6 +238,7 @@ function playerName(pid) {
 
 function schedulePoll(game) {
     if (_pollTimer) clearTimeout(_pollTimer);
+    if (_replayMode) return;  // pause polling while replaying
     if (!game || game.status !== 'STARTED') return;
     const gs = game.game_state || {};
     const myTurn = _me && gs.player_turn === _me.id;
@@ -431,6 +440,7 @@ function renderBoard(game, gs, isReplay) {
         display.forEach(ing => {
             const badge = makeIngredientBadge(ing);
             badge.setAttribute('role', 'listitem');
+            badge.dataset.ingredient = ing;
             dispEl.appendChild(badge);
         });
     }
@@ -450,6 +460,7 @@ function renderBoard(game, gs, isReplay) {
     cardRows.forEach(row => {
         const rowWrap = document.createElement('div');
         rowWrap.setAttribute('role', 'listitem');
+        rowWrap.dataset.rowPosition = row.position;
 
         const rowLabelRow = document.createElement('div');
         rowLabelRow.style.display = 'flex';
@@ -703,6 +714,7 @@ function renderMyCups(myState, isMyTurn, game, gs) {
         const cupEl = document.createElement('div');
         cupEl.className = 'gb-cup';
         cupEl.setAttribute('aria-label', `Cup ${index + 1}`);
+        cupEl.dataset.cupIndex = index;
 
         const title = document.createElement('div');
         title.className = 'gb-cup-title';
@@ -786,6 +798,7 @@ function buildOtherSheet(pid, pState, gs) {
     const div = document.createElement('div');
     div.className = 'gb-other-sheet';
     div.setAttribute('aria-label', `${playerName(pid)}'s player sheet`);
+    div.dataset.playerId = pid;
 
     const isActive = gs.player_turn === pid;
     const nameEl = document.createElement('div');
@@ -858,23 +871,27 @@ function buildOtherSheet(pid, pState, gs) {
     const cupRow = document.createElement('div');
     cupRow.className = 'gb-other-cup-row';
     [(pState.cups?.[0]?.ingredients) || [], (pState.cups?.[1]?.ingredients) || []].forEach((cup, i) => {
+        const cupDiv = document.createElement('div');
+        cupDiv.className = 'gb-other-cup-item';
+        cupDiv.dataset.cupIndex = i;
         const cupBadge = document.createElement('span');
-        cupBadge.style.cssText = 'font-size:0.72em;color:#6b3a0f;margin-right:8px';
+        cupBadge.style.cssText = 'font-size:0.72em;color:#6b3a0f;margin-right:4px';
         cupBadge.textContent = `Cup${i+1}: `;
-        cupRow.appendChild(cupBadge);
+        cupDiv.appendChild(cupBadge);
         if (cup.length === 0) {
             const e = document.createElement('em');
             e.style.cssText = 'font-size:0.72em;color:#8a5c2e';
-            e.textContent = 'empty ';
-            cupRow.appendChild(e);
+            e.textContent = 'empty';
+            cupDiv.appendChild(e);
         } else {
             cup.forEach(ing => {
                 const b = makeIngredientBadge(ing);
                 b.style.fontSize = '0.65em';
                 b.style.padding = '1px 5px';
-                cupRow.appendChild(b);
+                cupDiv.appendChild(b);
             });
         }
+        cupRow.appendChild(cupDiv);
     });
     div.appendChild(cupRow);
 
@@ -1155,13 +1172,18 @@ function buildReplayTurns(moves) {
 
 function updateReplayLabel() {
     const lbl = el('gbReplayLabel');
-    if (!lbl) return;
+    const barLbl = el('gbReplayBarLabel');
     if (!_replayMode) {
-        lbl.textContent = `Turns: ${_replayTurns.length}`;
+        const txt = `Turns: ${_replayTurns.length}`;
+        if (lbl) lbl.textContent = txt;
+        if (barLbl) barLbl.textContent = txt;
         return;
     }
     const cur = _replayTurns[_replayCursor];
-    lbl.textContent = `Turn ${cur} / ${_replayTurns[_replayTurns.length - 1] || '?'}`;
+    const last = _replayTurns[_replayTurns.length - 1];
+    const txt = `Turn ${(cur ?? 0) + 1} / ${(last ?? 0) + 1}`;
+    if (lbl) lbl.textContent = txt;
+    if (barLbl) barLbl.textContent = txt;
 }
 
 async function replayGo(direction) {
@@ -1169,26 +1191,36 @@ async function replayGo(direction) {
 
     let newCursor = _replayCursor;
     if (direction === 'first') { newCursor = 0; }
-    else if (direction === 'prev') { newCursor = Math.max(0, _replayCursor === -1 ? _replayTurns.length - 2 : _replayCursor - 1); }
+    else if (direction === 'prev') { newCursor = Math.max(0, _replayCursor === -1 ? _replayTurns.length - 1 : _replayCursor - 1); }
     else if (direction === 'next') {
         if (_replayCursor === -1) return; // already live
-        newCursor = Math.min(_replayTurns.length - 1, _replayCursor + 1);
-        if (newCursor === _replayTurns.length - 1) {
-            // At the last recorded turn — jump to live
+        if (_replayCursor >= _replayTurns.length - 1) {
             exitReplay();
             return;
         }
+        newCursor = _replayCursor + 1;
     }
     else if (direction === 'last') { exitReplay(); return; }
 
-    _replayCursor = newCursor;
+    await replayGoTo(newCursor);
+}
+
+async function replayGoTo(cursor) {
+    _replayCursor = cursor;
     _replayMode = true;
 
-    el('gbReplayBanner').classList.add('visible');
+    el('gbReplayBar').classList.add('visible');
     el('gbBoardPanel').classList.add('replay-mode');
 
     const turn = _replayTurns[_replayCursor];
     updateReplayLabel();
+    renderReplayBarMoves(turn);
+    clearReplayHighlights();
+
+    // Update URL so this turn is shareable
+    const sp = new URLSearchParams(window.location.search);
+    sp.set('turn', turn + 1);  // 1-indexed for readability
+    history.replaceState(null, '', `?${sp.toString()}`);
 
     // Fetch historical state
     try {
@@ -1198,6 +1230,7 @@ async function replayGo(direction) {
         const replayGs = data.game_state;
         if (replayGs && _game) {
             renderAll(_game, replayGs);
+            applyReplayHighlights(_historyMoves.filter(m => m.turn_number === turn));
         }
     } catch (e) {
         showError('Failed to load replay state.');
@@ -1208,10 +1241,102 @@ async function replayGo(direction) {
 function exitReplay() {
     _replayMode = false;
     _replayCursor = -1;
-    el('gbReplayBanner').classList.remove('visible');
+    el('gbReplayBar').classList.remove('visible');
     el('gbBoardPanel').classList.remove('replay-mode');
+    clearReplayHighlights();
     updateReplayLabel();
-    if (_game) renderAll(_game);
+    // Remove turn param from URL
+    const spExit = new URLSearchParams(window.location.search);
+    spExit.delete('turn');
+    const qsExit = spExit.toString();
+    history.replaceState(null, '', qsExit ? `?${qsExit}` : window.location.pathname);
+    if (_game) {
+        renderAll(_game);
+        schedulePoll(_game);
+    }
+}
+
+function clearReplayHighlights() {
+    document.querySelectorAll('.gb-replay-highlight').forEach(el => el.classList.remove('gb-replay-highlight'));
+}
+
+function _replayFindCup(playerId, cupIndex) {
+    if (_me && playerId === _me.id) {
+        const cupsEl = document.getElementById('gbMyCups');
+        return cupsEl ? cupsEl.querySelector(`[data-cup-index="${cupIndex}"]`) : null;
+    }
+    const sheet = document.querySelector(`#gbOthers [data-player-id="${playerId}"]`);
+    return sheet ? sheet.querySelector(`[data-cup-index="${cupIndex}"]`) : null;
+}
+
+function applyReplayHighlights(moves) {
+    if (!moves || moves.length === 0) return;
+
+    const dispEl = document.getElementById('gbOpenDisplay');
+    const bagEl  = document.getElementById('gbBagCount');
+    const rowsEl = document.getElementById('gbCardRows');
+
+    moves.forEach(m => {
+        const a = m.action || {};
+        switch (a.type) {
+            case 'draw_from_bag':
+                if (bagEl) bagEl.classList.add('gb-replay-highlight');
+                break;
+
+            case 'take_ingredients': {
+                const taken = a.taken || [];
+                taken.forEach(t => {
+                    if (t.source === 'display' && dispEl) {
+                        // Highlight one badge per taken ingredient (by name), skipping already-highlighted ones
+                        const badge = [...dispEl.querySelectorAll(`[data-ingredient="${t.ingredient}"]`)]
+                            .find(b => !b.classList.contains('gb-replay-highlight'));
+                        if (badge) badge.classList.add('gb-replay-highlight');
+                    } else if ((t.source === 'pending' || t.source === 'bag') && bagEl) {
+                        bagEl.classList.add('gb-replay-highlight');
+                    }
+                    if (t.disposition === 'cup') {
+                        const cup = _replayFindCup(m.player_id, t.cup_index);
+                        if (cup) cup.classList.add('gb-replay-highlight');
+                    }
+                });
+                break;
+            }
+
+            case 'sell_cup':
+            case 'drink_cup': {
+                const cup = _replayFindCup(m.player_id, a.cup_index);
+                if (cup) cup.classList.add('gb-replay-highlight');
+                break;
+            }
+
+            case 'claim_card':
+            case 'refresh_card_row':
+                if (rowsEl) {
+                    const row = rowsEl.querySelector(`[data-row-position="${a.row_position}"]`);
+                    if (row) row.classList.add('gb-replay-highlight');
+                }
+                break;
+        }
+    });
+}
+
+function renderReplayBarMoves(turnNumber) {
+    const container = el('gbReplayBarMoves');
+    if (!container) return;
+    const moves = _historyMoves.filter(m => m.turn_number === turnNumber);
+    if (moves.length === 0) {
+        container.innerHTML = '<em style="opacity:0.6;font-size:0.8em">No moves recorded for this turn</em>';
+        return;
+    }
+    container.innerHTML = moves.map(m =>
+        `<div class="gb-replay-move-card">` +
+        `<div class="gb-replay-move-card-header">` +
+        `<strong>${escHtml(playerName(m.player_id))}</strong>` +
+        `<span class="gb-replay-move-card-action">${escHtml(formatAction(m))}</span>` +
+        `</div>` +
+        `<div class="gb-replay-move-card-detail">${formatActionDetail(m)}</div>` +
+        `</div>`
+    ).join('');
 }
 
 // ─────────────────────────────────────────────────────────────

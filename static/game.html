@@ -33,9 +33,20 @@
             <div id="gbErrorBar" class="gb-error-bar" role="alert" aria-live="assertive"></div>
         </header>
 
-        <!-- ===== REPLAY BANNER ===== -->
-        <div id="gbReplayBanner" class="gb-replay-banner" role="status" aria-live="polite">
-            REPLAY MODE — viewing historical state
+        <!-- ===== REPLAY BAR ===== -->
+        <div id="gbReplayBar" class="gb-replay-bar" role="region" aria-label="Replay controls">
+            <div class="gb-replay-bar-row">
+                <span class="gb-replay-bar-title">REPLAY</span>
+                <div class="gb-replay-bar-btns">
+                    <button class="gb-replay-btn" onclick="replayGo('first')" aria-label="Jump to initial state">&#9664;&#9664; Initial</button>
+                    <button class="gb-replay-btn" onclick="replayGo('prev')" aria-label="Previous turn">&#9664; Prev</button>
+                    <span class="gb-replay-bar-label" id="gbReplayBarLabel" aria-live="polite">—</span>
+                    <button class="gb-replay-btn" onclick="replayGo('next')" aria-label="Next turn">Next &#9654;</button>
+                    <button class="gb-replay-btn" onclick="replayGo('last')" aria-label="Jump to current state">Current &#9654;&#9654;</button>
+                    <button class="gb-replay-btn gb-replay-exit-btn" onclick="exitReplay()" aria-label="Exit replay mode">&#10005; Exit</button>
+                </div>
+            </div>
+            <div class="gb-replay-bar-moves" id="gbReplayBarMoves" aria-live="polite"></div>
         </div>
 
         <!-- ===== MAIN (left board + right player sheets) ===== -->
