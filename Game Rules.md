@@ -59,7 +59,7 @@ On your turn, you must take ONE of the following actions:
 - Refresh a row of cards (Only if drunk enough)
 - Drink a cup
 
-### Take Ingredients
+### Take Ingredients
 
 You must take exactly 3 ingredients plus how drunk you are. For example, if you are 2 levels drunk, you must take exactly 5 ingredients.
 
@@ -83,13 +83,13 @@ The Special Ingredients are:
 5. Vermouth
 6. Nothing! Unlucky, no special ingredient this time, place the special ingredient die back in the bag
 
-#### Putting ingredients in cups
+_*Putting ingredients in cups*_
 
 There is no limitation on what you can put in the cup except that you cannot have more than five ingredients per cup. 
 
 Tip: see “Sell a cup” for limitations on what drinks you are able to sell
 
-#### Drinking ingredients 
+_Drinking ingredients_
 
 Place drunk ingredients in your mouth on the player mat. Once you have chosen all your ingredients, count the number of spirits and mixers you have drunk.
 
@@ -103,7 +103,7 @@ Then place all drunk ingredients into your bladder.
 
 If you cannot fit any more ingredients in your bladder you wet yourself and lose the game! Your bladder starts with a capacity of 8. 
 
-#### Sell a cup
+### Sell a cup
 
 You can only sell valid combinations of spirits and mixers as per the following matrix:
 
@@ -130,7 +130,7 @@ Cocktails are defined on the cocktail menu and require 1 or 2 special ingredient
 
 When you sell a cup, put the ingredients back into the bag.
 
-#### Go for a wee
+### Go for a wee
 
 At some point you may need to empty your bladder to allow you to drink more. If you do, you also sober up 1 level (decrease drunk track by 1).
 
@@ -140,19 +140,19 @@ Note: the smallest size your bladder can be is four. Once all four toilet tokens
 
 Note 2: You are allowed to "go for a wee" if you have nothing in your bladder... Just some time by yourself in the toilet to clear your head a bit!
 
-#### Claim a card
+### Claim a card
 
 From the three rows of cards, you can take one if you meet its cost requirement. To meet this, you count the ingredients you have drunk (ie currently in your bladder). 
 
 Place the card permanently in front of you and enjoy its special ability! Replace the card in the row with a new card from the deck. If the deck is exhausted, the slot stays empty for the rest of the game.
 
-#### Refresh a row of cards
+### Refresh a row of cards
 
 Only if you are at least 3 levels of drunk, you may choose to discard all three cards in a row and replace them with new cards from the deck. If the deck is exhausted, any replaced slots stay empty.
 
 Note: you CANNOT clear Kareoke cards - leave them where they are and replace the rest
 
-#### Drink a cup
+### Drink a cup
 
 You may drink the full contents of a cup you have made - the same rules for drinking as taking ingredients apply, so be careful!
 
