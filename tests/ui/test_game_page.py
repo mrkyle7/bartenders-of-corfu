@@ -267,10 +267,10 @@ def test_cup_shows_ingredient_badges_when_filled(
     page.goto(_game_url(base_url, game_id))
     page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
 
-    # At least one ingredient badge should appear inside the cup ingredients area
-    badges = page.locator("#gbMyCups .gb-cup-ingredients .gb-ingredient")
-    badges.first.wait_for(state="visible", timeout=5000)
-    assert badges.count() >= 1
+    # At least one filled cup slot should appear inside the cup ingredients area
+    filled = page.locator("#gbMyCups .gb-cup-slot.filled")
+    filled.first.wait_for(state="visible", timeout=5000)
+    assert filled.count() >= 1
 
 
 def test_empty_cup_shows_no_ingredient_badges(
@@ -306,9 +306,9 @@ def test_other_player_cup_shows_ingredient_badges(
 
     other_sheet = page.locator(".gb-other-sheet")
     other_sheet.wait_for(state="visible", timeout=5000)
-    badges = other_sheet.locator(".gb-ingredient")
-    badges.first.wait_for(state="visible", timeout=5000)
-    assert badges.count() >= 1
+    filled = other_sheet.locator(".gb-cup-slot.filled")
+    filled.first.wait_for(state="visible", timeout=5000)
+    assert filled.count() >= 1
 
 
 # ---------------------------------------------------------------------------

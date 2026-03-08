@@ -864,26 +864,27 @@ function renderMyStats(myState, gs) {
 }
 
 // Render a row of INITIAL_BLADDER_CAPACITY (8) physical bladder slots.
-// Slots 0..bladder.length-1: filled with ingredient token
-// Slots bladder.length..cap-1: empty open slots
+// Slots 0..bladder.length-1: filled (emoji icon, ingredient color)
+// Slots bladder.length..cap-1: empty open receptors
 // Slots cap..7: sealed (spent toilet tokens, from the right)
 function makeBladderSlots(bladder, cap, toiletTokens) {
     const INITIAL_SLOTS = 8;
     const wrap = document.createElement('div');
     wrap.className = 'gb-bladder-slots';
-    const spent = Math.max(0, INITIAL_SLOTS - cap - (4 - (toiletTokens ?? 4)));
-    // Simpler: total visible = 8, first cap slots are open (filled or empty), remaining are sealed
     for (let i = 0; i < INITIAL_SLOTS; i++) {
         const slot = document.createElement('div');
         if (i < bladder.length) {
-            slot.className = 'gb-bladder-slot filled';
-            slot.setAttribute('title', ingredientLabel(bladder[i]));
-            slot.appendChild(makeIngredientBadge(bladder[i]));
+            const ing = bladder[i];
+            slot.className = `gb-bladder-slot filled ${ingredientKind(ing)}`;
+            slot.textContent = ingredientIcon(ing) || ingredientLabel(ing).slice(0, 3);
+            slot.title = ingredientLabel(ing);
+            slot.setAttribute('aria-label', ingredientLabel(ing));
         } else if (i < cap) {
             slot.className = 'gb-bladder-slot empty';
             slot.setAttribute('aria-hidden', 'true');
         } else {
             slot.className = 'gb-bladder-slot sealed';
+            slot.textContent = '🚽';
             slot.setAttribute('aria-hidden', 'true');
         }
         wrap.appendChild(slot);
@@ -941,8 +942,11 @@ function renderMyCups(myState, isMyTurn, game, gs) {
         for (let s = 0; s < MAX_SLOTS; s++) {
             const slot = document.createElement('div');
             if (s < contents.length) {
-                slot.className = 'gb-cup-slot filled';
-                slot.appendChild(makeIngredientBadge(contents[s]));
+                const ing = contents[s];
+                slot.className = `gb-cup-slot filled ${ingredientKind(ing)}`;
+                slot.textContent = ingredientIcon(ing) || ingredientLabel(ing).slice(0, 3);
+                slot.title = ingredientLabel(ing);
+                slot.setAttribute('aria-label', ingredientLabel(ing));
             } else {
                 slot.className = 'gb-cup-slot empty';
                 slot.setAttribute('aria-hidden', 'true');
@@ -1154,8 +1158,11 @@ function buildOtherSheet(pid, pState, gs) {
         for (let s = 0; s < MAX_SLOTS; s++) {
             const slot = document.createElement('div');
             if (s < cup.length) {
-                slot.className = 'gb-cup-slot filled';
-                slot.appendChild(makeIngredientBadge(cup[s]));
+                const ing = cup[s];
+                slot.className = `gb-cup-slot filled ${ingredientKind(ing)}`;
+                slot.textContent = ingredientIcon(ing) || ingredientLabel(ing).slice(0, 3);
+                slot.title = ingredientLabel(ing);
+                slot.setAttribute('aria-label', ingredientLabel(ing));
             } else {
                 slot.className = 'gb-cup-slot empty';
                 slot.setAttribute('aria-hidden', 'true');

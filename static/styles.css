@@ -918,6 +918,7 @@ input {
     font-family: Georgia, serif;
     font-weight: bold;
     margin-bottom: 4px;
+    padding-right: 52px; /* clear the absolute-positioned type badge */
 }
 
 .gb-refresh-row-btn {
@@ -1068,7 +1069,7 @@ input {
     background: #b91c1c;
 }
 
-/* Bladder — physical slots layout */
+/* ── Physical bladder slots ─────────────────────────────────── */
 .gb-bladder-slots {
     display: flex;
     flex-wrap: wrap;
@@ -1077,52 +1078,38 @@ input {
     align-items: center;
 }
 
-/* Each bladder slot */
 .gb-bladder-slot {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-}
-
-/* Filled slot: holds an ingredient badge (badge handles its own sizing) */
-.gb-bladder-slot.filled {
-    background: transparent;
-}
-
-.gb-bladder-slot.filled .gb-ingredient {
-    font-size: 0.62em;
-    min-width: 26px;
-    height: 26px;
-    padding: 0 5px;
-}
-
-/* Empty open slot: visible receptor */
-.gb-bladder-slot.empty {
-    background: rgba(212,160,23,0.08);
-    border: 1.5px dashed rgba(212,160,23,0.45);
-}
-
-/* Sealed slot: closed by a spent toilet token */
-.gb-bladder-slot.sealed {
-    background: rgba(74,44,14,0.18);
-    border: 1.5px solid rgba(74,44,14,0.3);
-    position: relative;
-    overflow: hidden;
-}
-
-/* Cross-hatch on sealed slot */
-.gb-bladder-slot.sealed::after {
-    content: '🚽';
-    font-size: 0.72em;
+    font-size: 1em;        /* emoji size */
     line-height: 1;
-    opacity: 0.55;
 }
 
-/* Other player bladder label */
+/* Filled: slot adopts ingredient colour, shows emoji icon */
+.gb-bladder-slot.filled.spirit  { background: linear-gradient(145deg, #e8b420, #c49010); box-shadow: 0 2px 0 rgba(0,0,0,0.28); }
+.gb-bladder-slot.filled.mixer   { background: linear-gradient(145deg, #5a8fc0, #3a6a90); box-shadow: 0 2px 0 rgba(0,0,0,0.28); }
+.gb-bladder-slot.filled.special { background: linear-gradient(145deg, #9050f8, #6425cc); box-shadow: 0 2px 0 rgba(0,0,0,0.28); }
+
+/* Empty open receptor */
+.gb-bladder-slot.empty {
+    background: rgba(212,160,23,0.07);
+    border: 1.5px dashed rgba(212,160,23,0.4);
+}
+
+/* Sealed by a spent toilet token */
+.gb-bladder-slot.sealed {
+    background: rgba(74,44,14,0.15);
+    border: 1.5px solid rgba(74,44,14,0.25);
+    font-size: 0.78em;
+    opacity: 0.7;
+}
+
+/* Other player bladder row */
 .gb-other-bladder {
     display: flex;
     align-items: flex-start;
@@ -1133,11 +1120,12 @@ input {
 
 .gb-stat-label {
     font-size: 0.68em;
+    font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.07em;
     color: #8a5c2e;
     white-space: nowrap;
-    margin-top: 6px;
+    margin-top: 7px;
 }
 
 /* Other player stats row */
@@ -1146,43 +1134,32 @@ input {
     align-items: center;
 }
 
-/* Cup physical slots */
+/* ── Physical cup slots ──────────────────────────────────────── */
 .gb-cup-slot {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     border-radius: 5px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    font-size: 0.95em;
+    line-height: 1;
 }
 
-.gb-cup-slot.filled {
-    background: transparent;
-}
+/* Filled: slot adopts ingredient colour */
+.gb-cup-slot.filled.spirit  { background: linear-gradient(145deg, #e8b420, #c49010); box-shadow: 0 2px 0 rgba(0,0,0,0.25); }
+.gb-cup-slot.filled.mixer   { background: linear-gradient(145deg, #5a8fc0, #3a6a90); box-shadow: 0 2px 0 rgba(0,0,0,0.25); }
+.gb-cup-slot.filled.special { background: linear-gradient(145deg, #9050f8, #6425cc); box-shadow: 0 2px 0 rgba(0,0,0,0.25); }
 
-.gb-cup-slot.filled .gb-ingredient {
-    font-size: 0.58em;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 4px;
-}
-
+/* Empty receptor */
 .gb-cup-slot.empty {
-    background: rgba(180,130,40,0.08);
-    border: 1.5px dashed rgba(180,130,40,0.35);
+    background: rgba(180,130,40,0.07);
+    border: 1.5px dashed rgba(180,130,40,0.3);
 }
 
-/* Legacy bar (kept for backward compat) */
-.gb-bladder-bar {
-    height: 8px;
-    border-radius: 4px;
-    background: #e5d8c4;
-    overflow: hidden;
-    width: 80px;
-    display: none; /* replaced by slots */
-}
-
+/* Legacy bar — no longer used */
+.gb-bladder-bar  { display: none; }
 .gb-bladder-fill { display: none; }
 
 /* Cups — glass-like appearance */
