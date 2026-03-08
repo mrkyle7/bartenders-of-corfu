@@ -188,9 +188,11 @@ def bag_no_specials(ctx):
 
     _patch_game_state(ctx["game_id"], patch)
 
+
 @given("the open display contains {spec}")
 def set_open_display(ctx, spec):
     ingredients = _parse_ingredient_spec(spec)
+
     def patch(gs: GameState):
         gs.open_display = ingredients
         return gs
@@ -566,6 +568,7 @@ def player_try_sell_cup(ctx, n, cup_index):
 @when(parsers.parse("player {n:d} tries to drink cup {cup_index:d}"))
 def player_try_drink_cup(ctx, n, cup_index):
     player_drink_cup(ctx, n, cup_index)
+
 
 @when(parsers.parse("player {n:d} goes for a wee"))
 def player_go_for_a_wee(ctx, n):

@@ -122,7 +122,13 @@ class GameManager:
         turn_number = game.game_state.turn_number  # pre-action, shared across the turn
         move_number = db.get_next_move_number(game.id, turn_number)
         db.add_game_move(
-            game.id, turn_number, move_number, player_id, action_type, payload, state_before
+            game.id,
+            turn_number,
+            move_number,
+            player_id,
+            action_type,
+            payload,
+            state_before,
         )
         db.update_game_state(game.id, new_state)
         return new_state
@@ -263,9 +269,7 @@ class GameManager:
 
         return {"status": updated["status"], "votes": updated.get("votes")}
 
-    def _execute_undo(
-        self, game: Game, target_turn_number: int, proposed_by: UUID
-    ):
+    def _execute_undo(self, game: Game, target_turn_number: int, proposed_by: UUID):
         """Restore game state to just before the target turn.
 
         Restores from the state_before of the first move of the target turn —
