@@ -49,84 +49,69 @@
             <div class="gb-replay-bar-moves" id="gbReplayBarMoves" aria-live="polite"></div>
         </div>
 
-        <!-- ===== MAIN (left board + right player sheets) ===== -->
-        <main class="gb-main" id="gbMain">
+        <!-- ===== PLAYER STATS BAR ===== -->
+        <div id="gbPlayerStatsBar" class="gb-player-stats-bar hidden" aria-label="All player stats" aria-live="polite"></div>
 
-            <!-- LEFT: game board -->
-            <section class="gb-board-panel" id="gbBoardPanel" aria-label="Game board">
+        <!-- ===== BOARD SECTION (shared display + cards) ===== -->
+        <section class="gb-board-section" id="gbBoardPanel" aria-label="Game board">
 
-                <!-- LOBBY VIEW (shown for NEW games) -->
-                <div id="gbLobbyPanel" class="hidden">
-                    <div class="gb-section-title">Players in Lobby</div>
-                    <ul id="playerList" role="list" aria-label="Players in lobby" style="list-style:none;padding:0;margin:0"></ul>
-                    <div id="gbStartGameSection" style="margin-top:16px"></div>
+            <!-- LOBBY VIEW (shown for NEW games) -->
+            <div id="gbLobbyPanel" class="hidden">
+                <div class="gb-section-title">Players in Lobby</div>
+                <ul id="playerList" role="list" aria-label="Players in lobby" style="list-style:none;padding:0;margin:0"></ul>
+                <div id="gbStartGameSection" style="margin-top:16px"></div>
+            </div>
+
+            <div id="gbBoardLoading" class="gb-loading" aria-busy="true">
+                <span class="spinner" aria-hidden="true"></span>Loading game…
+            </div>
+
+            <div id="gbBoardContent" class="hidden">
+
+                <!-- Open display + bag -->
+                <div class="gb-section-title">Open Display</div>
+                <div class="gb-open-display" id="gbOpenDisplay" aria-label="Open ingredient display" role="list"></div>
+                <div class="gb-bag-area" aria-label="Ingredient bag"><!-- bag SVG rendered by JS --></div>
+                <div class="gb-bag-count" id="gbBagCount" aria-label="Deck count"></div>
+
+                <!-- Card rows -->
+                <div class="gb-section-title" style="margin-top:14px">Card Rows</div>
+                <div class="gb-card-rows" id="gbCardRows" role="list" aria-label="Available cards"></div>
+
+            </div>
+        </section>
+
+        <!-- ===== PLAYER MATS (cups + bladder per player) ===== -->
+        <div id="gbPlayerMats" class="gb-player-mats hidden" aria-label="Player mats">
+
+            <!-- My mat -->
+            <section class="gb-player-mat gb-my-mat" id="gbMySheet" aria-label="My player mat">
+                <div id="gbMySheetLoading" class="gb-loading" aria-busy="true">
+                    <span class="spinner" aria-hidden="true"></span>Loading…
                 </div>
-
-                <div id="gbBoardLoading" class="gb-loading" aria-busy="true">
-                    <span class="spinner" aria-hidden="true"></span>Loading game…
-                </div>
-
-                <div id="gbBoardContent" class="hidden">
-
-                    <!-- Open display + bag -->
-                    <div class="gb-section-title">Open Display</div>
-                    <div class="gb-open-display" id="gbOpenDisplay" aria-label="Open ingredient display" role="list"></div>
-                    <div class="gb-bag-area" aria-label="Ingredient bag"><!-- bag SVG rendered by JS --></div>
-                    <div class="gb-bag-count" id="gbBagCount" aria-label="Deck count"></div>
-
-                    <!-- Card rows -->
-                    <div class="gb-section-title" style="margin-top:14px">Card Rows</div>
-                    <div class="gb-card-rows" id="gbCardRows" role="list" aria-label="Available cards"></div>
-
+                <div id="gbMySheetContent" class="hidden">
+                    <div id="gbMyName"></div>
+                    <div class="gb-mat-body">
+                        <div class="gb-stats-row" id="gbMyStats" role="group" aria-label="My stats"></div>
+                        <div class="gb-section-title" style="margin-top:8px">Cups</div>
+                        <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
+                        <div class="gb-section-title">Specials on Mat</div>
+                        <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
+                        <div class="gb-section-title">Claimed Cards</div>
+                        <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
+                        <div id="gbWeeTile"></div>
+                        <div id="gbUndoSection" class="gb-undo-section hidden" aria-label="Undo controls">
+                            <div class="gb-undo-title">Undo</div>
+                            <div id="gbUndoContent"></div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
-            <!-- RIGHT: player sheets -->
-            <aside class="gb-right-panel" aria-label="Player sheets">
+            <!-- Other players -->
+            <div id="gbOthers" class="gb-other-mats" aria-label="Other players"></div>
 
-                <!-- My player sheet -->
-                <section class="gb-my-sheet" id="gbMySheet" aria-label="My player sheet">
-                    <div id="gbMySheetLoading" class="gb-loading" aria-busy="true">
-                        <span class="spinner" aria-hidden="true"></span>Loading…
-                    </div>
-                    <div id="gbMySheetContent" class="hidden">
-                        <!-- BGA-style player strip (edge-to-edge) -->
-                        <div id="gbMyName"></div>
-
-                        <!-- Padded content area -->
-                        <div class="gb-my-sheet-content-inner">
-                            <!-- Stats row -->
-                            <div class="gb-stats-row" id="gbMyStats" role="group" aria-label="My stats"></div>
-
-                            <!-- Cups -->
-                            <div class="gb-section-title" style="margin-top:8px">My Cups</div>
-                            <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
-
-                            <!-- Special ingredients -->
-                            <div class="gb-section-title">Special Ingredients on Mat</div>
-                            <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
-
-                            <!-- Claimed cards -->
-                            <div class="gb-section-title">Claimed Cards</div>
-                            <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
-
-                            <!-- Wee action tile (rendered by JS) -->
-                            <div id="gbWeeTile"></div>
-
-                            <!-- Undo section -->
-                            <div id="gbUndoSection" class="gb-undo-section hidden" aria-label="Undo controls">
-                                <div class="gb-undo-title">Undo</div>
-                                <div id="gbUndoContent"></div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Other players -->
-                <section class="gb-others-area" id="gbOthers" aria-label="Other players"></section>
-
-            </aside>
-        </main>
+        </div>
 
         <!-- ===== BOTTOM PANEL (history / replay / undo) ===== -->
         <div class="gb-bottom-panel" role="complementary" aria-label="Game history">

@@ -419,20 +419,68 @@ input {
 
 .gb-error-bar.visible { display: block; }
 
-.gb-main {
+/* ---------- Player stats bar (top, all players compact) ---------- */
+.gb-player-stats-bar {
     display: flex;
-    flex: 1;
-    gap: 0;
-    overflow: hidden;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(44,26,14,0.92);
+    border-bottom: 2px solid rgba(212,160,23,0.35);
+    flex-shrink: 0;
 }
 
-/* ---------- Left panel (board) — dark bar counter ---------- */
-.gb-board-panel {
-    flex: 1 1 0;
-    overflow-y: auto;
+.gb-stats-strip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(212,160,23,0.2);
+    flex-wrap: wrap;
+}
+
+.gb-stats-strip.active-turn {
+    background: linear-gradient(135deg, #1a5c1a, #2d8a2d);
+    border-color: rgba(45,122,45,0.5);
+}
+
+.gb-stats-strip.is-me {
+    border-color: rgba(212,160,23,0.6);
+}
+
+.gb-stats-strip-name {
+    font-size: 0.82em;
+    font-weight: bold;
+    color: #f0d090;
+    white-space: nowrap;
+}
+
+.gb-stats-strip.active-turn .gb-stats-strip-name { color: #fff; }
+
+.gb-stats-strip-turn-tag {
+    font-size: 0.62em;
+    font-weight: bold;
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 8px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.gb-stats-strip-stat {
+    font-size: 0.72em;
+    color: #c8a870;
+    white-space: nowrap;
+}
+
+.gb-stats-strip.active-turn .gb-stats-strip-stat { color: #d0ffd0; }
+
+/* ---------- Board section (shared display + cards) — dark bar counter ---------- */
+.gb-board-section {
     padding: 12px;
-    border-right: 2px solid rgba(212,160,23,0.3);
-    min-width: 0;
     /* Dark wood bar counter background */
     background:
         repeating-linear-gradient(
@@ -453,14 +501,58 @@ input {
     color: #e8d5a8;
 }
 
-/* ---------- Right panel (player sheets) ---------- */
-.gb-right-panel {
-    width: 330px;
-    flex-shrink: 0;
+/* ---------- Player mats (cups + bladder per player) ---------- */
+.gb-player-mats {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(247,231,206,0.45);
+    border-top: 2px solid rgba(212,160,23,0.25);
+}
+
+.gb-player-mat {
+    background: rgba(255,255,255,0.65);
+    border: 1px solid rgba(180,130,40,0.3);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(74,44,14,0.12);
+    flex: 1 1 280px;
+    min-width: 0;
+}
+
+.gb-mat-body {
+    padding: 8px 12px 12px;
+}
+
+/* Other player mats flow directly into .gb-player-mats flex */
+.gb-other-mats {
+    display: contents;
+}
+
+/* Other player sheet — same card appearance as .gb-player-mat */
+.gb-other-sheet {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(180,130,40,0.25);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(74,44,14,0.10);
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+/* Legacy .gb-main, .gb-board-panel, .gb-right-panel kept for any refs that may still exist */
+.gb-main {
+    display: flex;
+    flex: 1;
+    gap: 0;
+}
+
+.gb-board-panel {
+    flex: 1 1 0;
     overflow-y: auto;
-    background: rgba(247,231,206,0.6);
+    padding: 12px;
+    min-width: 0;
 }
 
 /* BGA-style player strip at top of my sheet */
@@ -641,20 +733,25 @@ input {
 }
 
 /* Section titles inside the dark board panel */
-.gb-board-panel .gb-section-title {
+.gb-board-panel .gb-section-title,
+.gb-board-section .gb-section-title {
     color: #d4a850;
     border-bottom-color: rgba(212,160,23,0.35);
 }
 
-.gb-board-panel .gb-card-row-label {
+.gb-board-panel .gb-card-row-label,
+.gb-board-section .gb-card-row-label {
     color: #c49840;
 }
 
-.gb-board-panel .gb-bag-count {
+.gb-board-panel .gb-bag-count,
+.gb-board-section .gb-bag-count {
     color: #c8a870;
 }
 
 /* Bag count text on dark bg */
+.gb-board-section #gbBagCount,
+.gb-board-panel #gbBagCount,
 #gbBagCount {
     font-size: 0.78em;
     color: #c8a870;
@@ -1409,7 +1506,8 @@ input {
 }
 
 /* Replay overlay dims the board */
-.gb-board-panel.replay-mode {
+.gb-board-panel.replay-mode,
+.gb-board-section.replay-mode {
     opacity: 0.72;
     pointer-events: none;
 }
@@ -2033,39 +2131,16 @@ input {
     .gb-menu-highlight { border-color: rgba(212,160,23,0.7) !important; background: rgba(212,160,23,0.1) !important; }
 }
 
-/* ---------- Responsive (BGA-style mobile stacking) ---------- */
+/* ---------- Responsive ---------- */
 @media (max-width: 768px) {
-    /* Stack: player sheets on top, board below — like BGA mobile */
-    .gb-main {
-        flex-direction: column-reverse;
-        overflow: visible;
+    .gb-player-mats {
+        gap: 8px;
+        padding: 8px;
     }
 
-    .gb-board-panel {
-        border-right: none;
-        border-top: 2px solid rgba(212,160,23,0.3);
-        overflow-y: visible;
-        min-height: 300px;
-    }
-
-    .gb-right-panel {
-        width: 100%;
-        /* Player sheets stacked side-by-side at top on tablet */
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
-        overflow-y: visible;
-        background: none;
-    }
-
-    .gb-my-sheet {
-        flex: 1 1 280px;
-        min-width: 0;
-    }
-
-    .gb-others-area {
-        flex: 1 1 200px;
-        min-width: 0;
+    .gb-player-mat,
+    .gb-other-sheet {
+        flex: 1 1 240px;
     }
 
     .gb-bottom-panel {
@@ -2107,9 +2182,10 @@ input {
     .gb-winner-banner,
     .gb-error-bar { width: 100%; order: 10; }
 
-    /* On phone: full-width player strips, board below */
-    .gb-right-panel {
-        flex-direction: column;
+    /* Player mats full-width on phone */
+    .gb-player-mat,
+    .gb-other-sheet {
+        flex: 1 1 100%;
     }
 
     /* Ingredient tokens smaller on phone */
@@ -2400,11 +2476,13 @@ input {
 }
 
 /* ---------- Bag area layout in dark board panel ---------- */
-.gb-board-panel .gb-bag-count-badge {
+.gb-board-panel .gb-bag-count-badge,
+.gb-board-section .gb-bag-count-badge {
     color: #f5d07a;
 }
 
-.gb-board-panel #gbBagCount {
+.gb-board-panel #gbBagCount,
+.gb-board-section #gbBagCount {
     font-size: 0.72em;
     color: #a88848;
     margin: 0 0 10px 0;

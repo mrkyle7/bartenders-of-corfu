@@ -301,11 +301,16 @@ function renderAll(game, replayState = null) {
         el('gbMySheetLoading').classList.add('hidden');
         el('gbMySheetContent').classList.add('hidden');
         el('gbUndoSection').classList.add('hidden');
+        el('gbPlayerStatsBar').classList.add('hidden');
+        el('gbPlayerMats').classList.add('hidden');
         renderLobby(game);
         schedulePollLobby();
         return;
     }
     el('gbLobbyPanel').classList.add('hidden');
+
+    // Stats bar (all players compact)
+    renderAllStats(game, gs);
 
     // Board
     renderBoard(game, gs, isReplay);
@@ -338,9 +343,56 @@ function renderAll(game, replayState = null) {
     el('gbBoardContent').classList.remove('hidden');
     el('gbMySheetLoading').classList.add('hidden');
     el('gbMySheetContent').classList.remove('hidden');
+    el('gbPlayerStatsBar').classList.remove('hidden');
+    el('gbPlayerMats').classList.remove('hidden');
 
     // Auto-open take modal if mid-taking (handles page refresh and batch continuation)
     _maybeAutoOpenTakeModal(game, gs, isReplay);
+}
+
+function renderAllStats(game, gs) {
+    const bar = el('gbPlayerStatsBar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    const gameEnded = game.status === 'ENDED';
+    (game.players || []).forEach(pid => {
+        const pState = gs.player_states ? gs.player_states[pid] : null;
+        const isMe = _me && pid === _me.id;
+        const isActive = !gameEnded && gs.player_turn === pid;
+
+        const strip = document.createElement('div');
+        strip.className = 'gb-stats-strip' +
+            (isActive ? ' active-turn' : '') +
+            (isMe ? ' is-me' : '');
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'gb-stats-strip-name';
+        nameSpan.textContent = playerName(pid);
+        strip.appendChild(nameSpan);
+
+        if (isActive) {
+            const tag = document.createElement('span');
+            tag.className = 'gb-stats-strip-turn-tag';
+            tag.textContent = isMe ? 'YOUR TURN' : 'THEIR TURN';
+            strip.appendChild(tag);
+        }
+
+        if (pState) {
+            [
+                `${pState.points || 0}/40 pts`,
+                `Drunk: ${pState.drunk_level || 0}/5`,
+                `Bladder: ${(pState.bladder || []).length}/${pState.bladder_capacity || 8}`,
+                `Karaoke: ${pState.karaoke_cards_claimed || 0}/3`,
+            ].forEach(text => {
+                const s = document.createElement('span');
+                s.className = 'gb-stats-strip-stat';
+                s.textContent = text;
+                strip.appendChild(s);
+            });
+        }
+
+        bar.appendChild(strip);
+    });
 }
 
 function renderTurnIndicator(game, gs) {
@@ -983,13 +1035,6 @@ function renderOthers(game, gs, isReplay) {
     othersEl.innerHTML = '';
 
     const otherIds = (game.players || []).filter(pid => !_me || pid !== _me.id);
-    if (otherIds.length === 0) return;
-
-    const heading = document.createElement('div');
-    heading.className = 'gb-section-title';
-    heading.textContent = 'Other Players';
-    othersEl.appendChild(heading);
-
     otherIds.forEach(pid => {
         const pState = gs.player_states ? gs.player_states[pid] : null;
         const sheet = buildOtherSheet(pid, pState, gs);
@@ -997,21 +1042,23 @@ function renderOthers(game, gs, isReplay) {
     });
 }
 
+// Other player mat — same visual layout as my mat but read-only
 function buildOtherSheet(pid, pState, gs) {
     const div = document.createElement('div');
     div.className = 'gb-other-sheet';
-    div.setAttribute('aria-label', `${playerName(pid)}'s player sheet`);
+    div.setAttribute('aria-label', `${playerName(pid)}'s player mat`);
     div.dataset.playerId = pid;
 
     const isActive = gs.player_turn === pid;
 
-    // BGA-style player strip
+    // Player strip (same style as my strip)
     const strip = document.createElement('div');
-    strip.className = 'gb-other-player-strip' + (isActive ? ' active-turn' : '');
+    strip.className = 'gb-player-strip ' + (isActive ? 'my-turn' : 'waiting');
+    strip.setAttribute('aria-live', 'polite');
     if (isActive) strip.setAttribute('aria-label', `${playerName(pid)} — current turn`);
 
     const stripName = document.createElement('span');
-    stripName.className = 'gb-other-player-strip-name';
+    stripName.className = 'gb-player-strip-name';
     stripName.textContent = playerName(pid);
     strip.appendChild(stripName);
 
@@ -1023,15 +1070,14 @@ function buildOtherSheet(pid, pState, gs) {
     }
 
     const scoreEl = document.createElement('span');
-    scoreEl.className = 'gb-other-player-strip-score';
-    scoreEl.textContent = `${pState ? (pState.points || 0) : '?'} pts`;
+    scoreEl.className = 'gb-player-strip-score';
+    scoreEl.textContent = `${pState ? (pState.points || 0) : '?'} / 40 pts`;
     strip.appendChild(scoreEl);
-
     div.appendChild(strip);
 
     if (!pState) {
         const body = document.createElement('div');
-        body.className = 'gb-other-sheet-body';
+        body.className = 'gb-mat-body';
         const na = document.createElement('em');
         na.style.fontSize = '0.75em';
         na.textContent = 'No data';
@@ -1041,8 +1087,9 @@ function buildOtherSheet(pid, pState, gs) {
     }
 
     const body = document.createElement('div');
-    body.className = 'gb-other-sheet-body';
+    body.className = 'gb-mat-body';
 
+    // Compact stats row
     const stats = document.createElement('div');
     stats.className = 'gb-other-stats';
     stats.innerHTML = `
@@ -1051,77 +1098,80 @@ function buildOtherSheet(pid, pState, gs) {
         <span>Karaoke: <strong>${pState.karaoke_cards_claimed||0}/3</strong></span>
         <span>Cards: <strong>${(pState.cards||[]).length}</strong></span>
     `;
-    const bladderContents = pState.bladder || [];
-    if (bladderContents.length > 0) {
-        const bladderRow = document.createElement('div');
-        bladderRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;';
-        bladderContents.forEach(ing => {
-            const b = makeIngredientBadge(ing);
-            bladderRow.appendChild(b);
-        });
-        stats.appendChild(bladderRow);
-    }
     body.appendChild(stats);
 
-    // Special ingredients on mat
-    const specials = pState.special_ingredients || [];
-    const specialRow = document.createElement('div');
-    specialRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;align-items:center;';
-    const specialLabel = document.createElement('span');
-    specialLabel.style.cssText = 'font-size:0.72em;color:#6b3a0f;margin-right:2px';
-    specialLabel.textContent = 'Specials:';
-    specialRow.appendChild(specialLabel);
-    if (specials.length === 0) {
-        const empty = document.createElement('em');
-        empty.style.cssText = 'font-size:0.72em;color:#8a5c2e';
-        empty.textContent = 'none';
-        specialRow.appendChild(empty);
-    } else {
-        specials.forEach(s => {
-            const b = makeIngredientBadge(s);
-            b.style.fontSize = '0.65em';
-            b.style.padding = '1px 5px';
-            specialRow.appendChild(b);
-        });
-    }
-    body.appendChild(specialRow);
+    // Cups — same gb-cup format as my cups
+    const cupsTitle = document.createElement('div');
+    cupsTitle.className = 'gb-section-title';
+    cupsTitle.style.marginTop = '6px';
+    cupsTitle.textContent = 'Cups';
+    body.appendChild(cupsTitle);
 
-    // Compact cup display
-    const cupRow = document.createElement('div');
-    cupRow.className = 'gb-other-cup-row';
+    const cupsRow = document.createElement('div');
+    cupsRow.className = 'gb-cups';
     [pState.cups?.[0] || {}, pState.cups?.[1] || {}].forEach((cupObj, i) => {
         const cup = cupObj.ingredients || [];
         const hasDoubler = !!(cupObj.has_cup_doubler);
-        const cupDiv = document.createElement('div');
-        cupDiv.className = 'gb-other-cup-item';
-        cupDiv.dataset.cupIndex = i;
-        const cupBadge = document.createElement('span');
-        cupBadge.style.cssText = 'font-size:0.72em;color:#6b3a0f;margin-right:4px';
-        cupBadge.textContent = `Cup${i+1}: `;
-        if (hasDoubler) {
-            const dbl = document.createElement('span');
-            dbl.className = 'gb-cup-doubler-badge';
-            dbl.title = 'Cup Doubler active — non-cocktail drinks score ×2';
-            dbl.textContent = '×2';
-            cupBadge.appendChild(dbl);
-        }
-        cupDiv.appendChild(cupBadge);
-        if (cup.length === 0) {
-            const e = document.createElement('em');
-            e.style.cssText = 'font-size:0.72em;color:#8a5c2e';
-            e.textContent = 'empty';
-            cupDiv.appendChild(e);
-        } else {
-            cup.forEach(ing => {
-                const b = makeIngredientBadge(ing);
-                cupDiv.appendChild(b);
-            });
-        }
-        cupRow.appendChild(cupDiv);
-    });
-    body.appendChild(cupRow);
-    div.appendChild(body);
+        const cupEl = document.createElement('div');
+        cupEl.className = 'gb-cup';
+        cupEl.dataset.cupIndex = i;
 
+        const title = document.createElement('div');
+        title.className = 'gb-cup-title';
+        title.innerHTML = `🥂 <span>Cup ${i + 1}</span>`;
+        if (hasDoubler) {
+            const badge = document.createElement('span');
+            badge.className = 'gb-cup-doubler-badge';
+            badge.title = 'Cup Doubler — ×2 non-cocktail pts';
+            badge.textContent = '×2';
+            title.appendChild(badge);
+        }
+        cupEl.appendChild(title);
+
+        const ingArea = document.createElement('div');
+        ingArea.className = 'gb-cup-ingredients';
+        if (cup.length === 0) {
+            const hint = document.createElement('span');
+            hint.className = 'gb-cup-empty-hint';
+            hint.textContent = 'Empty';
+            ingArea.appendChild(hint);
+        } else {
+            cup.forEach(ing => ingArea.appendChild(makeIngredientBadge(ing)));
+        }
+        cupEl.appendChild(ingArea);
+        cupsRow.appendChild(cupEl);
+    });
+    body.appendChild(cupsRow);
+
+    // Bladder tokens
+    const bladderContents = pState.bladder || [];
+    if (bladderContents.length > 0) {
+        const bladderTitle = document.createElement('div');
+        bladderTitle.className = 'gb-section-title';
+        bladderTitle.style.marginTop = '6px';
+        bladderTitle.textContent = `Bladder (${bladderContents.length}/${pState.bladder_capacity||8})`;
+        body.appendChild(bladderTitle);
+        const bladderRow = document.createElement('div');
+        bladderRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;';
+        bladderContents.forEach(ing => bladderRow.appendChild(makeIngredientBadge(ing)));
+        body.appendChild(bladderRow);
+    }
+
+    // Specials
+    const specials = pState.special_ingredients || [];
+    if (specials.length > 0) {
+        const specialTitle = document.createElement('div');
+        specialTitle.className = 'gb-section-title';
+        specialTitle.style.marginTop = '6px';
+        specialTitle.textContent = 'Specials on Mat';
+        body.appendChild(specialTitle);
+        const specialRow = document.createElement('div');
+        specialRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;';
+        specials.forEach(s => specialRow.appendChild(makeIngredientBadge(s)));
+        body.appendChild(specialRow);
+    }
+
+    div.appendChild(body);
     return div;
 }
 
