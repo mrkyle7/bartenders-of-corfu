@@ -542,7 +542,6 @@ function renderBoard(game, gs, isReplay) {
     const rowsEl = el('gbCardRows');
     rowsEl.innerHTML = '';
     const cardRows = gs.card_rows || [];
-    const myState  = (_me && gs.player_states) ? gs.player_states[_me.id] : null;
     const bladder  = myState ? (myState.bladder || []) : [];
 
     cardRows.forEach(row => {
