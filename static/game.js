@@ -101,6 +101,15 @@ function makeCostBadge(costItem) {
 
 function el(id) { return document.getElementById(id); }
 
+function closeAllCupOverlays() {
+    document.querySelectorAll('.gb-cup-action-overlay').forEach(o => o.classList.add('hidden'));
+}
+
+// Close cup overlays when clicking outside a cup
+document.addEventListener('click', e => {
+    if (!e.target.closest('.gb-cup-interactive')) closeAllCupOverlays();
+});
+
 function showError(msg) {
     const bar = el('gbErrorBar');
     bar.textContent = msg;
@@ -443,9 +452,54 @@ function schedulePollLobby() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Bag visual (SVG drawstring bag)
+// ─────────────────────────────────────────────────────────────
+function renderBagVisual(bagCount, isMyTurn, myState, gs) {
+    const existing = el('gbBagVisual');
+    if (existing) existing.remove();
+
+    const wrap = document.createElement('div');
+    wrap.id = 'gbBagVisual';
+    wrap.className = 'gb-bag-visual' + (isMyTurn ? ' interactive' : '');
+    if (isMyTurn) {
+        wrap.setAttribute('role', 'button');
+        wrap.setAttribute('tabindex', '0');
+        wrap.title = 'Click to draw from bag';
+        wrap.onclick = () => openTakeModal(myState, gs);
+        wrap.onkeydown = e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTakeModal(myState, gs); }
+        };
+    }
+    wrap.innerHTML = `
+        <svg class="gb-bag-svg" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M15 36 Q7 36 6 47 L10 76 Q10 82 17 82 L63 82 Q70 82 70 76 L74 47 Q73 36 65 36 Z"
+                  fill="#7a3810" stroke="#4a1e06" stroke-width="1.5"/>
+            <path d="M14 37 Q7 37 6.5 47 L10.5 76 Q10.5 81 17 81 L63 81 Q69.5 81 69.5 76 L73.5 47 Q73 37 66 37 Z"
+                  fill="none" stroke="rgba(212,160,23,0.25)" stroke-width="1" stroke-dasharray="5,5"/>
+            <rect x="25" y="19" width="30" height="19" rx="5" fill="#6a2f0e" stroke="#4a1e06" stroke-width="1.5"/>
+            <path d="M27 30 Q40 25 53 30" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M32 26 Q27 16 25 21" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M48 26 Q53 16 55 21" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="40" cy="25" r="3.5" fill="#d4a060"/>
+            <path d="M21 47 Q20 62 22 74" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="5" stroke-linecap="round"/>
+            <path d="M32 42 Q30 55 31 70" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <div class="gb-bag-count-badge">${bagCount}</div>
+        ${isMyTurn ? '<div class="gb-bag-hint">draw</div>' : ''}
+    `;
+
+    // Insert before gbBagCount
+    const bagCountEl = el('gbBagCount');
+    bagCountEl.parentNode.insertBefore(wrap, bagCountEl);
+}
+
+// ─────────────────────────────────────────────────────────────
 // Board panel (open display + card rows)
 // ─────────────────────────────────────────────────────────────
 function renderBoard(game, gs, isReplay) {
+    const isMyTurn = !isReplay && _me && gs.player_turn === _me.id && game.status === 'STARTED';
+    const myState  = (_me && gs.player_states) ? gs.player_states[_me.id] : null;
+
     // Open display
     const dispEl = el('gbOpenDisplay');
     dispEl.innerHTML = '';
@@ -453,22 +507,32 @@ function renderBoard(game, gs, isReplay) {
     if (display.length === 0) {
         const empty = document.createElement('em');
         empty.textContent = 'Empty';
-        empty.style.fontSize = '0.8em';
-        empty.style.color = '#8a5c2e';
+        empty.style.fontSize = '0.9em';
+        empty.style.color = '#c8a870';
         dispEl.appendChild(empty);
     } else {
-        display.forEach(ing => {
+        display.forEach((ing, idx) => {
             const badge = makeIngredientBadge(ing);
-            badge.setAttribute('role', 'listitem');
+            badge.setAttribute('role', isMyTurn ? 'button' : 'listitem');
             badge.dataset.ingredient = ing;
+            badge.dataset.idx = idx;
+            if (isMyTurn) {
+                badge.classList.add('gb-display-takeable');
+                badge.setAttribute('tabindex', '0');
+                badge.title = `Take ${ingredientLabel(ing)}`;
+                badge.onclick = () => openTakeModal(myState, gs);
+                badge.onkeydown = e => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTakeModal(myState, gs); }
+                };
+            }
             dispEl.appendChild(badge);
         });
     }
 
-    // Bag count
+    // Bag visual + count
     const bagContents = gs.bag_contents || [];
-    el('gbBagCount').textContent =
-        `Bag: ${bagContents.length} ingredient${bagContents.length !== 1 ? 's' : ''} remaining  |  Deck: ${gs.deck_size ?? '?'} cards`;
+    renderBagVisual(bagContents.length, isMyTurn, myState, gs);
+    el('gbBagCount').textContent = `Deck: ${gs.deck_size ?? '?'} cards`;
 
     // Card rows
     const rowsEl = el('gbCardRows');
@@ -778,24 +842,50 @@ function renderMyCups(myState, isMyTurn, game, gs) {
         cupEl.appendChild(ingArea);
 
         if (isMyTurn && contents.length > 0) {
-            const actions = document.createElement('div');
-            actions.className = 'gb-cup-actions';
+            cupEl.classList.add('gb-cup-interactive');
+            cupEl.setAttribute('role', 'button');
+            cupEl.setAttribute('tabindex', '0');
+            cupEl.title = 'Click to sell or drink';
 
-            const sellBtn = document.createElement('button');
-            sellBtn.className = 'gb-cup-btn sell';
-            sellBtn.textContent = 'Sell';
-            sellBtn.setAttribute('aria-label', `Sell cup ${index + 1}`);
-            sellBtn.onclick = () => openSellModal(index, contents, myState);
-            actions.appendChild(sellBtn);
+            const overlay = document.createElement('div');
+            overlay.className = 'gb-cup-action-overlay hidden';
+            overlay.setAttribute('aria-label', `Actions for cup ${index + 1}`);
 
-            const drinkBtn = document.createElement('button');
-            drinkBtn.className = 'gb-cup-btn drink';
-            drinkBtn.textContent = 'Drink';
-            drinkBtn.setAttribute('aria-label', `Drink contents of cup ${index + 1}`);
-            drinkBtn.onclick = () => openDrinkModal(index, contents);
-            actions.appendChild(drinkBtn);
+            const sellTile = document.createElement('div');
+            sellTile.className = 'gb-cup-action-tile sell';
+            sellTile.setAttribute('role', 'button');
+            sellTile.setAttribute('tabindex', '0');
+            sellTile.setAttribute('aria-label', `Sell cup ${index + 1}`);
+            sellTile.innerHTML = `<span class="gb-cup-action-icon">💰</span><span class="gb-cup-action-label">Sell</span>`;
+            sellTile.onclick = e => { e.stopPropagation(); closeAllCupOverlays(); openSellModal(index, contents, myState); };
+            sellTile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); closeAllCupOverlays(); openSellModal(index, contents, myState); } };
+            overlay.appendChild(sellTile);
 
-            cupEl.appendChild(actions);
+            const drinkTile = document.createElement('div');
+            drinkTile.className = 'gb-cup-action-tile drink';
+            drinkTile.setAttribute('role', 'button');
+            drinkTile.setAttribute('tabindex', '0');
+            drinkTile.setAttribute('aria-label', `Drink cup ${index + 1}`);
+            drinkTile.innerHTML = `<span class="gb-cup-action-icon">🍺</span><span class="gb-cup-action-label">Drink</span>`;
+            drinkTile.onclick = e => { e.stopPropagation(); closeAllCupOverlays(); openDrinkModal(index, contents); };
+            drinkTile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); closeAllCupOverlays(); openDrinkModal(index, contents); } };
+            overlay.appendChild(drinkTile);
+
+            cupEl.appendChild(overlay);
+
+            cupEl.onclick = e => {
+                const wasOpen = !overlay.classList.contains('hidden');
+                closeAllCupOverlays();
+                if (!wasOpen) overlay.classList.remove('hidden');
+            };
+            cupEl.onkeydown = e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    const wasOpen = !overlay.classList.contains('hidden');
+                    closeAllCupOverlays();
+                    if (!wasOpen) overlay.classList.remove('hidden');
+                }
+            };
         }
 
         cupsEl.appendChild(cupEl);
@@ -803,17 +893,22 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 }
 
 function renderActionButtons(isMyTurn, myState, game, gs) {
-    const takeBtn = el('gbBtnTakeIngredients');
-    const weeBtn  = el('gbBtnWee');
+    // Render the wee tile in the dedicated container
+    const weeContainer = el('gbWeeTile');
+    if (!weeContainer) return;
+    weeContainer.innerHTML = '';
 
-    if (!takeBtn || !weeBtn) return;
-
-    takeBtn.disabled = !isMyTurn;
-    weeBtn.disabled  = !isMyTurn;
-
-    // Rebind handlers cleanly
-    takeBtn.onclick = isMyTurn ? () => openTakeModal(myState, gs) : null;
-    weeBtn.onclick  = isMyTurn ? () => doWee() : null;
+    if (isMyTurn) {
+        const tile = document.createElement('div');
+        tile.className = 'gb-wee-tile';
+        tile.setAttribute('role', 'button');
+        tile.setAttribute('tabindex', '0');
+        tile.setAttribute('aria-label', 'Go for a wee — empties bladder, sobers up 1 level');
+        tile.innerHTML = `<span class="gb-wee-icon">🚽</span><span class="gb-wee-label">Go for a Wee</span>`;
+        tile.onclick = () => doWee(tile);
+        tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
+        weeContainer.appendChild(tile);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1417,9 +1512,8 @@ async function gameAction(action, body = null) {
     return resp;
 }
 
-async function doWee() {
-    const btn = el('gbBtnWee');
-    setButtonBusy(btn, true, 'Going…');
+async function doWee(tile) {
+    if (tile) { tile.style.pointerEvents = 'none'; tile.style.opacity = '0.6'; }
     clearError();
     try {
         const resp = await gameAction('go-for-a-wee');
@@ -1433,7 +1527,7 @@ async function doWee() {
     } catch (e) {
         if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
-        setButtonBusy(btn, false);
+        if (tile) { tile.style.pointerEvents = ''; tile.style.opacity = ''; }
     }
 }
 
@@ -2080,9 +2174,9 @@ function closeModal(id) {
         document.removeEventListener('keydown', overlay._escHandler);
         overlay._escHandler = null;
     }
-    // Return focus to take button
-    const focusReturn = el('gbBtnTakeIngredients');
-    if (focusReturn && !focusReturn.disabled) focusReturn.focus();
+    // Return focus to bag visual if available
+    const focusReturn = el('gbBagVisual');
+    if (focusReturn) focusReturn.focus();
 }
 
 // ─────────────────────────────────────────────────────────────
