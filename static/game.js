@@ -43,9 +43,26 @@ const INGREDIENT_LABELS = {
     SUGAR:'Sugar', VERMOUTH:'Vermouth',
 };
 
+// Emoji icons for ingredients — quick visual recognition (BGA-style)
+const INGREDIENT_ICONS = {
+    WHISKEY:'🥃', WHISKY:'🥃',
+    RUM:'🍾', VODKA:'🔮', GIN:'🌿', TEQUILA:'🌵',
+    COLA:'🥤', SODA:'💧', SODA_WATER:'💧',
+    TONIC:'💧', TONIC_WATER:'💧',
+    CRANBERRY:'🫐',
+    BITTERS:'✨', COINTREAU:'🍊', LEMON:'🍋',
+    SUGAR:'🍬', VERMOUTH:'🌹',
+    SPECIAL:'✨',
+};
+
 function ingredientLabel(name) {
     if (!name) return '?';
     return INGREDIENT_LABELS[name.toUpperCase()] || name;
+}
+
+function ingredientIcon(name) {
+    if (!name) return '';
+    return INGREDIENT_ICONS[name.toUpperCase()] || '';
 }
 
 function ingredientKind(name) {
@@ -56,12 +73,15 @@ function ingredientKind(name) {
     return 'special';
 }
 
-/** Build a coloured ingredient pill element */
+/** Build a coloured ingredient token element (BGA-style raised token) */
 function makeIngredientBadge(name) {
     const span = document.createElement('span');
     span.className = `gb-ingredient ${ingredientKind(name)}`;
-    span.textContent = ingredientLabel(name);
-    span.setAttribute('aria-label', ingredientLabel(name));
+    const icon = ingredientIcon(name);
+    const label = ingredientLabel(name);
+    span.textContent = icon ? `${icon} ${label}` : label;
+    span.setAttribute('aria-label', label);
+    span.title = label;
     return span;
 }
 
@@ -531,9 +551,10 @@ function buildCardElement(card, bladder, canClaim, gs) {
         cardEl.appendChild(badge);
     }
 
+    // Card label — karaoke or "Ability Card"
     const idEl = document.createElement('div');
     idEl.className = 'gb-card-id';
-    idEl.textContent = card.id ? card.id.slice(0, 8) : '—';
+    idEl.textContent = card.is_karaoke ? '🎤 Karaoke' : '⭐ Ability';
     cardEl.appendChild(idEl);
 
     if (cost.length > 0) {
@@ -564,11 +585,34 @@ function canAffordCard(cost, bladder) {
 // ─────────────────────────────────────────────────────────────
 function renderMySheet(game, gs, myState, isReplay) {
     const isMyTurn = _me && gs.player_turn === _me.id && game.status === 'STARTED';
+    const gameEnded = game.status === 'ENDED';
 
-    // Name
+    // BGA-style player strip
     const nameEl = el('gbMyName');
-    nameEl.textContent = (_me && _me.username) ? _me.username : 'Me';
-    nameEl.className = 'gb-sheet-name' + (isMyTurn ? ' active-turn' : '');
+    nameEl.innerHTML = '';
+    const strip = document.createElement('div');
+    const stripClass = gameEnded ? 'game-ended' : (isMyTurn ? 'my-turn' : 'waiting');
+    strip.className = `gb-player-strip ${stripClass}`;
+    strip.setAttribute('aria-live', 'polite');
+
+    const stripName = document.createElement('span');
+    stripName.className = 'gb-player-strip-name';
+    stripName.textContent = (_me && _me.username) ? _me.username : 'Me';
+    strip.appendChild(stripName);
+
+    if (isMyTurn && !gameEnded) {
+        const tag = document.createElement('span');
+        tag.className = 'gb-player-strip-turn-tag';
+        tag.textContent = '▶ YOUR TURN';
+        strip.appendChild(tag);
+    }
+
+    const score = document.createElement('span');
+    score.className = 'gb-player-strip-score';
+    score.textContent = `${myState.points || 0} / 40 pts`;
+    strip.appendChild(score);
+
+    nameEl.appendChild(strip);
 
     // Stats
     renderMyStats(myState, gs);
@@ -718,7 +762,7 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 
         const title = document.createElement('div');
         title.className = 'gb-cup-title';
-        title.textContent = `Cup ${index + 1}`;
+        title.innerHTML = `🥂 <span>Cup ${index + 1}</span>`;
         cupEl.appendChild(title);
 
         const ingArea = document.createElement('div');
@@ -801,26 +845,52 @@ function buildOtherSheet(pid, pState, gs) {
     div.dataset.playerId = pid;
 
     const isActive = gs.player_turn === pid;
-    const nameEl = document.createElement('div');
-    nameEl.className = 'gb-other-sheet-name' + (isActive ? ' active-turn' : '');
-    nameEl.textContent = playerName(pid);
-    if (isActive) nameEl.setAttribute('aria-label', `${playerName(pid)} — current turn`);
-    div.appendChild(nameEl);
+
+    // BGA-style player strip
+    const strip = document.createElement('div');
+    strip.className = 'gb-other-player-strip' + (isActive ? ' active-turn' : '');
+    if (isActive) strip.setAttribute('aria-label', `${playerName(pid)} — current turn`);
+
+    const stripName = document.createElement('span');
+    stripName.className = 'gb-other-player-strip-name';
+    stripName.textContent = playerName(pid);
+    strip.appendChild(stripName);
+
+    if (isActive) {
+        const tag = document.createElement('span');
+        tag.className = 'gb-player-strip-turn-tag';
+        tag.textContent = '▶ TURN';
+        strip.appendChild(tag);
+    }
+
+    const scoreEl = document.createElement('span');
+    scoreEl.className = 'gb-other-player-strip-score';
+    scoreEl.textContent = `${pState ? (pState.points || 0) : '?'} pts`;
+    strip.appendChild(scoreEl);
+
+    div.appendChild(strip);
 
     if (!pState) {
+        const body = document.createElement('div');
+        body.className = 'gb-other-sheet-body';
         const na = document.createElement('em');
         na.style.fontSize = '0.75em';
         na.textContent = 'No data';
-        div.appendChild(na);
+        body.appendChild(na);
+        div.appendChild(body);
         return div;
     }
+
+    const body = document.createElement('div');
+    body.className = 'gb-other-sheet-body';
 
     const stats = document.createElement('div');
     stats.className = 'gb-other-stats';
     stats.innerHTML = `
-        <span>Pts: <strong>${pState.points || 0}/40</strong></span>
         <span>Drunk: <strong>${pState.drunk_level || 0}/5</strong></span>
         <span>Bladder: <strong>${(pState.bladder||[]).length}/${pState.bladder_capacity||8}</strong></span>
+        <span>Karaoke: <strong>${pState.karaoke_cards_claimed||0}/3</strong></span>
+        <span>Cards: <strong>${(pState.cards||[]).length}</strong></span>
     `;
     const bladderContents = pState.bladder || [];
     if (bladderContents.length > 0) {
@@ -828,21 +898,11 @@ function buildOtherSheet(pid, pState, gs) {
         bladderRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;';
         bladderContents.forEach(ing => {
             const b = makeIngredientBadge(ing);
-            b.style.fontSize = '0.65em';
-            b.style.padding = '1px 5px';
             bladderRow.appendChild(b);
         });
         stats.appendChild(bladderRow);
     }
-    [
-        `Karaoke: <strong>${pState.karaoke_cards_claimed||0}/3</strong>`,
-        `Cards: <strong>${(pState.cards||[]).length}</strong>`,
-    ].forEach(html => {
-        const s = document.createElement('span');
-        s.innerHTML = html;
-        stats.appendChild(s);
-    });
-    div.appendChild(stats);
+    body.appendChild(stats);
 
     // Special ingredients on mat
     const specials = pState.special_ingredients || [];
@@ -865,7 +925,7 @@ function buildOtherSheet(pid, pState, gs) {
             specialRow.appendChild(b);
         });
     }
-    stats.appendChild(specialRow);
+    body.appendChild(specialRow);
 
     // Compact cup display
     const cupRow = document.createElement('div');
@@ -886,14 +946,13 @@ function buildOtherSheet(pid, pState, gs) {
         } else {
             cup.forEach(ing => {
                 const b = makeIngredientBadge(ing);
-                b.style.fontSize = '0.65em';
-                b.style.padding = '1px 5px';
                 cupDiv.appendChild(b);
             });
         }
         cupRow.appendChild(cupDiv);
     });
-    div.appendChild(cupRow);
+    body.appendChild(cupRow);
+    div.appendChild(body);
 
     return div;
 }
