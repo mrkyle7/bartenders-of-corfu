@@ -504,14 +504,22 @@ input {
 }
 
 .gb-player-strip-score {
-    font-size: 1.1em;
+    font-size: 1.15em;
     font-weight: bold;
-    background: rgba(0,0,0,0.2);
-    padding: 2px 8px;
-    border-radius: 10px;
+    background: rgba(0,0,0,0.22);
+    padding: 3px 10px;
+    border-radius: 12px;
     white-space: nowrap;
-    min-width: 40px;
+    min-width: 52px;
     text-align: center;
+    letter-spacing: 0.01em;
+}
+
+.gb-score-max {
+    font-size: 0.65em;
+    font-weight: normal;
+    opacity: 0.7;
+    margin-left: 1px;
 }
 
 .gb-player-strip-turn-tag {
@@ -571,11 +579,11 @@ input {
 }
 
 .gb-other-player-strip-score {
-    font-size: 0.88em;
+    font-size: 0.95em;
     font-weight: bold;
-    background: rgba(0,0,0,0.2);
-    padding: 1px 7px;
-    border-radius: 8px;
+    background: rgba(0,0,0,0.22);
+    padding: 2px 8px;
+    border-radius: 10px;
     white-space: nowrap;
 }
 
@@ -665,13 +673,13 @@ input {
 .gb-open-display {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 12px;
     align-items: center;
     margin-bottom: 6px;
-    padding: 8px;
-    background: rgba(0,0,0,0.25);
-    border-radius: 8px;
-    min-height: 44px;
+    padding: 12px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 10px;
+    min-height: 72px;
     border: 1px solid rgba(212,160,23,0.2);
 }
 
@@ -681,11 +689,34 @@ input {
     margin-bottom: 10px;
 }
 
-/* Ingredient tokens in the open display are slightly larger */
+/* Tokens in the open display are the same size as base tokens */
 .gb-open-display .gb-ingredient {
-    font-size: 0.82em;
-    min-width: 32px;
-    height: 32px;
+    width: 52px;
+    height: 52px;
+}
+
+.gb-open-display .gb-ingredient-icon {
+    font-size: 22px;
+}
+
+/* Stack wrapper: token + count badge below */
+.gb-display-token-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.gb-display-count {
+    font-size: 0.72em;
+    font-weight: bold;
+    color: #d4a017;
+    background: rgba(0,0,0,0.5);
+    border-radius: 8px;
+    padding: 1px 5px;
+    white-space: nowrap;
+    min-width: 28px;
+    text-align: center;
 }
 
 /* ---------- Card rows ---------- */
@@ -712,9 +743,9 @@ input {
 
 .gb-card {
     background: linear-gradient(160deg, #fffdf8, #f5e8c8);
-    border: 1px solid rgba(180,130,40,0.5);
+    border: 1.5px solid rgba(180,130,40,0.5);
     border-radius: 10px;
-    padding: 10px 10px 8px;
+    padding: 0 0 8px;
     min-width: 90px;
     max-width: 130px;
     flex: 1 1 90px;
@@ -723,6 +754,35 @@ input {
     box-shadow: 0 3px 6px rgba(74,44,14,0.2), 0 1px 2px rgba(74,44,14,0.15), inset 0 1px 0 rgba(255,255,255,0.7);
     transition: box-shadow 0.15s, transform 0.15s;
     position: relative;
+    overflow: hidden;
+}
+
+/* Card art header — prominent visual zone like BGA cards */
+.gb-card-art {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 52px;
+    font-size: 2.2em;
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+.gb-card-art.art-ability {
+    background: linear-gradient(160deg, #fffbe6, #f5d98c);
+    border-bottom: 1.5px solid rgba(180,130,40,0.4);
+}
+
+.gb-card-art.art-karaoke {
+    background: linear-gradient(160deg, #f5e8ff, #d8b4fe);
+    border-bottom: 1.5px solid rgba(147,51,234,0.3);
+}
+
+/* Slide the id/cost content into padded container below art */
+.gb-card-body {
+    padding: 0 8px 2px;
 }
 
 .gb-card.claimable {
@@ -791,26 +851,52 @@ input {
 .gb-refresh-row-btn:hover { background: #6b3a0f; transform: none; }
 .gb-refresh-row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ---------- Ingredient tokens (BGA-style physical tokens) ---------- */
+/* ---------- Ingredient tokens (BGA-style physical chip tokens) ---------- */
 .gb-ingredient {
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 28px;
-    padding: 0 8px;
-    border-radius: 14px;
-    font-size: 0.72em;
+    width: 48px;
+    height: 48px;
+    padding: 2px;
+    border-radius: 50%;
     font-weight: bold;
-    white-space: nowrap;
     user-select: none;
     line-height: 1;
-    /* Physical token depth */
-    box-shadow: 0 2px 0 rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.25);
-    border: 1px solid rgba(0,0,0,0.15);
+    text-align: center;
+    overflow: hidden;
+    /* Physical chip depth */
+    box-shadow:
+        0 4px 0 rgba(0,0,0,0.35),
+        0 5px 10px rgba(0,0,0,0.2),
+        inset 0 2px 0 rgba(255,255,255,0.4),
+        inset 0 0 0 3px rgba(0,0,0,0.08);
+    border: 2px solid rgba(0,0,0,0.12);
     transition: transform 0.1s, box-shadow 0.1s;
-    letter-spacing: 0.01em;
     cursor: default;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.gb-ingredient-icon {
+    font-size: 20px;
+    line-height: 1;
+    display: block;
+}
+
+.gb-ingredient-label {
+    font-size: 8px;
+    display: block;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 44px;
+    padding: 0 2px;
+    font-weight: bold;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
 }
 
 /* spirit = amber/gold token */
@@ -987,9 +1073,11 @@ input {
 .gb-cup-ingredients {
     display: flex;
     flex-wrap: wrap;
-    gap: 3px;
-    min-height: 22px;
+    gap: 5px;
+    min-height: 54px;
     margin-bottom: 6px;
+    align-items: center;
+    align-content: flex-start;
 }
 
 .gb-cup-empty-hint {
@@ -2028,10 +2116,16 @@ input {
 
     /* Ingredient tokens smaller on phone */
     .gb-ingredient {
-        min-width: 22px;
-        height: 22px;
-        font-size: 0.66em;
-        padding: 0 6px;
+        width: 38px;
+        height: 38px;
+    }
+
+    .gb-ingredient-icon {
+        font-size: 16px;
+    }
+
+    .gb-ingredient-label {
+        font-size: 7px;
     }
 
     /* Card cost tokens smaller */

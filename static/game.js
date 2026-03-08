@@ -73,13 +73,32 @@ function ingredientKind(name) {
     return 'special';
 }
 
-/** Build a coloured ingredient token element (BGA-style raised token) */
+/** Build a coloured ingredient token element (BGA-style physical chip token) */
 function makeIngredientBadge(name) {
     const span = document.createElement('span');
     span.className = `gb-ingredient ${ingredientKind(name)}`;
     const icon = ingredientIcon(name);
     const label = ingredientLabel(name);
-    span.textContent = icon ? `${icon} ${label}` : label;
+
+    if (icon) {
+        const iconEl = document.createElement('span');
+        iconEl.className = 'gb-ingredient-icon';
+        iconEl.textContent = icon;
+        iconEl.setAttribute('aria-hidden', 'true');
+        span.appendChild(iconEl);
+    }
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'gb-ingredient-label';
+    // Short labels for round token display
+    const SHORT_LABELS = {
+        'Soda Water': 'Soda', 'Tonic Water': 'Tonic',
+        'Cranberry': 'Cran', 'Cointreau': 'Coin',
+        'Vermouth': 'Verm', 'Whiskey': 'Whisk',
+    };
+    labelEl.textContent = SHORT_LABELS[label] || (label.length > 6 ? label.slice(0, 5) + '…' : label);
+    span.appendChild(labelEl);
+
     span.setAttribute('aria-label', label);
     span.title = label;
     return span;
@@ -446,7 +465,7 @@ function schedulePollLobby() {
 // Board panel (open display + card rows)
 // ─────────────────────────────────────────────────────────────
 function renderBoard(game, gs, isReplay) {
-    // Open display
+    // Open display — group same-type ingredients with a count badge
     const dispEl = el('gbOpenDisplay');
     dispEl.innerHTML = '';
     const display = gs.open_display || [];
@@ -457,11 +476,31 @@ function renderBoard(game, gs, isReplay) {
         empty.style.color = '#8a5c2e';
         dispEl.appendChild(empty);
     } else {
+        // Preserve order of first appearance while counting duplicates
+        const seen = [];
+        const counts = {};
         display.forEach(ing => {
+            const key = ing.toUpperCase();
+            if (!counts[key]) { seen.push(ing); counts[key] = 0; }
+            counts[key]++;
+        });
+        seen.forEach(ing => {
+            const count = counts[ing.toUpperCase()];
+            const wrapper = document.createElement('div');
+            wrapper.className = 'gb-display-token-stack';
+            wrapper.setAttribute('role', 'listitem');
+            wrapper.dataset.ingredient = ing;
+
             const badge = makeIngredientBadge(ing);
-            badge.setAttribute('role', 'listitem');
-            badge.dataset.ingredient = ing;
-            dispEl.appendChild(badge);
+            wrapper.appendChild(badge);
+
+            if (count > 1) {
+                const countEl = document.createElement('span');
+                countEl.className = 'gb-display-count';
+                countEl.textContent = `×${count}`;
+                wrapper.appendChild(countEl);
+            }
+            dispEl.appendChild(wrapper);
         });
     }
 
@@ -544,6 +583,13 @@ function buildCardElement(card, bladder, canClaim, gs) {
         cardEl.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doClaimCard(card.id, cardEl); } };
     }
 
+    // BGA-style card art header
+    const artEl = document.createElement('div');
+    artEl.className = 'gb-card-art ' + (card.is_karaoke ? 'art-karaoke' : 'art-ability');
+    artEl.setAttribute('aria-hidden', 'true');
+    artEl.textContent = card.is_karaoke ? '🎤' : '⭐';
+    cardEl.appendChild(artEl);
+
     if (card.is_karaoke) {
         const badge = document.createElement('span');
         badge.className = 'gb-card-karaoke-badge';
@@ -551,18 +597,22 @@ function buildCardElement(card, bladder, canClaim, gs) {
         cardEl.appendChild(badge);
     }
 
-    // Card label — karaoke or "Ability Card"
+    // Card body (label + cost)
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'gb-card-body';
+
     const idEl = document.createElement('div');
     idEl.className = 'gb-card-id';
-    idEl.textContent = card.is_karaoke ? '🎤 Karaoke' : '⭐ Ability';
-    cardEl.appendChild(idEl);
+    idEl.textContent = card.is_karaoke ? 'Karaoke' : 'Ability';
+    bodyEl.appendChild(idEl);
 
     if (cost.length > 0) {
         const costEl = document.createElement('div');
         costEl.className = 'gb-card-cost';
         cost.forEach(c => costEl.appendChild(makeCostBadge(c)));
-        cardEl.appendChild(costEl);
+        bodyEl.appendChild(costEl);
     }
+    cardEl.appendChild(bodyEl);
 
     return cardEl;
 }
@@ -609,7 +659,7 @@ function renderMySheet(game, gs, myState, isReplay) {
 
     const score = document.createElement('span');
     score.className = 'gb-player-strip-score';
-    score.textContent = `${myState.points || 0} / 40 pts`;
+    score.innerHTML = `⭐ <strong>${myState.points || 0}</strong><span class="gb-score-max">/40</span>`;
     strip.appendChild(score);
 
     nameEl.appendChild(strip);
@@ -865,7 +915,8 @@ function buildOtherSheet(pid, pState, gs) {
 
     const scoreEl = document.createElement('span');
     scoreEl.className = 'gb-other-player-strip-score';
-    scoreEl.textContent = `${pState ? (pState.points || 0) : '?'} pts`;
+    const pts = pState ? (pState.points || 0) : '?';
+    scoreEl.innerHTML = `⭐ <strong>${pts}</strong><span class="gb-score-max">/40</span>`;
     strip.appendChild(scoreEl);
 
     div.appendChild(strip);
