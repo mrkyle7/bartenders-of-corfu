@@ -689,6 +689,8 @@ async def action_go_for_a_wee(game_id: str, request: Request):
 
 class ClaimCardRequest(BaseModel):
     card_id: str
+    cup_index: Optional[int] = None
+    spirit_type: Optional[str] = None
 
 
 @app.post("/v1/games/{game_id}/actions/claim-card")
@@ -697,7 +699,13 @@ async def action_claim_card(game_id: str, body: ClaimCardRequest, request: Reque
     if err:
         return err
     try:
-        new_state, payload = gameManager.claim_card(game, token_user.id, body.card_id)
+        new_state, payload = gameManager.claim_card(
+            game,
+            token_user.id,
+            body.card_id,
+            cup_index=body.cup_index,
+            spirit_type=body.spirit_type,
+        )
         logger.info("%s claimed card in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}

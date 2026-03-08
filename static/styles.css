@@ -1403,6 +1403,43 @@ input {
     display: inline-block;
 }
 
+.gb-modal-select-label {
+    display: block;
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #4a2c0e;
+    margin-bottom: 5px;
+}
+
+.gb-modal-select {
+    font-size: 0.95em;
+    padding: 6px 10px;
+    border: 1px solid #d4a017;
+    border-radius: 6px;
+    background: #fff8ef;
+    color: #4a2c0e;
+    width: 100%;
+    cursor: pointer;
+}
+
+.gb-modal-select:focus {
+    outline: 2px solid #d4a017;
+    outline-offset: 1px;
+}
+
+.gb-cup-doubler-badge {
+    display: inline-block;
+    background: #d4a017;
+    color: #fff;
+    font-size: 0.68em;
+    font-weight: bold;
+    padding: 1px 5px;
+    border-radius: 10px;
+    margin-left: 4px;
+    vertical-align: middle;
+    letter-spacing: 0.03em;
+}
+
 .gb-modal-actions {
     display: flex;
     gap: 8px;

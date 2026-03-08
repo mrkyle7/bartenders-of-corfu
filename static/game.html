@@ -317,6 +317,36 @@
         </div>
     </div>
 
+    <!-- ===== CUP DOUBLER MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbCupDoublerModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbCupDoublerModalTitle"
+         tabindex="-1" onclick="if(event.target===this)closeCupDoublerModal()">
+        <div class="gb-modal">
+            <button class="gb-modal-close" onclick="closeCupDoublerModal()" aria-label="Cancel">&#x2715;</button>
+            <div class="gb-modal-title" id="gbCupDoublerModalTitle">Claim Cup Doubler</div>
+            <div class="gb-modal-step-label">Choose a cup and the spirit type you're paying with.</div>
+            <div class="gb-modal-content" style="display:flex;flex-direction:column;gap:14px;margin-top:10px">
+                <div>
+                    <label class="gb-modal-select-label" for="gbCupDoublerCupSelect">Apply doubler to:</label>
+                    <select id="gbCupDoublerCupSelect" class="gb-modal-select">
+                        <option value="0">Cup 1</option>
+                        <option value="1">Cup 2</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="gb-modal-select-label" for="gbCupDoublerSpiritSelect">Pay with spirit (3 needed):</label>
+                    <select id="gbCupDoublerSpiritSelect" class="gb-modal-select"></select>
+                </div>
+            </div>
+            <div class="gb-modal-actions">
+                <button class="gb-modal-btn cancel" onclick="closeCupDoublerModal()">Cancel</button>
+                <button class="gb-modal-btn confirm" id="gbCupDoublerConfirmBtn"
+                        onclick="confirmCupDoubler()">Claim</button>
+            </div>
+            <div id="gbCupDoublerModalError" class="gb-error-bar" style="margin-top:8px"></div>
+        </div>
+    </div>
+
     <!-- ===== COCKTAIL MENU MODAL ===== -->
     <div class="gb-modal-overlay hidden" id="gbMenuModal"
          role="dialog" aria-modal="true" aria-labelledby="gbMenuModalTitle"

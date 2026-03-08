@@ -1,0 +1,281 @@
+-- cards.allium
+-- Card definitions, row setup, claiming, and discard mechanics for Bartenders of Corfu.
+--
+-- This file extends game.allium. It supersedes the following rules from that file:
+--   ClaimCard         — point rewards per card type; uses ReplaceCardSlot
+--   RefreshCardRow    — row 1 cannot be refreshed; removed cards go to discard
+--   ReplaceCard       — superseded by ReplaceCardSlot (deck → discard fallback)
+--   ApplyDrunkModifier — Refresher cards modify drunk calculation
+--   SellCup           — CupDoubler cards modify points calculation
+--
+-- Deck composition (16 cards total):
+--   5 × KaraokeCard   (one per spirit type)
+--   5 × StoreCard     (one per spirit type)
+--   4 × RefresherCard (one per mixer type)
+--   2 × CupDoublerCard (Bendy Straw, Cocktail Umbrella)
+
+use "./game.allium" as game
+
+-- ─── Card types ───────────────────────────────────────────────────────────────
+-- Supersedes the Card entity in game.allium.
+
+entity Card {
+    id: String
+    kind: Karaoke | Store | Refresher | CupDoubler
+}
+
+variant KaraokeCard : Card {
+    spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
+    name: String
+    -- cost: exactly 3 bladder spirits of this card's spirit_type
+    -- worth 5 points when claimed; counts toward win condition
+}
+
+variant StoreCard : Card {
+    spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
+    name: String
+    stored_spirits: List<game/Spirit>
+    -- cost: 1 bladder spirit of this card's spirit_type
+    -- worth 1 point when claimed
+    -- on claim: player can choose any number of spirits of spirit_type from bladder and move to this card
+    -- stored spirits may be spent when selling a cup or may be drunk at any time (would increade drunk level as normal)
+    -- stored spirits are consumed when spent (not reusable)
+    -- stored spirits are unaffected by GoForAWee
+}
+
+variant RefresherCard : Card {
+    mixer_type: COLA | SODA | TONIC | CRANBERRY
+    name: String
+    -- cost: 2 bladder mixers of mixer_type
+    -- worth 1 point when claimed
+    -- ongoing: each mixer of this type always contributes -1 to drunk_level,
+    --          even when spirits are consumed in the same action
+}
+
+variant CupDoublerCard : Card {
+    name: String
+    -- cost: 3 bladder spirits all of the same type (player chooses which type at claim time)
+    -- worth 2 points when claimed
+    -- on claim: player immediately assigns it to one of their cups; that cup scores
+    --           double points for all non-cocktail drinks for the rest of the game
+}
+
+-- ─── Ingredient requirements ─────────────────────────────────────────────────
+-- Extends game/IngredientRequirement.
+-- spirit_type / mixer_type are set when a specific subtype is required;
+-- when null, any ingredient of that kind is accepted.
+
+value IngredientRequirement {
+    kind: Spirit | Mixer | Special
+    spirit_type: (WHISKEY | RUM | VODKA | GIN | TEQUILA)?  -- null = any spirit accepted
+    mixer_type:  (COLA | SODA | TONIC | CRANBERRY)?        -- null = any mixer accepted
+    count: Integer
+}
+
+-- ─── Card catalogue ───────────────────────────────────────────────────────────
+
+default KaraokeCard sea_shanty      = { spirit_type: RUM,     name: "Sea Shanty" }
+default KaraokeCard cringey_crooner = { spirit_type: GIN,     name: "Cringey Crooner" }
+default KaraokeCard dazzling_duet   = { spirit_type: TEQUILA, name: "Dazzling Duet" }
+default KaraokeCard party_tune      = { spirit_type: VODKA,   name: "Party Tune" }
+default KaraokeCard ballad_master   = { spirit_type: WHISKEY, name: "Ballad Master" }
+
+default StoreCard rum_store     = { spirit_type: RUM,     name: "Rum Store",     stored_spirits: [] }
+default StoreCard gin_store     = { spirit_type: GIN,     name: "Gin Store",     stored_spirits: [] }
+default StoreCard tequila_store = { spirit_type: TEQUILA, name: "Tequila Store", stored_spirits: [] }
+default StoreCard vodka_store   = { spirit_type: VODKA,   name: "Vodka Store",   stored_spirits: [] }
+default StoreCard whisky_store  = { spirit_type: WHISKEY, name: "Whisky Store",  stored_spirits: [] }
+
+default RefresherCard cola_refresher      = { mixer_type: COLA,      name: "Cola Refresher" }
+default RefresherCard soda_refresher      = { mixer_type: SODA,      name: "Soda Refresher" }
+default RefresherCard tonic_refresher     = { mixer_type: TONIC,     name: "Tonic Refresher" }
+default RefresherCard cranberry_refresher = { mixer_type: CRANBERRY, name: "Cranberry Refresher" }
+
+default CupDoublerCard bendy_straw       = { name: "Bendy Straw" }
+default CupDoublerCard cocktail_umbrella = { name: "Cocktail Umbrella" }
+
+-- ─── Config ───────────────────────────────────────────────────────────────────
+
+config {
+    karaoke_card_points:    Integer = 5
+    store_card_points:      Integer = 1
+    refresher_card_points:  Integer = 1
+    cup_doubler_card_points: Integer = 2
+}
+
+-- ─── Cup amendment ────────────────────────────────────────────────────────────
+-- Adds has_cup_doubler to game/Cup. Set permanently when a CupDoublerCard is
+-- assigned to this cup at claim time.
+-- Amends game/SellCup: non-cocktail drinks from a flagged cup score double.
+
+amendment game/Cup {
+    has_cup_doubler: Boolean = false
+}
+
+rule SellCup {
+    -- Supersedes game/SellCup for the points calculation only.
+    when: SellCup(player, cup, declared_specials)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: cup.owner.player_id = player.player_id
+    requires: declared_specials ⊆ player.special_ingredients
+    requires: (cup, declared_specials) is a valid sellable drink
+    let base_points = drink_points(cup, declared_specials)
+    let is_cocktail = (cup, declared_specials) matches a named cocktail recipe
+    let points = base_points * 2 when cup.has_cup_doubler and not is_cocktail, else base_points
+    ensures: player.points = player.points + points
+    ensures: player.special_ingredients = player.special_ingredients - declared_specials
+    let sold_ingredients = cup.ingredients (before sale)
+    ensures: cup.ingredients = []
+    ensures: board.bag_contents = board.bag_contents + sold_ingredients + declared_specials
+    ensures: CheckVictory(player)
+    -- has_cup_doubler is NOT cleared after sale; the effect is permanent.
+}
+
+-- ─── Discard pile ─────────────────────────────────────────────────────────────
+
+entity DiscardPile {
+    board: game/BoardState
+    cards: List<Card>
+}
+
+-- ─── Setup ────────────────────────────────────────────────────────────────────
+-- 3 random karaoke cards are placed in row 1 (the top row).
+-- The remaining 13 cards (2 karaoke + 11 non-karaoke) are shuffled together;
+-- 3 are dealt to row 2, 3 to row 3, and the remaining 7 form the draw deck.
+
+rule SetupCardRows {
+    when: GameStarted()
+    let all_karaoke  = deck where kind = Karaoke          -- exactly 5 cards
+    let karaoke_row_cards = random 3 from all_karaoke
+    let remaining_13 = shuffle(deck - karaoke_row_cards)  -- 2 karaoke + 11 others
+    let row2_cards   = first 3 from remaining_13
+    let row3_cards   = next 3 from remaining_13 (after row2_cards)
+    ensures: game/CardRow.created(position: 1, cards: karaoke_row_cards)
+    ensures: game/CardRow.created(position: 2, cards: row2_cards)
+    ensures: game/CardRow.created(position: 3, cards: row3_cards)
+    ensures: deck = remaining_13 - row2_cards - row3_cards   -- 7 cards remain
+    ensures: DiscardPile.created(board: board, cards: [])
+}
+
+-- ─── Slot replacement ─────────────────────────────────────────────────────────
+-- Supersedes game/ReplaceCard.
+-- Draw from deck if cards remain; otherwise the slot stays empty permanently.
+-- Discarded cards are never reshuffled back into the deck.
+
+rule ReplaceCardSlot {
+    when: ReplaceCardSlot(board, row)
+    if deck.count > 0:
+        let replacement = first card from deck
+        ensures: deck = deck - replacement
+        ensures: row.cards = row.cards + replacement
+    -- If deck is empty, the slot remains empty.
+}
+
+-- ─── Available spirit count (helper) ─────────────────────────────────────────
+-- For any action that checks spirit costs, the player may draw from both their
+-- bladder and any StoreCard they hold for the matching spirit_type.
+-- Stored spirits are consumed when spent (removed from the card, not reusable).
+
+-- available_of(player, spirit_type) =
+--   bladder spirits of that type
+--   + stored_spirits on StoreCard in player.cards where spirit_type matches
+
+-- ─── Claiming a card (amended) ────────────────────────────────────────────────
+-- Supersedes game/ClaimCard.
+
+rule ClaimCard {
+    when: ClaimCard(player, card)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: card in any row of board.card_rows
+    requires card.kind = Karaoke:
+        available_of(player, card.spirit_type) >= 3
+    requires card.kind = Store:
+        player.bladder where spirit_type = card.spirit_type has count >= 1
+        -- must use bladder only; cannot spend from a same-type StoreCard to claim this
+    requires card.kind = Refresher:
+        player.bladder where mixer_type = card.mixer_type has count >= 2
+    requires card.kind = CupDoubler:
+        player.bladder has 3 or more spirits all of the same spirit_type
+        -- player declares spent_type at claim time
+    -- Costs are threshold checks only; no bladder ingredients are consumed on claim.
+    -- Apply per-type effects.
+    if card.kind = Karaoke:
+        ensures: player.points = player.points + config.karaoke_card_points
+        ensures: player.karaoke_cards_claimed = player.karaoke_cards_claimed + 1
+    if card.kind = Store:
+        -- Transfer ALL matching spirits from bladder to stored_spirits (the card effect, not cost)
+        let transferred = player.bladder where spirit_type = card.spirit_type
+        ensures: player.bladder = player.bladder - transferred
+        ensures: card.stored_spirits = transferred
+        ensures: player.points = player.points + config.store_card_points
+    if card.kind = Refresher:
+        ensures: player.points = player.points + config.refresher_card_points
+    if card.kind = CupDoubler:
+        -- cup is an additional parameter declared alongside the ClaimCard action
+        ensures: cup.has_cup_doubler = true
+        ensures: player.points = player.points + config.cup_doubler_card_points
+    ensures: player.cards = player.cards + [card]
+    ensures: card removed from its CardRow
+    ensures: ReplaceCardSlot(board, card's row)
+    ensures: CheckVictory(player)
+}
+
+-- ─── Refreshing a card row (amended) ──────────────────────────────────────────
+-- Supersedes game/RefreshCardRow.
+-- Row 1 (the top row) cannot be refreshed.
+-- Rows 2 and 3 can always be refreshed regardless of which card types they contain.
+-- All cards removed go to the discard pile (including any karaoke cards present).
+
+rule RefreshCardRow {
+    when: RefreshCardRow(player, row)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: player.drunk_level >= game/config.min_drunk_to_refresh
+    requires: row in board.card_rows
+    requires: row.position != 1    -- top row is never refreshable
+    let removed = row.cards
+    ensures: discard.cards = discard.cards + removed
+    ensures: row.cards = []
+    for _ in removed:
+        ensures: ReplaceCardSlot(board, row)
+}
+
+-- ─── Drunk calculation (amended) ─────────────────────────────────────────────
+-- Supersedes game/ApplyDrunkModifier.
+-- Refresher cards make their mixer type contribute -1 to drunk_level on every
+-- action, even when spirits are also consumed in the same action.
+
+rule ApplyDrunkModifier {
+    when: ApplyDrunkModifier(player, consumed: List<Ingredient>)
+    let spirits      = consumed where kind = Spirit
+    let refresher_mixer_types = { card.mixer_type for card in player.cards where kind = Refresher }
+    let hot_mixers   = consumed where kind = Mixer and mixer_type in refresher_mixer_types
+    let plain_mixers = consumed where kind = Mixer and mixer_type not in refresher_mixer_types
+    -- Spirits raise drunk level; hot_mixers always lower it (-1 each);
+    -- plain mixers lower it only when no spirits were consumed.
+    let delta = spirits.count - hot_mixers.count
+    if spirits.count = 0:
+        let delta = delta - plain_mixers.count
+    ensures: player.drunk_level = max(0, player.drunk_level + delta)
+    ensures: CheckElimination(player)
+}
+
+-- ─── Guarantees ───────────────────────────────────────────────────────────────
+
+guarantee: row 1 always contains exactly 3 karaoke cards at game start
+guarantee: row 1 is never passed to RefreshCardRow
+guarantee: rows 2 and 3 may always be refreshed regardless of which card types they contain
+guarantee: a karaoke card in row 2 or 3 is discarded (not returned to the karaoke row) when that row is refreshed
+guarantee: a karaoke card in row 2 or 3 may be claimed and counts toward the win condition
+guarantee: discarded cards are never reshuffled; the discard pile is a permanent graveyard
+guarantee: card costs are threshold checks only — no bladder ingredients are removed on claim
+guarantee: the Store card effect (transferring spirits to stored_spirits) is not a cost consumption
+guarantee: ClaimCard for a CupDoubler card requires a cup parameter; invalid without one
+guarantee: cup.has_cup_doubler is set at claim time and never cleared; persists through sell/refill cycles
+guarantee: the CupDoubler doubling applies only to non-cocktail scoring categories (3–5 in game.allium)
+guarantee: all cards removed from rows 2 or 3 (any kind) go to the discard pile
+guarantee: stored spirits on a StoreCard are unaffected by GoForAWee
+guarantee: stored spirits are consumed (removed from the card) when spent on an action
+guarantee: ReplaceCardSlot is called exactly once per vacated slot

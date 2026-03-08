@@ -25,6 +25,9 @@ let _takeDisplaySelected = []; // [{ingredient, source:'display', idx}]
 let _takeBagPending      = []; // [{ingredient, source:'pending'}] — server-confirmed draws
 let _sellCupIndex        = null;
 let _drinkCupIndex       = null;
+let _cupDoublerCard      = null;
+let _cupDoublerCardEl    = null;
+let _currentGs           = null;  // latest rendered game state (for modal use)
 
 // ─────────────────────────────────────────────────────────────
 // Constants / helpers
@@ -253,6 +256,7 @@ function schedulePoll(game) {
 // ─────────────────────────────────────────────────────────────
 function renderAll(game, replayState = null) {
     const gs = replayState || game.game_state || {};
+    _currentGs = gs;
     const isReplay = !!replayState;
 
     // Header
@@ -473,10 +477,10 @@ function renderBoard(game, gs, isReplay) {
         rowLabel.textContent = `Row ${row.position}`;
         rowLabelRow.appendChild(rowLabel);
 
-        // Refresh row button (needs drunk level >= 3)
+        // Refresh row button (needs drunk level >= 3; row 1 is karaoke row — never refreshable)
         const isMyTurn = _me && gs.player_turn === _me.id;
         const drunkLevel = myState ? (myState.drunk_level || 0) : 0;
-        if (!isReplay && isMyTurn && drunkLevel >= 3) {
+        if (!isReplay && isMyTurn && drunkLevel >= 3 && row.position !== 1) {
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'gb-refresh-row-btn';
             refreshBtn.textContent = 'Refresh Row';
@@ -509,54 +513,98 @@ function renderBoard(game, gs, isReplay) {
 }
 
 function buildCardElement(card, bladder, canClaim, gs) {
-    // Determine if the player can afford this card
-    const cost = card.cost || [];
-    const affordable = canClaim && canAffordCard(cost, bladder);
+    const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
+    const affordable = canClaim && canAffordCard(card, bladder, gs);
 
     const cardEl = document.createElement('div');
-    cardEl.className = 'gb-card' + (card.is_karaoke ? ' karaoke' : '') + (affordable ? ' claimable' : '');
+    cardEl.className = `gb-card ${cardType}` + (affordable ? ' claimable' : '');
     cardEl.setAttribute('role', affordable ? 'button' : 'article');
-    cardEl.setAttribute('aria-label',
-        `Card${card.is_karaoke ? ' (Karaoke)' : ''}. Cost: ${cost.map(c => `${c.count} ${c.kind}`).join(', ') || 'free'}`);
+    const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
+    const costDesc = _cardCostDesc(card);
+    cardEl.setAttribute('aria-label', `${card.name || typeLabel}. ${costDesc}`);
     if (affordable) {
         cardEl.setAttribute('tabindex', '0');
-        cardEl.onclick = () => doClaimCard(card.id, cardEl);
-        cardEl.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doClaimCard(card.id, cardEl); } };
+        cardEl.onclick = () => doClaimCard(card, cardEl);
+        cardEl.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doClaimCard(card, cardEl); } };
     }
 
-    if (card.is_karaoke) {
-        const badge = document.createElement('span');
-        badge.className = 'gb-card-karaoke-badge';
-        badge.textContent = 'Karaoke';
-        cardEl.appendChild(badge);
-    }
+    const badge = document.createElement('span');
+    badge.className = 'gb-card-type-badge';
+    badge.textContent = typeLabel;
+    cardEl.appendChild(badge);
 
-    const idEl = document.createElement('div');
-    idEl.className = 'gb-card-id';
-    idEl.textContent = card.id ? card.id.slice(0, 8) : '—';
-    cardEl.appendChild(idEl);
+    const nameEl = document.createElement('div');
+    nameEl.className = 'gb-card-name';
+    nameEl.textContent = card.name || '—';
+    cardEl.appendChild(nameEl);
 
-    if (cost.length > 0) {
-        const costEl = document.createElement('div');
-        costEl.className = 'gb-card-cost';
-        cost.forEach(c => costEl.appendChild(makeCostBadge(c)));
-        cardEl.appendChild(costEl);
+    const subEl = document.createElement('div');
+    subEl.className = 'gb-card-sub';
+    if (card.spirit_type) subEl.textContent = ingredientLabel(card.spirit_type);
+    else if (card.mixer_type) subEl.textContent = ingredientLabel(card.mixer_type);
+    if (subEl.textContent) cardEl.appendChild(subEl);
+
+    const costEl = document.createElement('div');
+    costEl.className = 'gb-card-cost';
+    costEl.textContent = costDesc;
+    cardEl.appendChild(costEl);
+
+    // Show stored spirits on store cards
+    if (cardType === 'store' && card.stored_spirits && card.stored_spirits.length > 0) {
+        const storedEl = document.createElement('div');
+        storedEl.className = 'gb-card-stored';
+        storedEl.textContent = `Stored: ${card.stored_spirits.map(ingredientLabel).join(', ')}`;
+        cardEl.appendChild(storedEl);
     }
 
     return cardEl;
 }
 
-function canAffordCard(cost, bladder) {
-    if (!cost || cost.length === 0) return true;
-    // Count bladder contents by kind
-    const counts = { spirit: 0, mixer: 0, special: 0 };
-    bladder.forEach(ing => {
-        counts[ingredientKind(ing)] = (counts[ingredientKind(ing)] || 0) + 1;
-    });
-    return cost.every(req => {
-        const kind = (req.kind || '').toLowerCase();
-        return (counts[kind] || 0) >= req.count;
-    });
+function _cardCostDesc(card) {
+    const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
+    const spirit = card.spirit_type ? ingredientLabel(card.spirit_type) : 'any';
+    const mixer = card.mixer_type ? ingredientLabel(card.mixer_type) : 'any';
+    if (cardType === 'karaoke') return `Cost: 3 ${spirit}`;
+    if (cardType === 'store') return `Cost: 1 ${spirit}`;
+    if (cardType === 'refresher') return `Cost: 2 ${mixer}`;
+    if (cardType === 'cup_doubler') return 'Cost: 3 of same spirit';
+    return '';
+}
+
+function canAffordCard(card, bladder, gs) {
+    const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
+    const myState = (_me && gs && gs.player_states) ? gs.player_states[_me.id] : null;
+    const myCards = myState ? (myState.cards || []) : [];
+
+    function bladderCountOf(type) {
+        return bladder.filter(i => i.toUpperCase() === type.toUpperCase()).length;
+    }
+    function storeCountOf(spiritType) {
+        return myCards
+            .filter(c => c.card_type === 'store' && (c.spirit_type || '').toUpperCase() === spiritType.toUpperCase())
+            .reduce((sum, c) => sum + (c.stored_spirits || []).length, 0);
+    }
+
+    if (cardType === 'karaoke') {
+        if (!card.spirit_type) return false;
+        return bladderCountOf(card.spirit_type) + storeCountOf(card.spirit_type) >= 3;
+    }
+    if (cardType === 'store') {
+        if (!card.spirit_type) return false;
+        return bladderCountOf(card.spirit_type) >= 1;
+    }
+    if (cardType === 'refresher') {
+        if (!card.mixer_type) return false;
+        return bladderCountOf(card.mixer_type) >= 2;
+    }
+    if (cardType === 'cup_doubler') {
+        // Spec: cost is bladder-only (cannot spend store card spirits)
+        for (const spirit of SPIRITS) {
+            if (bladderCountOf(spirit) >= 3) return true;
+        }
+        return false;
+    }
+    return false;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -602,10 +650,20 @@ function renderMySheet(game, gs, myState, isReplay) {
         claimedEl.appendChild(hint);
     } else {
         cards.forEach(c => {
+            const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
+            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
             const div = document.createElement('div');
-            div.className = 'gb-claimed-card' + (c.is_karaoke ? ' karaoke' : '');
-            div.textContent = c.is_karaoke ? `Karaoke: ${(c.id||'').slice(0,8)}` : (c.id || '').slice(0, 8);
+            div.className = `gb-claimed-card ${cardType}`;
             div.title = c.id || '';
+            const namePart = c.name || (c.id || '').slice(0, 8);
+            const subPart = c.spirit_type ? ` (${ingredientLabel(c.spirit_type)})` : c.mixer_type ? ` (${ingredientLabel(c.mixer_type)})` : '';
+            div.textContent = `${typeLabel}: ${namePart}${subPart}`;
+            if (c.stored_spirits && c.stored_spirits.length > 0) {
+                const stored = document.createElement('div');
+                stored.className = 'gb-card-stored';
+                stored.textContent = `Stored: ${c.stored_spirits.map(ingredientLabel).join(', ')}`;
+                div.appendChild(stored);
+            }
             claimedEl.appendChild(div);
         });
     }
@@ -706,19 +764,26 @@ function renderMyCups(myState, isMyTurn, game, gs) {
     cupsEl.innerHTML = '';
 
     const cupData = [
-        { index: 0, contents: (myState.cups?.[0]?.ingredients) || [] },
-        { index: 1, contents: (myState.cups?.[1]?.ingredients) || [] },
+        { index: 0, contents: (myState.cups?.[0]?.ingredients) || [], hasDoubler: !!(myState.cups?.[0]?.has_cup_doubler) },
+        { index: 1, contents: (myState.cups?.[1]?.ingredients) || [], hasDoubler: !!(myState.cups?.[1]?.has_cup_doubler) },
     ];
 
-    cupData.forEach(({ index, contents }) => {
+    cupData.forEach(({ index, contents, hasDoubler }) => {
         const cupEl = document.createElement('div');
         cupEl.className = 'gb-cup';
-        cupEl.setAttribute('aria-label', `Cup ${index + 1}`);
+        cupEl.setAttribute('aria-label', `Cup ${index + 1}${hasDoubler ? ' (doubled)' : ''}`);
         cupEl.dataset.cupIndex = index;
 
         const title = document.createElement('div');
         title.className = 'gb-cup-title';
         title.textContent = `Cup ${index + 1}`;
+        if (hasDoubler) {
+            const badge = document.createElement('span');
+            badge.className = 'gb-cup-doubler-badge';
+            badge.title = 'Cup Doubler active — non-cocktail drinks score ×2';
+            badge.textContent = '×2';
+            title.appendChild(badge);
+        }
         cupEl.appendChild(title);
 
         const ingArea = document.createElement('div');
@@ -870,13 +935,22 @@ function buildOtherSheet(pid, pState, gs) {
     // Compact cup display
     const cupRow = document.createElement('div');
     cupRow.className = 'gb-other-cup-row';
-    [(pState.cups?.[0]?.ingredients) || [], (pState.cups?.[1]?.ingredients) || []].forEach((cup, i) => {
+    [pState.cups?.[0] || {}, pState.cups?.[1] || {}].forEach((cupObj, i) => {
+        const cup = cupObj.ingredients || [];
+        const hasDoubler = !!(cupObj.has_cup_doubler);
         const cupDiv = document.createElement('div');
         cupDiv.className = 'gb-other-cup-item';
         cupDiv.dataset.cupIndex = i;
         const cupBadge = document.createElement('span');
         cupBadge.style.cssText = 'font-size:0.72em;color:#6b3a0f;margin-right:4px';
         cupBadge.textContent = `Cup${i+1}: `;
+        if (hasDoubler) {
+            const dbl = document.createElement('span');
+            dbl.className = 'gb-cup-doubler-badge';
+            dbl.title = 'Cup Doubler active — non-cocktail drinks score ×2';
+            dbl.textContent = '×2';
+            cupBadge.appendChild(dbl);
+        }
         cupDiv.appendChild(cupBadge);
         if (cup.length === 0) {
             const e = document.createElement('em');
@@ -1378,11 +1452,18 @@ async function doWee() {
     }
 }
 
-async function doClaimCard(cardId, cardEl) {
+async function doClaimCard(card, cardEl) {
+    const cardType = (card.card_type) || (card.is_karaoke ? 'karaoke' : 'store');
+
+    if (cardType === 'cup_doubler') {
+        openCupDoublerModal(card, cardEl);
+        return;
+    }
+
     if (cardEl) { cardEl.style.pointerEvents = 'none'; cardEl.style.opacity = '0.6'; }
     clearError();
     try {
-        const resp = await gameAction('claim-card', { card_id: cardId });
+        const resp = await gameAction('claim-card', { card_id: card.id || card });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
             showError(d.detail || d.error || 'Cannot claim that card right now.');
@@ -1394,6 +1475,74 @@ async function doClaimCard(cardId, cardEl) {
         if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
         if (cardEl) { cardEl.style.pointerEvents = ''; cardEl.style.opacity = ''; }
+    }
+}
+
+function openCupDoublerModal(card, cardEl) {
+    _cupDoublerCard   = card;
+    _cupDoublerCardEl = cardEl;
+    clearModalError('gbCupDoublerModalError');
+
+    // Populate spirit dropdown with spirits that have >= 3 in bladder
+    const spiritSel = el('gbCupDoublerSpiritSelect');
+    spiritSel.innerHTML = '';
+    const bladder = (_currentGs && _me)
+        ? (_currentGs.player_states?.[_me.id]?.bladder || [])
+        : [];
+
+    const countOf = s => bladder.filter(i => i === s).length;
+    const eligible = [...SPIRITS].filter(s => countOf(s) >= 3);
+
+    if (eligible.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No spirit with ≥ 3 in bladder';
+        spiritSel.appendChild(opt);
+    } else {
+        eligible.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = `${ingredientLabel(s)} (${countOf(s)} in bladder)`;
+            spiritSel.appendChild(opt);
+        });
+    }
+
+    openModal('gbCupDoublerModal');
+}
+
+function closeCupDoublerModal() {
+    closeModal('gbCupDoublerModal');
+    if (_cupDoublerCardEl) { _cupDoublerCardEl.style.pointerEvents = ''; _cupDoublerCardEl.style.opacity = ''; }
+    _cupDoublerCard   = null;
+    _cupDoublerCardEl = null;
+}
+
+async function confirmCupDoubler() {
+    const card = _cupDoublerCard;
+    if (!card) return;
+
+    const cupIndex   = parseInt(el('gbCupDoublerCupSelect').value, 10);
+    const spiritType = el('gbCupDoublerSpiritSelect').value;
+    if (!spiritType) { showModalError('gbCupDoublerModalError', 'You need at least 3 of the same spirit in your bladder.'); return; }
+
+    const btn = el('gbCupDoublerConfirmBtn');
+    setButtonBusy(btn, true, 'Claiming…');
+    clearModalError('gbCupDoublerModalError');
+
+    try {
+        const resp = await gameAction('claim-card', { card_id: card.id, cup_index: cupIndex, spirit_type: spiritType });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showModalError('gbCupDoublerModalError', d.detail || d.error || 'Cannot claim that card right now.');
+        } else {
+            closeCupDoublerModal();
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showModalError('gbCupDoublerModalError', 'Network error. Please try again.');
+    } finally {
+        setButtonBusy(btn, false);
     }
 }
 

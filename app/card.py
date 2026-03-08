@@ -1,6 +1,6 @@
 """Card and CardRow entities plus deck builder.
 
-Card effects are deferred per spec (see: cards.allium).
+Card effects are applied per cards.allium spec.
 """
 
 import random
@@ -24,22 +24,55 @@ class IngredientRequirement:
 @dataclass
 class Card:
     id: str  # UUID as string
-    is_karaoke: bool
-    cost: list[IngredientRequirement]
+    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler"
+    name: str = ""
+    spirit_type: str | None = None  # "WHISKEY" | "RUM" | "VODKA" | "GIN" | "TEQUILA"
+    mixer_type: str | None = None  # "COLA" | "SODA" | "TONIC" | "CRANBERRY"
+    stored_spirits: list[str] = field(default_factory=list)
+
+    @property
+    def is_karaoke(self) -> bool:
+        return self.card_type == "karaoke"
+
+    @property
+    def cost(self) -> list[IngredientRequirement]:
+        """Derived cost list for display purposes."""
+        if self.card_type == "karaoke":
+            return [IngredientRequirement(kind="spirit", count=3)]
+        elif self.card_type == "store":
+            return [IngredientRequirement(kind="spirit", count=1)]
+        elif self.card_type == "refresher":
+            return [IngredientRequirement(kind="mixer", count=2)]
+        elif self.card_type == "cup_doubler":
+            return [IngredientRequirement(kind="spirit", count=3)]
+        return []
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "card_type": self.card_type,
             "is_karaoke": self.is_karaoke,
+            "name": self.name,
+            "spirit_type": self.spirit_type,
+            "mixer_type": self.mixer_type,
+            "stored_spirits": list(self.stored_spirits),
             "cost": [r.to_dict() for r in self.cost],
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "Card":
+        # Backward compatibility: infer card_type from is_karaoke if card_type missing
+        if "card_type" in d:
+            card_type = d["card_type"]
+        else:
+            card_type = "karaoke" if d.get("is_karaoke", False) else "store"
         return cls(
             id=d["id"],
-            is_karaoke=d["is_karaoke"],
-            cost=[IngredientRequirement.from_dict(r) for r in d.get("cost", [])],
+            card_type=card_type,
+            name=d.get("name", ""),
+            spirit_type=d.get("spirit_type"),
+            mixer_type=d.get("mixer_type"),
+            stored_spirits=list(d.get("stored_spirits", [])),
         )
 
 
@@ -60,58 +93,81 @@ class CardRow:
 
 
 def build_deck() -> list[Card]:
-    """Build a shuffled deck of cards. Effects are deferred per spec."""
+    """Build the 16-card deck per cards.allium spec (unshuffled).
+
+    5 KaraokeCards (one per spirit), 5 StoreCards (one per spirit),
+    4 RefresherCards (one per mixer), 2 CupDoublerCards.
+    """
     cards: list[Card] = []
 
-    # 5 karaoke cards — cost: 2 spirits in bladder
-    for _ in range(5):
+    # 5 KaraokeCards — one per spirit type
+    for name, spirit in [
+        ("Sea Shanty", "RUM"),
+        ("Cringey Crooner", "GIN"),
+        ("Dazzling Duet", "TEQUILA"),
+        ("Party Tune", "VODKA"),
+        ("Ballad Master", "WHISKEY"),
+    ]:
         cards.append(
-            Card(
-                id=str(uuid4()),
-                is_karaoke=True,
-                cost=[IngredientRequirement(kind="spirit", count=2)],
-            )
+            Card(id=str(uuid4()), card_type="karaoke", name=name, spirit_type=spirit)
         )
 
-    # 15 standard ability cards with varying bladder costs
-    standard_costs = [
-        [IngredientRequirement(kind="mixer", count=1)],
-        [IngredientRequirement(kind="mixer", count=2)],
-        [IngredientRequirement(kind="spirit", count=1)],
-        [
-            IngredientRequirement(kind="spirit", count=1),
-            IngredientRequirement(kind="mixer", count=1),
-        ],
-        [IngredientRequirement(kind="mixer", count=1)],
-        [IngredientRequirement(kind="spirit", count=2)],
-        [IngredientRequirement(kind="mixer", count=2)],
-        [IngredientRequirement(kind="spirit", count=1)],
-        [IngredientRequirement(kind="mixer", count=1)],
-        [
-            IngredientRequirement(kind="spirit", count=1),
-            IngredientRequirement(kind="mixer", count=1),
-        ],
-        [IngredientRequirement(kind="mixer", count=3)],
-        [IngredientRequirement(kind="spirit", count=1)],
-        [IngredientRequirement(kind="mixer", count=1)],
-        [IngredientRequirement(kind="spirit", count=2)],
-        [IngredientRequirement(kind="mixer", count=2)],
-    ]
-    for cost in standard_costs:
-        cards.append(Card(id=str(uuid4()), is_karaoke=False, cost=cost))
+    # 5 StoreCards — one per spirit type
+    for name, spirit in [
+        ("Rum Store", "RUM"),
+        ("Gin Store", "GIN"),
+        ("Tequila Store", "TEQUILA"),
+        ("Vodka Store", "VODKA"),
+        ("Whisky Store", "WHISKEY"),
+    ]:
+        cards.append(
+            Card(id=str(uuid4()), card_type="store", name=name, spirit_type=spirit)
+        )
 
-    random.shuffle(cards)
+    # 4 RefresherCards — one per mixer type
+    for name, mixer in [
+        ("Cola Refresher", "COLA"),
+        ("Soda Refresher", "SODA"),
+        ("Tonic Refresher", "TONIC"),
+        ("Cranberry Refresher", "CRANBERRY"),
+    ]:
+        cards.append(
+            Card(id=str(uuid4()), card_type="refresher", name=name, mixer_type=mixer)
+        )
+
+    # 2 CupDoublerCards
+    cards.append(Card(id=str(uuid4()), card_type="cup_doubler", name="Bendy Straw"))
+    cards.append(
+        Card(id=str(uuid4()), card_type="cup_doubler", name="Cocktail Umbrella")
+    )
+
     return cards
 
 
 def deal_initial_rows(deck: list[Card]) -> tuple[list[CardRow], list[Card]]:
-    """Deal cards into 3 rows of 3 from the deck. Returns (rows, remaining_deck)."""
-    remaining = list(deck)
-    rows = []
-    for pos in range(1, 4):
-        row_cards = []
-        for _ in range(3):
-            if remaining:
-                row_cards.append(remaining.pop(0))
-        rows.append(CardRow(position=pos, cards=row_cards))
-    return rows, remaining
+    """Deal cards into 3 rows per cards.allium spec.
+
+    Row 1: 3 random karaoke cards (never refreshable).
+    Remaining 13 shuffled: 3 → row 2, 3 → row 3, 7 remain as deck.
+    """
+    karaoke_cards = [c for c in deck if c.card_type == "karaoke"]
+    non_karaoke = [c for c in deck if c.card_type != "karaoke"]
+
+    # Pick 3 random karaoke cards for row 1
+    row1_cards = random.sample(karaoke_cards, 3)
+    remaining_karaoke = [c for c in karaoke_cards if c not in row1_cards]
+
+    # Shuffle remaining 13 (2 karaoke + 11 others)
+    remaining_13 = remaining_karaoke + non_karaoke
+    random.shuffle(remaining_13)
+
+    row2_cards = remaining_13[:3]
+    row3_cards = remaining_13[3:6]
+    remaining_deck = remaining_13[6:]  # 7 cards
+
+    rows = [
+        CardRow(position=1, cards=row1_cards),
+        CardRow(position=2, cards=row2_cards),
+        CardRow(position=3, cards=row3_cards),
+    ]
+    return rows, remaining_deck

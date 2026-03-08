@@ -39,6 +39,7 @@ class GameState:
         drunk_ingredients_this_turn: list[Ingredient] | None = None,
         bag_draw_pending: list[Ingredient] | None = None,
         taken_records_this_turn: list[dict] | None = None,
+        discard: list[dict] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -74,6 +75,8 @@ class GameState:
         self.taken_records_this_turn: list[dict] = (
             taken_records_this_turn if taken_records_this_turn is not None else []
         )
+        # Discard pile — cards removed by refresh go here permanently (never reshuffled)
+        self.discard: list[dict] = discard if discard is not None else []
 
     @classmethod
     def new_game(cls, host: User) -> "GameState":
@@ -113,6 +116,7 @@ class GameState:
             deck=[c.to_dict() for c in remaining_deck],
             turn_order=turn_order,
             turn_number=0,
+            discard=[],
         )
 
     def to_dict(self) -> dict:
@@ -136,6 +140,7 @@ class GameState:
             ],
             "bag_draw_pending": [i.name for i in self.bag_draw_pending],
             "taken_records_this_turn": self.taken_records_this_turn,
+            "discard": self.discard,
         }
 
     @classmethod
@@ -191,4 +196,5 @@ class GameState:
                 Ingredient[i] for i in state_data.get("bag_draw_pending", [])
             ],
             taken_records_this_turn=state_data.get("taken_records_this_turn", []),
+            discard=state_data.get("discard", []),
         )

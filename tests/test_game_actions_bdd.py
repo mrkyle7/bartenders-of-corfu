@@ -188,9 +188,11 @@ def bag_no_specials(ctx):
 
     _patch_game_state(ctx["game_id"], patch)
 
+
 @given("the open display contains {spec}")
 def set_open_display(ctx, spec):
     ingredients = _parse_ingredient_spec(spec)
+
     def patch(gs: GameState):
         gs.open_display = ingredients
         return gs
@@ -295,32 +297,12 @@ def player_has_points(ctx, n, points):
 
 
 @given(
-    parsers.parse("a card with cost {count:d} {kind} is available in row {row:d}"),
+    parsers.parse("a refresher card is available in row {row:d}"),
     target_fixture="available_card_id",
 )
-def card_in_row(ctx, count, kind, row):
-    _KIND_NORMALIZE = {"spirits": "spirit", "mixers": "mixer", "specials": "special"}
-    kind_norm = _KIND_NORMALIZE.get(kind, kind)
-
-    game = _get_game(ctx["p1_token"], ctx["game_id"])
-    rows = game["game_state"]["card_rows"]
-    for r in rows:
-        if r["position"] == row:
-            for card in r["cards"]:
-                reqs = card["cost"]
-                # Only reuse an existing card if its entire cost is covered by
-                # `count` of `kind` — cards with additional requirements (e.g.
-                # [mixer:1, spirit:1]) would fail the claim with a 400.
-                if (
-                    len(reqs) == 1
-                    and reqs[0]["kind"] == kind_norm
-                    and reqs[0]["count"] <= count
-                ):
-                    ctx["target_card_id"] = card["id"]
-                    return card["id"]
-    # No matching card found — patch the game state to insert one
+def refresher_card_in_row(ctx, row):
     import uuid as _uuid
-    from app.card import Card as _Card, IngredientRequirement as _Req
+    from app.card import Card as _Card
 
     new_card_id = str(_uuid.uuid4())
 
@@ -331,8 +313,9 @@ def card_in_row(ctx, count, kind, row):
                     0,
                     _Card(
                         id=new_card_id,
-                        is_karaoke=False,
-                        cost=[_Req(kind=kind_norm, count=count)],
+                        card_type="refresher",
+                        name="Cola Refresher",
+                        mixer_type="COLA",
                     ),
                 )
                 break
@@ -344,16 +327,12 @@ def card_in_row(ctx, count, kind, row):
 
 
 @given(
-    parsers.parse(
-        "a karaoke card with cost {count:d} {kind} is available in row {row:d}"
-    ),
+    parsers.parse("a karaoke card is available in row {row:d}"),
     target_fixture="available_card_id",
 )
-def karaoke_card_in_row(ctx, count, kind, row):
-    _KIND_NORMALIZE = {"spirits": "spirit", "mixers": "mixer", "specials": "special"}
-    kind_norm = _KIND_NORMALIZE.get(kind, kind)
+def karaoke_card_in_row(ctx, row):
     import uuid as _uuid
-    from app.card import Card as _Card, IngredientRequirement as _Req
+    from app.card import Card as _Card
 
     new_card_id = str(_uuid.uuid4())
 
@@ -364,8 +343,39 @@ def karaoke_card_in_row(ctx, count, kind, row):
                     0,
                     _Card(
                         id=new_card_id,
-                        is_karaoke=True,
-                        cost=[_Req(kind=kind_norm, count=count)],
+                        card_type="karaoke",
+                        name="Party Tune",
+                        spirit_type="VODKA",
+                    ),
+                )
+                break
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+    ctx["target_card_id"] = new_card_id
+    return new_card_id
+
+
+@given(
+    parsers.parse("a store card is available in row {row:d}"),
+    target_fixture="available_card_id",
+)
+def store_card_in_row(ctx, row):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    new_card_id = str(_uuid.uuid4())
+
+    def patch(gs):
+        for r in gs.card_rows:
+            if r.position == row:
+                r.cards.insert(
+                    0,
+                    _Card(
+                        id=new_card_id,
+                        card_type="store",
+                        name="Vodka Store",
+                        spirit_type="VODKA",
                     ),
                 )
                 break
@@ -566,6 +576,7 @@ def player_try_sell_cup(ctx, n, cup_index):
 @when(parsers.parse("player {n:d} tries to drink cup {cup_index:d}"))
 def player_try_drink_cup(ctx, n, cup_index):
     player_drink_cup(ctx, n, cup_index)
+
 
 @when(parsers.parse("player {n:d} goes for a wee"))
 def player_go_for_a_wee(ctx, n):

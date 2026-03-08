@@ -14,7 +14,7 @@ Covers:
 import json
 import urllib.request
 
-from tests.ui.conftest import _api_post, _unique
+from tests.ui.conftest import _api_post
 
 
 def _game_url(base_url: str, game_id: str) -> str:
@@ -71,10 +71,16 @@ def _wait_for_history_entry(page, timeout=8000):
 # ---------------------------------------------------------------------------
 
 
-def test_history_entries_are_expandable(page, base_url, new_user, new_game, other_user_and_jwt):
+def test_history_entries_are_expandable(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
     """Each history entry has the expandable class and chevron."""
     _start_game(base_url, new_user["jwt"], other_user_and_jwt["jwt"], new_game)
-    _take_full_turn(base_url, new_game, _active_jwt(base_url, new_game, new_user, other_user_and_jwt))
+    _take_full_turn(
+        base_url,
+        new_game,
+        _active_jwt(base_url, new_game, new_user, other_user_and_jwt),
+    )
 
     page.goto(_game_url(base_url, new_game))
     _wait_for_history_entry(page)
@@ -85,16 +91,24 @@ def test_history_entries_are_expandable(page, base_url, new_user, new_game, othe
     assert chevron.count() == 1
 
 
-def test_clicking_entry_expands_detail(page, base_url, new_user, new_game, other_user_and_jwt):
+def test_clicking_entry_expands_detail(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
     """Clicking a history entry reveals its .gb-history-detail panel."""
     _start_game(base_url, new_user["jwt"], other_user_and_jwt["jwt"], new_game)
-    _take_full_turn(base_url, new_game, _active_jwt(base_url, new_game, new_user, other_user_and_jwt))
+    _take_full_turn(
+        base_url,
+        new_game,
+        _active_jwt(base_url, new_game, new_user, other_user_and_jwt),
+    )
 
     page.goto(_game_url(base_url, new_game))
     _wait_for_history_entry(page)
 
     entry = page.locator(".gb-history-expandable").first
-    detail = entry.locator("xpath=following-sibling::div[contains(@class,'gb-history-detail')]")
+    detail = entry.locator(
+        "xpath=following-sibling::div[contains(@class,'gb-history-detail')]"
+    )
 
     # Detail starts hidden
     assert not detail.is_visible()
@@ -106,16 +120,24 @@ def test_clicking_entry_expands_detail(page, base_url, new_user, new_game, other
     assert entry.get_attribute("aria-expanded") == "true"
 
 
-def test_clicking_again_collapses_detail(page, base_url, new_user, new_game, other_user_and_jwt):
+def test_clicking_again_collapses_detail(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
     """Clicking an expanded entry hides the detail again."""
     _start_game(base_url, new_user["jwt"], other_user_and_jwt["jwt"], new_game)
-    _take_full_turn(base_url, new_game, _active_jwt(base_url, new_game, new_user, other_user_and_jwt))
+    _take_full_turn(
+        base_url,
+        new_game,
+        _active_jwt(base_url, new_game, new_user, other_user_and_jwt),
+    )
 
     page.goto(_game_url(base_url, new_game))
     _wait_for_history_entry(page)
 
     entry = page.locator(".gb-history-expandable").first
-    detail = entry.locator("xpath=following-sibling::div[contains(@class,'gb-history-detail')]")
+    detail = entry.locator(
+        "xpath=following-sibling::div[contains(@class,'gb-history-detail')]"
+    )
 
     entry.click()
     detail.wait_for(state="visible", timeout=3000)
@@ -134,7 +156,9 @@ def test_clicking_again_collapses_detail(page, base_url, new_user, new_game, oth
 # ---------------------------------------------------------------------------
 
 
-def test_wee_detail_shows_flushed_label(page, base_url, new_user, new_game, other_user_and_jwt):
+def test_wee_detail_shows_flushed_label(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
     """Expanding a go_for_a_wee entry shows 'Flushed:' or empty-bladder text."""
     _start_game(base_url, new_user["jwt"], other_user_and_jwt["jwt"], new_game)
 
@@ -156,7 +180,9 @@ def test_wee_detail_shows_flushed_label(page, base_url, new_user, new_game, othe
     assert wee_entry is not None, "No go_for_a_wee entry found in history"
     wee_entry.click()
 
-    detail = wee_entry.locator("xpath=following-sibling::div[contains(@class,'gb-history-detail')]")
+    detail = wee_entry.locator(
+        "xpath=following-sibling::div[contains(@class,'gb-history-detail')]"
+    )
     detail.wait_for(state="visible", timeout=3000)
 
     text = detail.inner_text().lower()
@@ -173,7 +199,12 @@ def test_take_ingredients_detail_shows_cup_label(
 ):
     """Expanding a take_ingredients entry shows 'Cup 1:' detail row."""
     _start_game(base_url, new_user["jwt"], other_user_and_jwt["jwt"], new_game)
-    _take_full_turn(base_url, new_game, _active_jwt(base_url, new_game, new_user, other_user_and_jwt), cup_index=0)
+    _take_full_turn(
+        base_url,
+        new_game,
+        _active_jwt(base_url, new_game, new_user, other_user_and_jwt),
+        cup_index=0,
+    )
 
     page.goto(_game_url(base_url, new_game))
     _wait_for_history_entry(page)
@@ -189,7 +220,9 @@ def test_take_ingredients_detail_shows_cup_label(
     assert take_entry is not None, "No take_ingredients entry found in history"
     take_entry.click()
 
-    detail = take_entry.locator("xpath=following-sibling::div[contains(@class,'gb-history-detail')]")
+    detail = take_entry.locator(
+        "xpath=following-sibling::div[contains(@class,'gb-history-detail')]"
+    )
     detail.wait_for(state="visible", timeout=3000)
 
     # Should show "Cup 1:" label and at least one ingredient badge
@@ -238,7 +271,9 @@ def test_sell_cup_detail_shows_points_badge(
             if "Sold cup" in entry.inner_text():
                 sell_entry = entry
                 break
-        assert sell_entry is not None, "Sell succeeded but no 'Sold cup' entry in history"
+        assert sell_entry is not None, (
+            "Sell succeeded but no 'Sold cup' entry in history"
+        )
         sell_entry.click()
         detail = sell_entry.locator(
             "xpath=following-sibling::div[contains(@class,'gb-history-detail')]"

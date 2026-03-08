@@ -106,23 +106,23 @@ Feature: Game turn actions
 
   Scenario: Player claims a card they can afford
     Given it is player 1's turn
-    And a card with cost 1 mixer is available in row 1
-    And player 1 has 1 mixer in their bladder
+    And a refresher card is available in row 1
+    And player 1 has 2 mixers in their bladder
     When player 1 claims that card
     Then player 1 should have 1 card
     And a move record should be created for the game
 
   Scenario: Claiming a karaoke card replaces the slot from the deck
     Given it is player 1's turn
-    And a karaoke card with cost 1 mixer is available in row 1
-    And player 1 has 1 mixer in their bladder
+    And a karaoke card is available in row 1
+    And player 1 has 3 spirits in their bladder
     When player 1 claims that card
     Then player 1 should have 1 card
     And row 1 should have 4 cards
 
   Scenario: Player cannot claim a card they cannot afford
     Given it is player 1's turn
-    And a card with cost 2 spirits is available in row 1
+    And a store card is available in row 1
     And player 1 has 0 spirits in their bladder
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
@@ -130,8 +130,8 @@ Feature: Game turn actions
   Scenario: Player refreshes a card row when drunk enough
     Given it is player 1's turn
     And player 1 has a drunk level of 3
-    When player 1 refreshes card row 1
-    Then row 1 should be refreshed with new cards
+    When player 1 refreshes card row 2
+    Then row 2 should be refreshed with new cards
     And a move record should be created for the game
 
   Scenario: Player cannot refresh a card row when not drunk enough
@@ -175,8 +175,8 @@ Feature: Game turn actions
   Scenario: Player wins by claiming the third karaoke card
     Given it is player 1's turn
     And player 1 has claimed 2 karaoke cards
-    And a karaoke card with cost 1 mixer is available in row 1
-    And player 1 has 1 mixer in their bladder
+    And a karaoke card is available in row 1
+    And player 1 has 3 spirits in their bladder
     When player 1 claims that card
     Then the game should be over
     And player 1 should be the winner
@@ -206,8 +206,8 @@ Feature: Game turn actions
   Scenario: ClaimCard is blocked while a take-ingredients batch is in progress
     Given it is player 1's turn
     And the bag contains no special tokens
-    And a card with cost 1 mixer is available in row 1
-    And player 1 has 1 mixer in their bladder
+    And a refresher card is available in row 1
+    And player 1 has 2 mixers in their bladder
     When player 1 takes 1 ingredient from the bag
     And player 1 tries to claim that card
     Then the action should be rejected with a 409 error

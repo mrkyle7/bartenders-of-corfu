@@ -255,9 +255,12 @@ def test_cup_shows_ingredient_badges_when_filled(
     )
     # Turn order is randomised — ensure the host goes first so their cup gets filled.
     _ensure_host_turn(
-        base_url, game_id,
-        new_user["jwt"], new_user["user"]["id"],
-        other_user_and_jwt["jwt"], other_user_and_jwt["user"]["id"],
+        base_url,
+        game_id,
+        new_user["jwt"],
+        new_user["user"]["id"],
+        other_user_and_jwt["jwt"],
+        other_user_and_jwt["user"]["id"],
     )
     _put_ingredient_in_cup(base_url, game_id, new_user["jwt"], cup_index=0)
 
@@ -335,7 +338,9 @@ def _take_partial_batch(base_url, game_id, jwt, count=1):
     )
 
 
-def _ensure_host_turn(base_url, game_id, host_jwt, host_user_id, other_jwt, other_user_id):
+def _ensure_host_turn(
+    base_url, game_id, host_jwt, host_user_id, other_jwt, other_user_id
+):
     """If the other player goes first (turn order is random), complete their turn so it
     becomes the host's turn before the browser test begins."""
     game = _api_get(base_url, f"/v1/games/{game_id}", host_jwt)
@@ -353,9 +358,12 @@ def test_take_modal_auto_opens_on_page_load_when_mid_taking(
     )
     # Turn order is random — ensure it is the host's turn before the partial take
     _ensure_host_turn(
-        base_url, game_id,
-        new_user["jwt"], new_user["user"]["id"],
-        other_user_and_jwt["jwt"], other_user_and_jwt["user"]["id"],
+        base_url,
+        game_id,
+        new_user["jwt"],
+        new_user["user"]["id"],
+        other_user_and_jwt["jwt"],
+        other_user_and_jwt["user"]["id"],
     )
     # Host takes 1 of 3 required ingredients — turn is still theirs
     _take_partial_batch(base_url, game_id, new_user["jwt"], count=1)
@@ -384,9 +392,12 @@ def test_take_modal_auto_reopens_after_partial_batch_submit(
     )
     # Turn order is random — ensure it is the host's turn before browser interaction
     _ensure_host_turn(
-        base_url, game_id,
-        new_user["jwt"], new_user["user"]["id"],
-        other_user_and_jwt["jwt"], other_user_and_jwt["user"]["id"],
+        base_url,
+        game_id,
+        new_user["jwt"],
+        new_user["user"]["id"],
+        other_user_and_jwt["jwt"],
+        other_user_and_jwt["user"]["id"],
     )
 
     # Navigate as host (whose turn it is)

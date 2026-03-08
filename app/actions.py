@@ -11,7 +11,7 @@ import random
 from uuid import UUID
 
 from app.card import Card, CardRow
-from app.cocktails import drink_points
+from app.cocktails import drink_points, is_cocktail
 from app.game import GameException
 from app.GameState import OPEN_DISPLAY_SIZE, GameState
 from app.Ingredient import Ingredient, SpecialType
@@ -33,6 +33,77 @@ MIN_DRUNK_TO_REFRESH = 3
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+_SPIRIT_MAP: dict[str, Ingredient] = {
+    "WHISKEY": Ingredient.WHISKEY,
+    "GIN": Ingredient.GIN,
+    "RUM": Ingredient.RUM,
+    "TEQUILA": Ingredient.TEQUILA,
+    "VODKA": Ingredient.VODKA,
+}
+_MIXER_MAP: dict[str, Ingredient] = {
+    "COLA": Ingredient.COLA,
+    "SODA": Ingredient.SODA,
+    "TONIC": Ingredient.TONIC,
+    "CRANBERRY": Ingredient.CRANBERRY,
+}
+
+
+def _spirit_ingredient(spirit_type: str) -> Ingredient:
+    ing = _SPIRIT_MAP.get(spirit_type.upper())
+    if ing is None:
+        raise GameException(f"Unknown spirit type: {spirit_type}", status_code=400)
+    return ing
+
+
+def _mixer_ingredient(mixer_type: str) -> Ingredient:
+    ing = _MIXER_MAP.get(mixer_type.upper())
+    if ing is None:
+        raise GameException(f"Unknown mixer type: {mixer_type}", status_code=400)
+    return ing
+
+
+def _available_spirits(ps: "PlayerState", spirit_type: str) -> int:
+    """Count spirits available from bladder + matching store cards."""
+    spirit_ing = _spirit_ingredient(spirit_type)
+    count = sum(1 for i in ps.bladder if i == spirit_ing)
+    for card_dict in ps.cards:
+        if (
+            card_dict.get("card_type") == "store"
+            and card_dict.get("spirit_type") == spirit_type.upper()
+        ):
+            count += len(card_dict.get("stored_spirits", []))
+    return count
+
+
+def _consume_spirits(ps: "PlayerState", spirit_type: str, count: int) -> None:
+    """Remove `count` spirits from bladder first, then from store cards."""
+    spirit_ing = _spirit_ingredient(spirit_type)
+    remaining = count
+    # Remove from bladder first
+    new_bladder = list(ps.bladder)
+    removed = 0
+    for i in range(len(new_bladder) - 1, -1, -1):
+        if removed >= remaining:
+            break
+        if new_bladder[i] == spirit_ing:
+            new_bladder.pop(i)
+            removed += 1
+    ps.bladder = new_bladder
+    remaining -= removed
+    # Then from store cards
+    if remaining > 0:
+        for card_dict in ps.cards:
+            if (
+                card_dict.get("card_type") == "store"
+                and card_dict.get("spirit_type") == spirit_type.upper()
+            ):
+                stored = card_dict.get("stored_spirits", [])
+                to_remove = min(remaining, len(stored))
+                card_dict["stored_spirits"] = stored[to_remove:]
+                remaining -= to_remove
+                if remaining == 0:
+                    break
 
 
 def _deep_copy_state(gs: GameState) -> GameState:
@@ -139,15 +210,32 @@ def _apply_drunk_modifier(
 ):
     """Apply drunk level changes for a batch of drunk ingredients.
 
-    You only sober up if ALL ingredients in the batch are mixers (no spirits).
-    If any spirit is present, mixers do not reduce drunk_level.
+    Refresher cards make their mixer type always contribute -1 (hot mixers),
+    even when spirits are consumed. Plain mixers only sober when no spirits.
     """
     ps = gs.player_states[player_id]
     spirits = [i for i in ingredients if i in _SPIRITS]
-    mixers = [i for i in ingredients if i in _MIXERS]
-    ps.drunk_level += len(spirits)
+
+    # Collect mixer types covered by player's refresher cards
+    refresher_mixer_types: set[str] = set()
+    for card_dict in ps.cards:
+        if card_dict.get("card_type") == "refresher":
+            mt = card_dict.get("mixer_type")
+            if mt:
+                refresher_mixer_types.add(mt.upper())
+
+    hot_mixers = [
+        i for i in ingredients if i in _MIXERS and i.name in refresher_mixer_types
+    ]
+    plain_mixers = [
+        i for i in ingredients if i in _MIXERS and i.name not in refresher_mixer_types
+    ]
+
+    # delta = spirits - hot_mixers; plain_mixers only subtract when no spirits
+    delta = len(spirits) - len(hot_mixers)
     if not spirits:
-        ps.drunk_level = max(0, ps.drunk_level - len(mixers))
+        delta -= len(plain_mixers)
+    ps.drunk_level = max(0, ps.drunk_level + delta)
     _check_elimination(gs, player_id)
     _check_last_player_standing(gs)
 
@@ -427,6 +515,10 @@ def sell_cup(
             "This combination of ingredients cannot be sold", status_code=400
         )
 
+    # CupDoubler doubling: non-cocktail drinks from a bendy-straw cup score double
+    if cup.has_cup_doubler and not is_cocktail(cup.ingredients, declared_specials):
+        pts *= 2
+
     sold_ingredients = list(cup.ingredients)
     # Return sold ingredients + declared specials to the bag
     gs.bag_contents.extend(sold_ingredients)
@@ -522,8 +614,14 @@ def claim_card(
     gs: GameState,
     player_id: UUID,
     card_id: str,
+    cup_index: int | None = None,
+    spirit_type: str | None = None,
 ) -> tuple[GameState, dict]:
-    """ClaimCard action."""
+    """ClaimCard action.
+
+    cup_index: required for cup_doubler cards (0 or 1).
+    spirit_type: required for cup_doubler cards (declares which spirit type was used to pay).
+    """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
@@ -545,35 +643,89 @@ def claim_card(
     if target_card is None:
         raise GameException("Card not found in any row", status_code=404)
 
-    # Validate bladder contents meet the cost
-    bladder_spirits = sum(1 for i in ps.bladder if i in _SPIRITS)
-    bladder_mixers = sum(1 for i in ps.bladder if i in _MIXERS)
-    bladder_specials = len(ps.special_ingredients)
+    card_type = target_card.card_type
 
-    for req in target_card.cost:
-        if req.kind == "spirit" and bladder_spirits < req.count:
+    # Per-type cost validation
+    if card_type == "karaoke":
+        if target_card.spirit_type is None:
+            raise GameException("Karaoke card has no spirit type", status_code=500)
+        available = _available_spirits(ps, target_card.spirit_type)
+        if available < 3:
             raise GameException(
-                f"Need {req.count} spirit(s) in bladder; have {bladder_spirits}",
+                f"Need 3 {target_card.spirit_type} spirits available; have {available}",
                 status_code=400,
             )
-        elif req.kind == "mixer" and bladder_mixers < req.count:
+
+    elif card_type == "store":
+        if target_card.spirit_type is None:
+            raise GameException("Store card has no spirit type", status_code=500)
+        spirit_ing = _spirit_ingredient(target_card.spirit_type)
+        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
+        if bladder_count < 1:
             raise GameException(
-                f"Need {req.count} mixer(s) in bladder; have {bladder_mixers}",
+                f"Need at least 1 {target_card.spirit_type} spirit in bladder; have {bladder_count}",
                 status_code=400,
             )
-        elif req.kind == "special" and bladder_specials < req.count:
+
+    elif card_type == "refresher":
+        if target_card.mixer_type is None:
+            raise GameException("Refresher card has no mixer type", status_code=500)
+        mixer_ing = _mixer_ingredient(target_card.mixer_type)
+        bladder_mixer_count = sum(1 for i in ps.bladder if i == mixer_ing)
+        if bladder_mixer_count < 2:
             raise GameException(
-                f"Need {req.count} special(s) on mat; have {bladder_specials}",
+                f"Need 2 {target_card.mixer_type} mixers in bladder; have {bladder_mixer_count}",
+                status_code=400,
+            )
+
+    elif card_type == "cup_doubler":
+        if spirit_type is None:
+            raise GameException(
+                "Must declare spirit_type when claiming a cup doubler card",
+                status_code=400,
+            )
+        if cup_index not in (0, 1):
+            raise GameException(
+                "Must declare cup_index (0 or 1) when claiming a cup doubler card",
+                status_code=400,
+            )
+        # Spec: bladder only (cannot spend from store cards)
+        spirit_ing = _spirit_ingredient(spirit_type)
+        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
+        if bladder_count < 3:
+            raise GameException(
+                f"Need 3 {spirit_type} spirits in bladder; have {bladder_count}",
                 status_code=400,
             )
 
     # Remove card from row
     target_row.cards.remove(target_card)
 
-    # Claim the card
-    ps.cards.append(target_card.to_dict())
-    if target_card.is_karaoke:
+    # Per-type effects — cost is a threshold check only, no bladder consumption
+    if card_type == "karaoke":
+        ps.points += 5
         ps.karaoke_cards_claimed += 1
+        ps.cards.append(target_card.to_dict())
+
+    elif card_type == "store":
+        # Effect: transfer ALL matching spirits from bladder to stored_spirits on the card
+        spirit_ing = _spirit_ingredient(target_card.spirit_type)
+        transferred = [i for i in ps.bladder if i == spirit_ing]
+        ps.bladder = [i for i in ps.bladder if i != spirit_ing]
+        card_dict = target_card.to_dict()
+        card_dict["stored_spirits"] = [i.name for i in transferred]
+        ps.cards.append(card_dict)
+        ps.points += 1
+
+    elif card_type == "refresher":
+        ps.cards.append(target_card.to_dict())
+        ps.points += 1
+
+    elif card_type == "cup_doubler":
+        cup = ps.cups[cup_index]
+        cup.has_cup_doubler = True
+        ps.cards.append(target_card.to_dict())
+        ps.points += 2
 
     # Replace the claimed card's slot from the deck (if any cards remain)
     _replace_card(gs, target_row)
@@ -584,6 +736,7 @@ def claim_card(
 
     payload = {
         "card_id": card_id,
+        "card_type": card_type,
         "is_karaoke": target_card.is_karaoke,
         "row_position": target_row.position,
     }
@@ -595,7 +748,11 @@ def refresh_card_row(
     player_id: UUID,
     row_position: int,
 ) -> tuple[GameState, dict]:
-    """RefreshCardRow action."""
+    """RefreshCardRow action.
+
+    Row 1 (karaoke row) cannot be refreshed.
+    All cards in the target row are removed to the discard pile and replaced from deck.
+    """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
@@ -609,6 +766,12 @@ def refresh_card_row(
             status_code=400,
         )
 
+    if row_position == 1:
+        raise GameException(
+            "Row 1 (karaoke row) cannot be refreshed",
+            status_code=400,
+        )
+
     target_row: CardRow | None = None
     for row in gs.card_rows:
         if row.position == row_position:
@@ -618,16 +781,17 @@ def refresh_card_row(
     if target_row is None:
         raise GameException(f"Row {row_position} does not exist", status_code=404)
 
-    # Remove non-karaoke cards
-    non_karaoke = [c for c in target_row.cards if not c.is_karaoke]
-    target_row.cards = [c for c in target_row.cards if c.is_karaoke]
+    # Remove ALL cards → discard pile (never reshuffled)
+    removed = list(target_row.cards)
+    gs.discard.extend(c.to_dict() for c in removed)
+    target_row.cards = []
 
     # Replace removed slots from deck
-    for _ in non_karaoke:
+    for _ in removed:
         _replace_card(gs, target_row)
 
     gs.turn_number += 1
     _advance_turn(gs)
 
-    payload = {"row_position": row_position, "cards_removed": len(non_karaoke)}
+    payload = {"row_position": row_position, "cards_removed": len(removed)}
     return gs, payload

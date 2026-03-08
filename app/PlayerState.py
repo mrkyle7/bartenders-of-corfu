@@ -10,10 +10,15 @@ MIN_BLADDER_CAPACITY = 4
 
 
 class Cup:
-    def __init__(self, ingredients: list[Ingredient] | None = None):
+    def __init__(
+        self,
+        ingredients: list[Ingredient] | None = None,
+        has_cup_doubler: bool = False,
+    ):
         self.ingredients: list[Ingredient] = (
             ingredients if ingredients is not None else []
         )
+        self.has_cup_doubler: bool = has_cup_doubler
 
     @property
     def spirit_count(self) -> int:
@@ -33,11 +38,15 @@ class Cup:
             "spirit_count": self.spirit_count,
             "is_full": self.is_full,
             "is_empty": self.is_empty,
+            "has_cup_doubler": self.has_cup_doubler,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Cup":
-        return cls(ingredients=[Ingredient[i] for i in data.get("ingredients", [])])
+        return cls(
+            ingredients=[Ingredient[i] for i in data.get("ingredients", [])],
+            has_cup_doubler=data.get("has_cup_doubler", False),
+        )
 
 
 class PlayerState:

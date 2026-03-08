@@ -99,6 +99,40 @@ _RECIPES: list[tuple[Counter, Counter, Counter, int, str]] = [
 ]
 
 
+def is_cocktail(
+    cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> bool:
+    """Return True if the cup+specials combo matches a named cocktail recipe."""
+    cup_spirits = [i for i in cup_ingredients if i in _SPIRITS]
+    cup_mixers = [i for i in cup_ingredients if i in _MIXERS]
+
+    if not cup_spirits:
+        return False
+
+    spirits_count = Counter(cup_spirits)
+    mixers_count = Counter(cup_mixers)
+
+    parsed_specials: list[SpecialType] = []
+    for s in declared_specials:
+        try:
+            st = SpecialType(s)
+            if st != SpecialType.NOTHING:
+                parsed_specials.append(st)
+        except ValueError:
+            return False
+    specials_count = Counter(parsed_specials)
+
+    for r_spirits, r_mixers, r_specials, _pts, _name in _RECIPES:
+        if (
+            spirits_count == r_spirits
+            and mixers_count == r_mixers
+            and specials_count == r_specials
+        ):
+            return True
+
+    return False
+
+
 def drink_points(
     cup_ingredients: list[Ingredient], declared_specials: list[str]
 ) -> int | None:
