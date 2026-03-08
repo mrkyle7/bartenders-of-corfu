@@ -2047,3 +2047,279 @@ input {
     .gb-header-gameid { display: none; }
     .gb-card { min-width: 70px; }
 }
+
+/* ============================================================
+   INTERACTIVE UI ELEMENTS (no-button design)
+   ============================================================ */
+
+/* ---------- Clickable display ingredients ---------- */
+.gb-display-takeable {
+    cursor: pointer;
+    transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+
+.gb-display-takeable:hover,
+.gb-display-takeable:focus {
+    transform: translateY(-4px) scale(1.1);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4), 0 2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.35);
+    filter: brightness(1.15);
+    outline: none;
+    z-index: 2;
+    position: relative;
+}
+
+.gb-display-takeable:active {
+    transform: translateY(-1px) scale(1.05);
+}
+
+/* Pulse animation when it's my turn to signal clickability */
+.gb-open-display .gb-display-takeable {
+    animation: token-idle 3s ease-in-out infinite;
+}
+
+@keyframes token-idle {
+    0%, 100% { box-shadow: 0 2px 0 rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.25); }
+    50%       { box-shadow: 0 2px 0 rgba(0,0,0,0.3), 0 2px 8px rgba(212,160,23,0.5), inset 0 1px 0 rgba(255,255,255,0.25); }
+}
+
+/* ---------- Bag visual ---------- */
+.gb-bag-area {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 8px 0 2px;
+}
+
+.gb-bag-visual {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    padding: 4px;
+    border-radius: 10px;
+    transition: transform 0.15s, filter 0.15s;
+    cursor: default;
+    user-select: none;
+}
+
+.gb-bag-visual.interactive {
+    cursor: pointer;
+}
+
+.gb-bag-visual.interactive:hover,
+.gb-bag-visual.interactive:focus {
+    transform: scale(1.08) translateY(-3px);
+    filter: brightness(1.2) drop-shadow(0 4px 10px rgba(212,160,23,0.5));
+    outline: none;
+}
+
+.gb-bag-visual.interactive:active {
+    transform: scale(1.03) translateY(-1px);
+}
+
+.gb-bag-svg {
+    width: 64px;
+    height: 72px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+.gb-bag-count-badge {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.7);
+    color: #f5d07a;
+    font-size: 0.78em;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 1px 6px;
+    min-width: 20px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.gb-bag-hint {
+    font-size: 0.62em;
+    color: #d4a850;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: -2px;
+    font-weight: bold;
+    animation: hint-pulse 2s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%       { opacity: 1; }
+}
+
+/* ---------- Interactive cup (click-to-act, no buttons) ---------- */
+.gb-cup-interactive {
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+}
+
+.gb-cup-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(74,44,14,0.25), inset 0 1px 0 rgba(255,255,255,0.8), inset 1px 0 0 rgba(255,255,255,0.4);
+}
+
+.gb-cup-interactive:focus {
+    outline: 2px solid #d4a017;
+    outline-offset: 2px;
+}
+
+/* Floating action overlay on the cup */
+.gb-cup-action-overlay {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    background: rgba(40,20,5,0.95);
+    border: 1px solid rgba(212,160,23,0.5);
+    border-radius: 10px;
+    padding: 6px;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+    animation: overlay-pop 0.12s ease-out;
+}
+
+@keyframes overlay-pop {
+    from { opacity: 0; transform: translateX(-50%) scale(0.85) translateY(4px); }
+    to   { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
+}
+
+.gb-cup-action-overlay::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(40,20,5,0.95);
+}
+
+/* Action tiles inside the cup overlay */
+.gb-cup-action-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s, transform 0.1s;
+    min-width: 52px;
+}
+
+.gb-cup-action-tile:hover {
+    transform: scale(1.08);
+}
+
+.gb-cup-action-tile:focus {
+    outline: 2px solid #d4a017;
+    outline-offset: 2px;
+}
+
+.gb-cup-action-tile.sell {
+    background: linear-gradient(145deg, #1a6b1a, #2d8a2d);
+}
+
+.gb-cup-action-tile.sell:hover {
+    background: linear-gradient(145deg, #1f8020, #35a035);
+}
+
+.gb-cup-action-tile.drink {
+    background: linear-gradient(145deg, #2a5f8a, #3a7ab8);
+}
+
+.gb-cup-action-tile.drink:hover {
+    background: linear-gradient(145deg, #3070a0, #4a8acc);
+}
+
+.gb-cup-action-icon {
+    font-size: 1.4em;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.gb-cup-action-label {
+    font-size: 0.65em;
+    font-weight: bold;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    pointer-events: none;
+}
+
+/* Subtle "tap me" animation on the cup title when interactive */
+.gb-cup-interactive .gb-cup-title {
+    transition: color 0.2s;
+}
+.gb-cup-interactive:hover .gb-cup-title {
+    color: #d4a017;
+}
+
+/* ---------- Wee action tile ---------- */
+#gbWeeTile {
+    margin-top: 10px;
+}
+
+.gb-wee-tile {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: linear-gradient(145deg, #5a3010, #7a4820);
+    border: 1px solid rgba(212,160,23,0.35);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    user-select: none;
+}
+
+.gb-wee-tile:hover {
+    background: linear-gradient(145deg, #6b3a10, #8a5828);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.3);
+}
+
+.gb-wee-tile:focus {
+    outline: 2px solid #d4a017;
+    outline-offset: 2px;
+}
+
+.gb-wee-tile:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+.gb-wee-icon {
+    font-size: 1.3em;
+    line-height: 1;
+}
+
+.gb-wee-label {
+    font-size: 0.82em;
+    font-weight: bold;
+    color: #f0d090;
+    letter-spacing: 0.02em;
+}
+
+/* ---------- Bag area layout in dark board panel ---------- */
+.gb-board-panel .gb-bag-count-badge {
+    color: #f5d07a;
+}
+
+.gb-board-panel #gbBagCount {
+    font-size: 0.72em;
+    color: #a88848;
+    margin: 0 0 10px 0;
+}
