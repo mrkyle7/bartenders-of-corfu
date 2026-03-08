@@ -522,7 +522,7 @@ input {
 }
 
 .gb-mat-body {
-    padding: 8px 12px 12px;
+    padding: 6px 10px 10px;
 }
 
 /* Other player mats flow directly into .gb-player-mats flex */
@@ -1068,26 +1068,122 @@ input {
     background: #b91c1c;
 }
 
-/* Bladder meter */
+/* Bladder — physical slots layout */
+.gb-bladder-slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 4px;
+    align-items: center;
+}
+
+/* Each bladder slot */
+.gb-bladder-slot {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Filled slot: holds an ingredient badge (badge handles its own sizing) */
+.gb-bladder-slot.filled {
+    background: transparent;
+}
+
+.gb-bladder-slot.filled .gb-ingredient {
+    font-size: 0.62em;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 5px;
+}
+
+/* Empty open slot: visible receptor */
+.gb-bladder-slot.empty {
+    background: rgba(212,160,23,0.08);
+    border: 1.5px dashed rgba(212,160,23,0.45);
+}
+
+/* Sealed slot: closed by a spent toilet token */
+.gb-bladder-slot.sealed {
+    background: rgba(74,44,14,0.18);
+    border: 1.5px solid rgba(74,44,14,0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Cross-hatch on sealed slot */
+.gb-bladder-slot.sealed::after {
+    content: '🚽';
+    font-size: 0.72em;
+    line-height: 1;
+    opacity: 0.55;
+}
+
+/* Other player bladder label */
+.gb-other-bladder {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 4px 0 2px;
+    flex-wrap: wrap;
+}
+
+.gb-stat-label {
+    font-size: 0.68em;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8a5c2e;
+    white-space: nowrap;
+    margin-top: 6px;
+}
+
+/* Other player stats row */
+.gb-other-stat-drunk {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Cup physical slots */
+.gb-cup-slot {
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.gb-cup-slot.filled {
+    background: transparent;
+}
+
+.gb-cup-slot.filled .gb-ingredient {
+    font-size: 0.58em;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 4px;
+}
+
+.gb-cup-slot.empty {
+    background: rgba(180,130,40,0.08);
+    border: 1.5px dashed rgba(180,130,40,0.35);
+}
+
+/* Legacy bar (kept for backward compat) */
 .gb-bladder-bar {
     height: 8px;
     border-radius: 4px;
     background: #e5d8c4;
     overflow: hidden;
-    margin-top: 2px;
-    margin-bottom: 2px;
     width: 80px;
-    display: inline-block;
+    display: none; /* replaced by slots */
 }
 
-.gb-bladder-fill {
-    height: 100%;
-    border-radius: 4px;
-    background: #4b7ca8;
-    transition: width 0.3s;
-}
-
-.gb-bladder-fill.danger { background: #b91c1c; }
+.gb-bladder-fill { display: none; }
 
 /* Cups — glass-like appearance */
 .gb-cups {
@@ -1134,8 +1230,8 @@ input {
     display: flex;
     flex-wrap: wrap;
     gap: 3px;
-    min-height: 22px;
     margin-bottom: 6px;
+    align-items: center;
 }
 
 .gb-cup-empty-hint {
@@ -1266,8 +1362,10 @@ input {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+    align-items: center;
     font-size: 0.75em;
     color: #6b3a0f;
+    margin-bottom: 4px;
 }
 
 .gb-other-cup-row {

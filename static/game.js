@@ -783,31 +783,29 @@ function renderMySheet(game, gs, myState, isReplay) {
     // Cups
     renderMyCups(myState, isMyTurn && !isReplay, game, gs);
 
-    // Special ingredients
+    // Special ingredients — only show section if non-empty
     const specialsEl = el('gbMySpecials');
     specialsEl.innerHTML = '';
     const specials = myState.special_ingredients || [];
-    if (specials.length === 0) {
-        const hint = document.createElement('em');
-        hint.style.fontSize = '0.78em';
-        hint.style.color = '#8a5c2e';
-        hint.textContent = 'None';
-        specialsEl.appendChild(hint);
-    } else {
+    if (specials.length > 0) {
+        const specialsTitle = document.createElement('div');
+        specialsTitle.className = 'gb-section-title';
+        specialsTitle.style.marginTop = '6px';
+        specialsTitle.textContent = 'Specials on Mat';
+        specialsEl.appendChild(specialsTitle);
         specials.forEach(s => specialsEl.appendChild(makeIngredientBadge(s)));
     }
 
-    // Claimed cards
+    // Claimed cards — only show section if non-empty
     const claimedEl = el('gbMyClaimedCards');
     claimedEl.innerHTML = '';
     const cards = myState.cards || [];
-    if (cards.length === 0) {
-        const hint = document.createElement('em');
-        hint.style.fontSize = '0.78em';
-        hint.style.color = '#8a5c2e';
-        hint.textContent = 'None';
-        claimedEl.appendChild(hint);
-    } else {
+    if (cards.length > 0) {
+        const claimedTitle = document.createElement('div');
+        claimedTitle.className = 'gb-section-title';
+        claimedTitle.style.marginTop = '6px';
+        claimedTitle.textContent = 'Claimed Cards';
+        claimedEl.appendChild(claimedTitle);
         cards.forEach(c => {
             const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
             const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
@@ -835,10 +833,7 @@ function renderMyStats(myState, gs) {
     const statsEl = el('gbMyStats');
     statsEl.innerHTML = '';
 
-    // Points
-    statsEl.appendChild(makeStat('Points', `${myState.points || 0}/40`));
-
-    // Drunk meter
+    // Drunk meter (pips only, no fraction label)
     const drunkLevel = myState.drunk_level || 0;
     const drunkStat = makeStat('Drunk', '');
     const meterEl = document.createElement('div');
@@ -851,55 +846,50 @@ function renderMyStats(myState, gs) {
         pip.setAttribute('aria-hidden', 'true');
         meterEl.appendChild(pip);
     }
-    const drunkLabel = document.createElement('span');
-    drunkLabel.style.fontSize = '0.75em';
-    drunkLabel.style.marginLeft = '4px';
-    drunkLabel.textContent = `${drunkLevel}/5`;
-    meterEl.appendChild(drunkLabel);
     drunkStat.querySelector('strong').after(meterEl);
     statsEl.appendChild(drunkStat);
 
-    // Bladder
+    // Bladder — physical slots (filled ingredients + empty + sealed by toilet tokens)
     const bladder = myState.bladder || [];
     const cap = myState.bladder_capacity || 8;
-    const pct = cap > 0 ? Math.min(bladder.length / cap, 1) : 0;
+    const toiletTokens = myState.toilet_tokens ?? 4;
     const bladderStat = makeStat('Bladder', '');
-    const barWrap = document.createElement('div');
-    barWrap.style.display = 'flex';
-    barWrap.style.alignItems = 'center';
-    barWrap.style.gap = '4px';
-    const bar = document.createElement('div');
-    bar.className = 'gb-bladder-bar';
-    bar.setAttribute('role', 'progressbar');
-    bar.setAttribute('aria-valuenow', bladder.length);
-    bar.setAttribute('aria-valuemax', cap);
-    bar.setAttribute('aria-label', `Bladder ${bladder.length} of ${cap}`);
-    const fill = document.createElement('div');
-    fill.className = 'gb-bladder-fill' + (pct >= 0.85 ? ' danger' : '');
-    fill.style.width = `${Math.round(pct * 100)}%`;
-    bar.appendChild(fill);
-    barWrap.appendChild(bar);
-    const bladderLabel = document.createElement('span');
-    bladderLabel.style.fontSize = '0.75em';
-    bladderLabel.textContent = `${bladder.length}/${cap}`;
-    barWrap.appendChild(bladderLabel);
-    bladderStat.querySelector('strong').after(barWrap);
-    if (bladder.length > 0) {
-        const bladderContents = document.createElement('div');
-        bladderContents.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;';
-        bladder.forEach(ing => bladderContents.appendChild(makeIngredientBadge(ing)));
-        bladderStat.appendChild(bladderContents);
-    }
+    const slotsEl = makeBladderSlots(bladder, cap, toiletTokens);
+    bladderStat.querySelector('strong').after(slotsEl);
     statsEl.appendChild(bladderStat);
 
-    // Toilet tokens
-    statsEl.appendChild(makeStat('Toilet Tokens', myState.toilet_tokens ?? 4));
-
-    // Take count
+    // Take count + Karaoke — compact
     statsEl.appendChild(makeStat('Must Take', myState.take_count ?? 3));
-
-    // Karaoke cards
     statsEl.appendChild(makeStat('Karaoke', `${myState.karaoke_cards_claimed ?? 0}/3`));
+}
+
+// Render a row of INITIAL_BLADDER_CAPACITY (8) physical bladder slots.
+// Slots 0..bladder.length-1: filled with ingredient token
+// Slots bladder.length..cap-1: empty open slots
+// Slots cap..7: sealed (spent toilet tokens, from the right)
+function makeBladderSlots(bladder, cap, toiletTokens) {
+    const INITIAL_SLOTS = 8;
+    const wrap = document.createElement('div');
+    wrap.className = 'gb-bladder-slots';
+    const spent = Math.max(0, INITIAL_SLOTS - cap - (4 - (toiletTokens ?? 4)));
+    // Simpler: total visible = 8, first cap slots are open (filled or empty), remaining are sealed
+    for (let i = 0; i < INITIAL_SLOTS; i++) {
+        const slot = document.createElement('div');
+        if (i < bladder.length) {
+            slot.className = 'gb-bladder-slot filled';
+            slot.setAttribute('title', ingredientLabel(bladder[i]));
+            slot.appendChild(makeIngredientBadge(bladder[i]));
+        } else if (i < cap) {
+            slot.className = 'gb-bladder-slot empty';
+            slot.setAttribute('aria-hidden', 'true');
+        } else {
+            slot.className = 'gb-bladder-slot sealed';
+            slot.setAttribute('aria-hidden', 'true');
+        }
+        wrap.appendChild(slot);
+    }
+    wrap.setAttribute('aria-label', `Bladder: ${bladder.length} of ${cap} slots used`);
+    return wrap;
 }
 
 function makeStat(label, value) {
@@ -921,6 +911,7 @@ function makeStat(label, value) {
 function renderMyCups(myState, isMyTurn, game, gs) {
     const cupsEl = el('gbMyCups');
     cupsEl.innerHTML = '';
+    const MAX_SLOTS = 5;
 
     const cupData = [
         { index: 0, contents: (myState.cups?.[0]?.ingredients) || [], hasDoubler: !!(myState.cups?.[0]?.has_cup_doubler) },
@@ -947,13 +938,16 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 
         const ingArea = document.createElement('div');
         ingArea.className = 'gb-cup-ingredients';
-        if (contents.length === 0) {
-            const hint = document.createElement('span');
-            hint.className = 'gb-cup-empty-hint';
-            hint.textContent = 'Empty';
-            ingArea.appendChild(hint);
-        } else {
-            contents.forEach(ing => ingArea.appendChild(makeIngredientBadge(ing)));
+        for (let s = 0; s < MAX_SLOTS; s++) {
+            const slot = document.createElement('div');
+            if (s < contents.length) {
+                slot.className = 'gb-cup-slot filled';
+                slot.appendChild(makeIngredientBadge(contents[s]));
+            } else {
+                slot.className = 'gb-cup-slot empty';
+                slot.setAttribute('aria-hidden', 'true');
+            }
+            ingArea.appendChild(slot);
         }
         cupEl.appendChild(ingArea);
 
@@ -1089,26 +1083,53 @@ function buildOtherSheet(pid, pState, gs) {
     const body = document.createElement('div');
     body.className = 'gb-mat-body';
 
-    // Compact stats row
-    const stats = document.createElement('div');
-    stats.className = 'gb-other-stats';
-    stats.innerHTML = `
-        <span>Drunk: <strong>${pState.drunk_level || 0}/5</strong></span>
-        <span>Bladder: <strong>${(pState.bladder||[]).length}/${pState.bladder_capacity||8}</strong></span>
-        <span>Karaoke: <strong>${pState.karaoke_cards_claimed||0}/3</strong></span>
-        <span>Cards: <strong>${(pState.cards||[]).length}</strong></span>
-    `;
-    body.appendChild(stats);
+    // Stats row: drunk pips + compact text stats
+    const statsRow = document.createElement('div');
+    statsRow.className = 'gb-other-stats';
 
-    // Cups — same gb-cup format as my cups
-    const cupsTitle = document.createElement('div');
-    cupsTitle.className = 'gb-section-title';
-    cupsTitle.style.marginTop = '6px';
-    cupsTitle.textContent = 'Cups';
-    body.appendChild(cupsTitle);
+    // Drunk pips
+    const drunkLevel = pState.drunk_level || 0;
+    const drunkWrap = document.createElement('span');
+    drunkWrap.className = 'gb-other-stat-drunk';
+    drunkWrap.setAttribute('aria-label', `Drunk ${drunkLevel}/5`);
+    const dMeter = document.createElement('div');
+    dMeter.className = 'gb-drunk-meter';
+    for (let i = 0; i < 5; i++) {
+        const pip = document.createElement('span');
+        pip.className = 'gb-drunk-pip' + (i < drunkLevel ? (drunkLevel >= 4 ? ' danger' : ' filled') : '');
+        dMeter.appendChild(pip);
+    }
+    drunkWrap.appendChild(dMeter);
+    statsRow.appendChild(drunkWrap);
 
+    [
+        `Karaoke: ${pState.karaoke_cards_claimed||0}/3`,
+        `Cards: ${(pState.cards||[]).length}`,
+    ].forEach(t => {
+        const s = document.createElement('span');
+        s.className = 'gb-stats-strip-stat';
+        s.textContent = t;
+        statsRow.appendChild(s);
+    });
+    body.appendChild(statsRow);
+
+    // Bladder — physical slots
+    const bladderStat = document.createElement('div');
+    bladderStat.className = 'gb-other-bladder';
+    const bLabel = document.createElement('strong');
+    bLabel.className = 'gb-stat-label';
+    bLabel.textContent = 'Bladder';
+    bladderStat.appendChild(bLabel);
+    const bladderContents = pState.bladder || [];
+    const bCap = pState.bladder_capacity || 8;
+    const bTokens = pState.toilet_tokens ?? 4;
+    bladderStat.appendChild(makeBladderSlots(bladderContents, bCap, bTokens));
+    body.appendChild(bladderStat);
+
+    // Cups — physical 5-slot cups
     const cupsRow = document.createElement('div');
     cupsRow.className = 'gb-cups';
+    const MAX_SLOTS = 5;
     [pState.cups?.[0] || {}, pState.cups?.[1] || {}].forEach((cupObj, i) => {
         const cup = cupObj.ingredients || [];
         const hasDoubler = !!(cupObj.has_cup_doubler);
@@ -1130,32 +1151,21 @@ function buildOtherSheet(pid, pState, gs) {
 
         const ingArea = document.createElement('div');
         ingArea.className = 'gb-cup-ingredients';
-        if (cup.length === 0) {
-            const hint = document.createElement('span');
-            hint.className = 'gb-cup-empty-hint';
-            hint.textContent = 'Empty';
-            ingArea.appendChild(hint);
-        } else {
-            cup.forEach(ing => ingArea.appendChild(makeIngredientBadge(ing)));
+        for (let s = 0; s < MAX_SLOTS; s++) {
+            const slot = document.createElement('div');
+            if (s < cup.length) {
+                slot.className = 'gb-cup-slot filled';
+                slot.appendChild(makeIngredientBadge(cup[s]));
+            } else {
+                slot.className = 'gb-cup-slot empty';
+                slot.setAttribute('aria-hidden', 'true');
+            }
+            ingArea.appendChild(slot);
         }
         cupEl.appendChild(ingArea);
         cupsRow.appendChild(cupEl);
     });
     body.appendChild(cupsRow);
-
-    // Bladder tokens
-    const bladderContents = pState.bladder || [];
-    if (bladderContents.length > 0) {
-        const bladderTitle = document.createElement('div');
-        bladderTitle.className = 'gb-section-title';
-        bladderTitle.style.marginTop = '6px';
-        bladderTitle.textContent = `Bladder (${bladderContents.length}/${pState.bladder_capacity||8})`;
-        body.appendChild(bladderTitle);
-        const bladderRow = document.createElement('div');
-        bladderRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;';
-        bladderContents.forEach(ing => bladderRow.appendChild(makeIngredientBadge(ing)));
-        body.appendChild(bladderRow);
-    }
 
     // Specials
     const specials = pState.special_ingredients || [];

@@ -285,9 +285,8 @@ def test_empty_cup_shows_no_ingredient_badges(
     page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
 
     assert page.locator("#gbMyCups .gb-cup-ingredients .gb-ingredient").count() == 0
-    # Empty hint text should be present
-    empty_hints = page.locator("#gbMyCups .gb-cup-empty-hint")
-    assert empty_hints.count() == 2
+    # Empty cups show physical empty slots (5 per cup × 2 cups = 10)
+    assert page.locator("#gbMyCups .gb-cup-slot.empty").count() == 10
 
 
 def test_other_player_cup_shows_ingredient_badges(
