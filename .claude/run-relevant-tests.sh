@@ -5,8 +5,8 @@
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
 
-# Only act on Python files inside app/ or tests/
-if ! echo "$FILE_PATH" | grep -qE '/(app|tests)/[^/]+\.py$'; then
+# Only act on Python files inside app/ or tests/, or JS/HTML files inside static/
+if ! echo "$FILE_PATH" | grep -qE '/(app|tests)/[^/]+\.py$|/static/[^/]+\.(js|html)$'; then
   exit 0
 fi
 
@@ -50,6 +50,9 @@ case "$BASENAME" in
   test_*.py)
     TESTS+=("$FILE_PATH")
     ;;
+  game.js|*.html)
+    TESTS+=("tests/ui/test_game_page.py" "tests/ui/test_history_detail.py")
+    ;;
   *)
     exit 0
     ;;
@@ -63,6 +66,12 @@ fi
 UNIQUE_TESTS=($(printf '%s\n' "${TESTS[@]}" | sort -u))
 
 echo "Running targeted tests for: $BASENAME (${UNIQUE_TESTS[*]})" >&2
+
+# JS syntax gate — fast check before running any tests
+if ! node --check static/game.js 2>&1; then
+  echo "JS syntax error in static/game.js — fix before tests can run"
+  exit 2
+fi
 
 OUTPUT=$(uv run pytest "${UNIQUE_TESTS[@]}" -v 2>&1)
 EXIT_CODE=$?

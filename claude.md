@@ -12,14 +12,34 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 - Backend: Use type hints in FastAPI; follow PEP8
 - Database: Supabase logic stays in `app/db.py`
 - UI: Keep JS and HTML files in `static/`
-- Testing: Prefer end to end tests using API. Ensure tests cover positive and negative tests for features.
-- Ensure backend app is stateless and API changes are non-breaking
+- Testing: BDD end-to-end via API. Every feature needs a positive and at least one negative scenario.
+- API changes are non-breaking: add optional fields only, never remove or rename
+- UI: WCAG 2.1 AA; responsive ≥320 px mobile and ≥1280 px desktop; no raw API errors shown to users; all interactive elements have descriptive `aria-label` attributes
 
-## Architecture notes
-- `/app`: FastAPI routes and logic
-- `/k3s`: K3s YAML files
-- `/static`: frontend assets
-- `/tests`: end to end and unit tests
-- `/terraform`: GCP terraform files
-- `/.github`: GitHub Actions YML files
+## Architecture
+- `/app` — FastAPI routes (`api.py`), business logic (`actions.py`, `gameManager.py`), domain models (`GameState.py`, `PlayerState.py`, `card.py`, `cocktails.py`)
+- `/static` — frontend assets
+- `/tests` — BDD tests (`features/*.feature` + `test_game_actions_bdd.py`), UI tests (`ui/`)
+- `/specs` — allium specs (source of truth for game rules, see below)
 
+## Domain Model
+Formal specs live in `specs/game.allium` and `specs/cards.allium`. Use the `spec-reader` agent to extract rules before implementing game logic. Key rules to know:
+
+**Winning:** 40+ pts OR 3 karaoke cards claimed OR last player standing
+**Elimination:** `drunk_level > 5` → hospitalised; `bladder.count > bladder_capacity` → wet
+**Turn:** player takes exactly ONE action per turn. `TakeIngredients` may span multiple API batches — the turn only advances when the cumulative total reaches `take_count`. No other action is permitted while a batch is in progress.
+**Cards:** costs are threshold checks only — no bladder ingredients are consumed on claim. `cards.allium` rules supersede same-named rules in `game.allium` (ClaimCard, RefreshCardRow, ReplaceCard, ApplyDrunkModifier, SellCup).
+**Row 1:** always contains karaoke cards, can never be refreshed.
+**Discard:** permanent graveyard (`gs.discard`), never reshuffled.
+
+## Definition of Done
+A task is complete when:
+1. Targeted tests pass — the PostToolUse hook runs them automatically after every file edit
+2. `uv run ruff check && uv run ruff format --check` is clean
+3. BDD feature file updated if any observable behaviour changed
+4. No breaking API changes introduced
+
+## Subagents
+- `spec-reader` — reads allium specs and returns a precise rule briefing; invoke before implementing any game logic to avoid misreading the spec
+- `bdd-test-writer` — writes BDD scenarios and step definitions matching project style; invoke when adding test coverage for new behaviour
+- `ui-developer` — builds and modifies UI components; enforces the board-game interaction model (clickable elements, state at a glance, guided turn flow), mobile/desktop layout, and WCAG 2.1 AA; invoke for any task touching `static/`

@@ -17,3 +17,4 @@ bartenders.rendered.yml
 k3s-rendered/
 .env
 .env.local
+.playwright-mcp/

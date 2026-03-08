@@ -160,6 +160,20 @@ surface GamePage {
     guidance: in-game interactions (ingredient actions, state updates) should respond within 200 ms
     guidance: the move history log and replay controls should be visually distinct from the live game board
                to avoid confusion between the replay view and the current game state
+    guidance: game elements must have physical, tactile representations — cups show actual ingredient slots,
+               bladder shows actual capacity slots with ingredient tokens filling them, toilet tokens physically
+               occupy sealed bladder slots to show reduced capacity; numeric summaries (e.g. "4/8") are
+               acceptable only as secondary labels alongside the physical layout, never as a replacement for it
+    guidance: cups are rendered as physical vessels with exactly config.max_cup_ingredients (5) visible slots;
+               filled slots show the ingredient token, empty slots show open receptors ready to accept an
+               ingredient; the cup as a whole is the interactive element for Sell and Drink actions
+    guidance: the bladder is rendered as a row of bladder_capacity slots, not a progress bar or number;
+               ingredient tokens sit in slots physically; each spent toilet token seals one slot from the
+               right, making that slot visually closed and unavailable; the sealed count equals
+               config.initial_toilet_tokens - player.toilet_tokens
+    guidance: toilet tokens are shown as a physical reserve; as tokens are spent on GoForAWee they visibly
+               seal a bladder slot, making the cause of capacity reduction immediately legible without
+               reading any number
 
     related:
         HomePage()
