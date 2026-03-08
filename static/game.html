@@ -71,7 +71,8 @@
                     <!-- Open display + bag -->
                     <div class="gb-section-title">Open Display</div>
                     <div class="gb-open-display" id="gbOpenDisplay" aria-label="Open ingredient display" role="list"></div>
-                    <div class="gb-bag-count" id="gbBagCount" aria-label="Bag contents count"></div>
+                    <div class="gb-bag-area" aria-label="Ingredient bag"><!-- bag SVG rendered by JS --></div>
+                    <div class="gb-bag-count" id="gbBagCount" aria-label="Deck count"></div>
 
                     <!-- Card rows -->
                     <div class="gb-section-title" style="margin-top:14px">Card Rows</div>
@@ -89,40 +90,34 @@
                         <span class="spinner" aria-hidden="true"></span>Loading…
                     </div>
                     <div id="gbMySheetContent" class="hidden">
-                        <div class="gb-sheet-name" id="gbMyName"></div>
+                        <!-- BGA-style player strip (edge-to-edge) -->
+                        <div id="gbMyName"></div>
 
-                        <!-- Stats row -->
-                        <div class="gb-stats-row" id="gbMyStats" role="group" aria-label="My stats"></div>
+                        <!-- Padded content area -->
+                        <div class="gb-my-sheet-content-inner">
+                            <!-- Stats row -->
+                            <div class="gb-stats-row" id="gbMyStats" role="group" aria-label="My stats"></div>
 
-                        <!-- Cups -->
-                        <div class="gb-section-title" style="margin-top:8px">My Cups</div>
-                        <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
+                            <!-- Cups -->
+                            <div class="gb-section-title" style="margin-top:8px">My Cups</div>
+                            <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
 
-                        <!-- Special ingredients -->
-                        <div class="gb-section-title">Special Ingredients on Mat</div>
-                        <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
+                            <!-- Special ingredients -->
+                            <div class="gb-section-title">Special Ingredients on Mat</div>
+                            <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
 
-                        <!-- Claimed cards -->
-                        <div class="gb-section-title">Claimed Cards</div>
-                        <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
+                            <!-- Claimed cards -->
+                            <div class="gb-section-title">Claimed Cards</div>
+                            <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
 
-                        <!-- Actions -->
-                        <div class="gb-section-title" style="margin-top:10px">Actions</div>
-                        <div class="gb-actions" id="gbActions" role="group" aria-label="Available actions">
-                            <button class="gb-action-btn" id="gbBtnTakeIngredients"
-                                    aria-label="Take ingredients from display or bag">
-                                Take Ingredients
-                            </button>
-                            <button class="gb-action-btn secondary" id="gbBtnWee"
-                                    aria-label="Go for a wee — empties bladder">
-                                Go for a Wee
-                            </button>
-                        </div>
+                            <!-- Wee action tile (rendered by JS) -->
+                            <div id="gbWeeTile"></div>
 
-                        <!-- Undo section -->
-                        <div id="gbUndoSection" class="gb-undo-section hidden" aria-label="Undo controls">
-                            <div class="gb-undo-title">Undo</div>
-                            <div id="gbUndoContent"></div>
+                            <!-- Undo section -->
+                            <div id="gbUndoSection" class="gb-undo-section hidden" aria-label="Undo controls">
+                                <div class="gb-undo-title">Undo</div>
+                                <div id="gbUndoContent"></div>
+                            </div>
                         </div>
                     </div>
                 </section>

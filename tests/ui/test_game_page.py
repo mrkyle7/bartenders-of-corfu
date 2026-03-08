@@ -404,8 +404,8 @@ def test_take_modal_auto_reopens_after_partial_batch_submit(
     page.goto(_game_url(base_url, game_id))
     page.locator("#gbBoardContent").wait_for(state="visible", timeout=8000)
 
-    # Open the take modal manually
-    take_btn = page.locator("#gbBtnTakeIngredients")
+    # Open the take modal by clicking the interactive bag visual
+    take_btn = page.locator("#gbBagVisual")
     take_btn.wait_for(state="visible", timeout=5000)
     take_btn.click()
 

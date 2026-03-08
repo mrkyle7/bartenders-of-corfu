@@ -426,27 +426,107 @@ input {
     overflow: hidden;
 }
 
-/* ---------- Left panel (board) ---------- */
+/* ---------- Left panel (board) — dark bar counter ---------- */
 .gb-board-panel {
     flex: 1 1 0;
     overflow-y: auto;
     padding: 12px;
     border-right: 2px solid rgba(212,160,23,0.3);
     min-width: 0;
+    /* Dark wood bar counter background */
+    background:
+        repeating-linear-gradient(
+            90deg,
+            rgba(255,255,255,0.015) 0px,
+            rgba(255,255,255,0.015) 1px,
+            transparent 1px,
+            transparent 60px
+        ),
+        repeating-linear-gradient(
+            180deg,
+            rgba(0,0,0,0.04) 0px,
+            rgba(0,0,0,0.04) 1px,
+            transparent 1px,
+            transparent 24px
+        ),
+        linear-gradient(160deg, #2c1a0e 0%, #3d2410 40%, #2a1608 100%);
+    color: #e8d5a8;
 }
 
 /* ---------- Right panel (player sheets) ---------- */
 .gb-right-panel {
-    width: 320px;
+    width: 330px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    background: rgba(247,231,206,0.6);
 }
 
+/* BGA-style player strip at top of my sheet */
 .gb-my-sheet {
-    padding: 12px;
+    padding: 0 0 12px;
     border-bottom: 2px solid rgba(212,160,23,0.35);
+}
+
+/* Player color strip — green for active player (BGA style) */
+.gb-player-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.gb-player-strip.my-turn {
+    background: linear-gradient(135deg, #1a5c1a, #2d8a2d);
+    color: #fff;
+}
+
+.gb-player-strip.waiting {
+    background: linear-gradient(135deg, #5a3010, #7a4820);
+    color: #f0d090;
+}
+
+.gb-player-strip.game-ended {
+    background: linear-gradient(135deg, #2a1a50, #3d2880);
+    color: #d0c0ff;
+}
+
+.gb-player-strip-name {
+    font-size: 0.9em;
+    font-weight: bold;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gb-player-strip-score {
+    font-size: 1.1em;
+    font-weight: bold;
+    background: rgba(0,0,0,0.2);
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+    min-width: 40px;
+    text-align: center;
+}
+
+.gb-player-strip-turn-tag {
+    font-size: 0.65em;
+    background: rgba(255,255,255,0.25);
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+/* Player sheet content — padded below the edge-to-edge strip */
+.gb-my-sheet-content-inner {
+    padding: 8px 12px 12px;
 }
 
 .gb-others-area {
@@ -454,6 +534,53 @@ input {
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+/* BGA-style other player strips */
+.gb-other-sheet {
+    background: rgba(255,255,255,0.45);
+    border: none;
+    border-radius: 8px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(74,44,14,0.12);
+}
+
+.gb-other-player-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: linear-gradient(135deg, #7a4018, #9a5828);
+    color: #f5ddb8;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.gb-other-player-strip.active-turn {
+    background: linear-gradient(135deg, #1a5c1a, #2d8a2d);
+    color: #e0ffe0;
+}
+
+.gb-other-player-strip-name {
+    font-size: 0.82em;
+    font-weight: bold;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gb-other-player-strip-score {
+    font-size: 0.88em;
+    font-weight: bold;
+    background: rgba(0,0,0,0.2);
+    padding: 1px 7px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
+.gb-other-sheet-body {
+    padding: 6px 10px 8px;
 }
 
 /* ---------- Bottom panel (history) ---------- */
@@ -513,19 +640,52 @@ input {
     border-bottom: 1px solid rgba(212,160,23,0.4);
 }
 
-/* ---------- Open display ---------- */
+/* Section titles inside the dark board panel */
+.gb-board-panel .gb-section-title {
+    color: #d4a850;
+    border-bottom-color: rgba(212,160,23,0.35);
+}
+
+.gb-board-panel .gb-card-row-label {
+    color: #c49840;
+}
+
+.gb-board-panel .gb-bag-count {
+    color: #c8a870;
+}
+
+/* Bag count text on dark bg */
+#gbBagCount {
+    font-size: 0.78em;
+    color: #c8a870;
+    margin-bottom: 8px;
+}
+
+/* ---------- Open display (ingredient tokens laid out on the bar) ---------- */
 .gb-open-display {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    padding: 8px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    min-height: 44px;
+    border: 1px solid rgba(212,160,23,0.2);
 }
 
 .gb-bag-count {
     font-size: 0.8em;
     color: #6b3a0f;
     margin-bottom: 10px;
+}
+
+/* Ingredient tokens in the open display are slightly larger */
+.gb-open-display .gb-ingredient {
+    font-size: 0.82em;
+    min-width: 32px;
+    height: 32px;
 }
 
 /* ---------- Card rows ---------- */
@@ -551,14 +711,16 @@ input {
 }
 
 .gb-card {
-    background: #fff8ef;
-    border: 2px solid #d4a017;
-    border-radius: 8px;
-    padding: 8px 10px;
+    background: linear-gradient(160deg, #fffdf8, #f5e8c8);
+    border: 1px solid rgba(180,130,40,0.5);
+    border-radius: 10px;
+    padding: 10px 10px 8px;
     min-width: 90px;
     max-width: 130px;
     flex: 1 1 90px;
     cursor: default;
+    /* Physical card depth */
+    box-shadow: 0 3px 6px rgba(74,44,14,0.2), 0 1px 2px rgba(74,44,14,0.15), inset 0 1px 0 rgba(255,255,255,0.7);
     transition: box-shadow 0.15s, transform 0.15s;
     position: relative;
 }
@@ -566,32 +728,84 @@ input {
 .gb-card.claimable {
     border-color: #2d7a2d;
     cursor: pointer;
-    box-shadow: 0 0 0 2px rgba(45,122,45,0.35);
+    box-shadow: 0 3px 8px rgba(45,122,45,0.35), 0 1px 2px rgba(45,122,45,0.2);
 }
 
 .gb-card.claimable:hover,
 .gb-card.claimable:focus {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(45,122,45,0.4);
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 8px 20px rgba(45,122,45,0.45), 0 2px 4px rgba(45,122,45,0.2);
     outline: none;
 }
 
 .gb-card.karaoke {
-    border-color: #9333ea;
-    background: #fdf4ff;
+    border-color: rgba(147,51,234,0.6);
+    background: linear-gradient(160deg, #fdf8ff, #ede0ff);
+    box-shadow: 0 3px 6px rgba(100,40,180,0.2), 0 1px 2px rgba(100,40,180,0.15), inset 0 1px 0 rgba(255,255,255,0.7);
 }
 
 .gb-card-karaoke-badge {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    font-size: 0.62em;
-    background: #9333ea;
+    top: 5px;
+    right: 5px;
+    font-size: 0.58em;
+    background: linear-gradient(135deg, #a855f7, #7c3aed);
     color: #fff;
-    padding: 1px 5px;
+    padding: 2px 6px;
     border-radius: 10px;
     font-weight: bold;
     text-transform: uppercase;
+    letter-spacing: 0.04em;
+    box-shadow: 0 1px 3px rgba(100,40,180,0.4);
+}
+
+/* Card type variants */
+.gb-card.store {
+    border-color: rgba(45,122,45,0.5);
+    background: linear-gradient(160deg, #f8fff8, #dff0df);
+    box-shadow: 0 3px 6px rgba(20,80,20,0.18), 0 1px 2px rgba(20,80,20,0.12), inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.gb-card.refresher {
+    border-color: rgba(59,130,246,0.5);
+    background: linear-gradient(160deg, #f8fbff, #ddeeff);
+    box-shadow: 0 3px 6px rgba(30,80,180,0.18), 0 1px 2px rgba(30,80,180,0.12), inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.gb-card.cup_doubler {
+    border-color: rgba(212,160,23,0.7);
+    background: linear-gradient(160deg, #fffef0, #fff5c0);
+    box-shadow: 0 3px 6px rgba(150,110,0,0.22), 0 1px 2px rgba(150,110,0,0.15), inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+/* Type badge — top-right pill showing card kind */
+.gb-card-type-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    font-size: 0.56em;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #fff;
+    background: linear-gradient(135deg, #8a5c2e, #6b3a0f);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+
+.gb-card.karaoke   .gb-card-type-badge { background: linear-gradient(135deg, #a855f7, #7c3aed); box-shadow: 0 1px 3px rgba(100,40,180,0.4); }
+.gb-card.store     .gb-card-type-badge { background: linear-gradient(135deg, #16a34a, #15803d); box-shadow: 0 1px 3px rgba(20,100,40,0.4); }
+.gb-card.refresher .gb-card-type-badge { background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 1px 3px rgba(30,70,200,0.4); }
+.gb-card.cup_doubler .gb-card-type-badge { background: linear-gradient(135deg, #d97706, #b45309); box-shadow: 0 1px 3px rgba(150,90,0,0.4); }
+
+/* Spirit/mixer sub-label under the card name */
+.gb-card-sub {
+    font-size: 0.72em;
+    color: #8a5c2e;
+    margin-top: 1px;
+    margin-bottom: 2px;
+    font-style: italic;
 }
 
 .gb-card-cost {
@@ -602,10 +816,11 @@ input {
 }
 
 .gb-card-id {
-    font-size: 0.65em;
-    color: #8a5c2e;
-    font-family: monospace;
-    word-break: break-all;
+    font-size: 0.72em;
+    color: #6b3a0f;
+    font-family: Georgia, serif;
+    font-weight: bold;
+    margin-bottom: 4px;
 }
 
 .gb-refresh-row-btn {
@@ -625,52 +840,68 @@ input {
 .gb-refresh-row-btn:hover { background: #6b3a0f; transform: none; }
 .gb-refresh-row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ---------- Ingredient badges ---------- */
+/* ---------- Ingredient tokens (BGA-style physical tokens) ---------- */
 .gb-ingredient {
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.78em;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 14px;
+    font-size: 0.72em;
     font-weight: bold;
     white-space: nowrap;
     user-select: none;
+    line-height: 1;
+    /* Physical token depth */
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.25);
+    border: 1px solid rgba(0,0,0,0.15);
+    transition: transform 0.1s, box-shadow 0.1s;
+    letter-spacing: 0.01em;
+    cursor: default;
 }
 
-/* spirit = amber */
+/* spirit = amber/gold token */
 .gb-ingredient.spirit {
-    background: #d4a017;
+    background: linear-gradient(145deg, #e8b420, #c49010);
     color: #fff;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.3);
 }
 
-/* mixer = blue-grey */
+/* mixer = blue token */
 .gb-ingredient.mixer {
-    background: #4b7ca8;
+    background: linear-gradient(145deg, #5a8fc0, #3a6a90);
     color: #fff;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.3);
 }
 
-/* special = purple */
+/* special = purple token */
 .gb-ingredient.special {
-    background: #7c3aed;
+    background: linear-gradient(145deg, #9050f8, #6425cc);
     color: #fff;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.3);
 }
 
-/* cost badge */
+/* cost badge — shows required amounts on cards */
 .gb-cost-badge {
     display: inline-flex;
     align-items: center;
-    padding: 1px 6px;
-    border-radius: 10px;
-    font-size: 0.7em;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 7px;
+    border-radius: 13px;
+    font-size: 0.72em;
     font-weight: bold;
-    background: rgba(74,44,14,0.12);
-    color: #4a2c0e;
     white-space: nowrap;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.2);
+    border: 1px solid rgba(0,0,0,0.12);
 }
 
-.gb-cost-badge.spirit { background: rgba(212,160,23,0.25); }
-.gb-cost-badge.mixer  { background: rgba(75,124,168,0.2); }
-.gb-cost-badge.special { background: rgba(124,58,237,0.18); }
+.gb-cost-badge.spirit { background: linear-gradient(145deg, #e8b420, #c49010); color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.25); }
+.gb-cost-badge.mixer  { background: linear-gradient(145deg, #5a8fc0, #3a6a90); color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.25); }
+.gb-cost-badge.special { background: linear-gradient(145deg, #9050f8, #6425cc); color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.25); }
 
 /* ---------- Player sheet ---------- */
 .gb-sheet-name {
@@ -761,28 +992,45 @@ input {
 
 .gb-bladder-fill.danger { background: #b91c1c; }
 
-/* Cups */
+/* Cups — glass-like appearance */
 .gb-cups {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     margin-bottom: 8px;
 }
 
 .gb-cup {
-    background: rgba(255,255,255,0.6);
-    border: 2px solid #d4a017;
-    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(255,255,255,0.85), rgba(230,210,170,0.5));
+    border: 1.5px solid rgba(180,130,40,0.45);
+    border-radius: 6px 6px 12px 12px; /* slight glass taper */
     padding: 8px 10px;
-    min-width: 110px;
-    flex: 1 1 110px;
+    min-width: 100px;
+    flex: 1 1 100px;
+    box-shadow: 0 3px 8px rgba(74,44,14,0.15), inset 0 1px 0 rgba(255,255,255,0.8), inset 1px 0 0 rgba(255,255,255,0.4);
+    position: relative;
+}
+
+/* Glass highlight stripe */
+.gb-cup::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 6px;
+    width: 4px;
+    height: 60%;
+    background: rgba(255,255,255,0.5);
+    border-radius: 0 0 4px 4px;
+    pointer-events: none;
 }
 
 .gb-cup-title {
-    font-size: 0.75em;
+    font-size: 0.73em;
     font-weight: bold;
     color: #6b3a0f;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .gb-cup-ingredients {
@@ -909,14 +1157,7 @@ input {
 
 .gb-action-btn.danger:hover { background: #991b1b; }
 
-/* ---------- Other players compact sheet ---------- */
-.gb-other-sheet {
-    background: rgba(255,255,255,0.45);
-    border: 1.5px solid rgba(212,160,23,0.4);
-    border-radius: 8px;
-    padding: 8px 10px;
-}
-
+/* ---------- Other players compact sheet — see BGA-style above ---------- */
 .gb-other-sheet-name {
     font-size: 0.85em;
     font-weight: bold;
@@ -1792,25 +2033,49 @@ input {
     .gb-menu-highlight { border-color: rgba(212,160,23,0.7) !important; background: rgba(212,160,23,0.1) !important; }
 }
 
-/* ---------- Responsive ---------- */
+/* ---------- Responsive (BGA-style mobile stacking) ---------- */
 @media (max-width: 768px) {
+    /* Stack: player sheets on top, board below — like BGA mobile */
     .gb-main {
-        flex-direction: column;
+        flex-direction: column-reverse;
         overflow: visible;
     }
 
     .gb-board-panel {
         border-right: none;
-        border-bottom: 2px solid rgba(212,160,23,0.3);
+        border-top: 2px solid rgba(212,160,23,0.3);
         overflow-y: visible;
+        min-height: 300px;
     }
 
     .gb-right-panel {
         width: 100%;
+        /* Player sheets stacked side-by-side at top on tablet */
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        overflow-y: visible;
+        background: none;
+    }
+
+    .gb-my-sheet {
+        flex: 1 1 280px;
+        min-width: 0;
+    }
+
+    .gb-others-area {
+        flex: 1 1 200px;
+        min-width: 0;
     }
 
     .gb-bottom-panel {
         max-height: 180px;
+    }
+
+    /* Compact cups on tablet */
+    .gb-cup {
+        min-width: 90px;
+        flex: 1 1 90px;
     }
 }
 
@@ -1820,12 +2085,13 @@ input {
     }
 
     .gb-cup {
-        min-width: 90px;
+        min-width: 80px;
+        flex: 1 1 80px;
     }
 
     .gb-action-btn {
-        font-size: 0.78em;
-        padding: 6px 10px;
+        font-size: 0.8em;
+        padding: 7px 12px;
     }
 
     /* Compact header buttons on mobile */
@@ -1840,9 +2106,306 @@ input {
     /* Prevent winner/error bars from breaking the header row */
     .gb-winner-banner,
     .gb-error-bar { width: 100%; order: 10; }
+
+    /* On phone: full-width player strips, board below */
+    .gb-right-panel {
+        flex-direction: column;
+    }
+
+    /* Ingredient tokens smaller on phone */
+    .gb-ingredient {
+        min-width: 22px;
+        height: 22px;
+        font-size: 0.66em;
+        padding: 0 6px;
+    }
+
+    /* Card cost tokens smaller */
+    .gb-cost-badge {
+        min-width: 20px;
+        height: 20px;
+        font-size: 0.66em;
+        padding: 0 5px;
+    }
 }
 
 @media (max-width: 320px) {
     .gb-header-gameid { display: none; }
     .gb-card { min-width: 70px; }
+}
+
+/* ============================================================
+   INTERACTIVE UI ELEMENTS (no-button design)
+   ============================================================ */
+
+/* ---------- Clickable display ingredients ---------- */
+.gb-display-takeable {
+    cursor: pointer;
+    transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+
+.gb-display-takeable:hover,
+.gb-display-takeable:focus {
+    transform: translateY(-4px) scale(1.1);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4), 0 2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.35);
+    filter: brightness(1.15);
+    outline: none;
+    z-index: 2;
+    position: relative;
+}
+
+.gb-display-takeable:active {
+    transform: translateY(-1px) scale(1.05);
+}
+
+/* Pulse animation when it's my turn to signal clickability */
+.gb-open-display .gb-display-takeable {
+    animation: token-idle 3s ease-in-out infinite;
+}
+
+@keyframes token-idle {
+    0%, 100% { box-shadow: 0 2px 0 rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.25); }
+    50%       { box-shadow: 0 2px 0 rgba(0,0,0,0.3), 0 2px 8px rgba(212,160,23,0.5), inset 0 1px 0 rgba(255,255,255,0.25); }
+}
+
+/* ---------- Bag visual ---------- */
+.gb-bag-area {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 8px 0 2px;
+}
+
+.gb-bag-visual {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    padding: 4px;
+    border-radius: 10px;
+    transition: transform 0.15s, filter 0.15s;
+    cursor: default;
+    user-select: none;
+}
+
+.gb-bag-visual.interactive {
+    cursor: pointer;
+}
+
+.gb-bag-visual.interactive:hover,
+.gb-bag-visual.interactive:focus {
+    transform: scale(1.08) translateY(-3px);
+    filter: brightness(1.2) drop-shadow(0 4px 10px rgba(212,160,23,0.5));
+    outline: none;
+}
+
+.gb-bag-visual.interactive:active {
+    transform: scale(1.03) translateY(-1px);
+}
+
+.gb-bag-svg {
+    width: 64px;
+    height: 72px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+.gb-bag-count-badge {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.7);
+    color: #f5d07a;
+    font-size: 0.78em;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 1px 6px;
+    min-width: 20px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.gb-bag-hint {
+    font-size: 0.62em;
+    color: #d4a850;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: -2px;
+    font-weight: bold;
+    animation: hint-pulse 2s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%       { opacity: 1; }
+}
+
+/* ---------- Interactive cup (click-to-act, no buttons) ---------- */
+.gb-cup-interactive {
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+}
+
+.gb-cup-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(74,44,14,0.25), inset 0 1px 0 rgba(255,255,255,0.8), inset 1px 0 0 rgba(255,255,255,0.4);
+}
+
+.gb-cup-interactive:focus {
+    outline: 2px solid #d4a017;
+    outline-offset: 2px;
+}
+
+/* Floating action overlay on the cup */
+.gb-cup-action-overlay {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    background: rgba(40,20,5,0.95);
+    border: 1px solid rgba(212,160,23,0.5);
+    border-radius: 10px;
+    padding: 6px;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+    animation: overlay-pop 0.12s ease-out;
+}
+
+@keyframes overlay-pop {
+    from { opacity: 0; transform: translateX(-50%) scale(0.85) translateY(4px); }
+    to   { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
+}
+
+.gb-cup-action-overlay::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(40,20,5,0.95);
+}
+
+/* Action tiles inside the cup overlay */
+.gb-cup-action-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s, transform 0.1s;
+    min-width: 52px;
+}
+
+.gb-cup-action-tile:hover {
+    transform: scale(1.08);
+}
+
+.gb-cup-action-tile:focus {
+    outline: 2px solid #d4a017;
+    outline-offset: 2px;
+}
+
+.gb-cup-action-tile.sell {
+    background: linear-gradient(145deg, #1a6b1a, #2d8a2d);
+}
+
+.gb-cup-action-tile.sell:hover {
+    background: linear-gradient(145deg, #1f8020, #35a035);
+}
+
+.gb-cup-action-tile.drink {
+    background: linear-gradient(145deg, #2a5f8a, #3a7ab8);
+}
+
+.gb-cup-action-tile.drink:hover {
+    background: linear-gradient(145deg, #3070a0, #4a8acc);
+}
+
+.gb-cup-action-icon {
+    font-size: 1.4em;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.gb-cup-action-label {
+    font-size: 0.65em;
+    font-weight: bold;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    pointer-events: none;
+}
+
+/* Subtle "tap me" animation on the cup title when interactive */
+.gb-cup-interactive .gb-cup-title {
+    transition: color 0.2s;
+}
+.gb-cup-interactive:hover .gb-cup-title {
+    color: #d4a017;
+}
+
+/* ---------- Wee action tile ---------- */
+#gbWeeTile {
+    margin-top: 10px;
+}
+
+.gb-wee-tile {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: linear-gradient(145deg, #5a3010, #7a4820);
+    border: 1px solid rgba(212,160,23,0.35);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    user-select: none;
+}
+
+.gb-wee-tile:hover {
+    background: linear-gradient(145deg, #6b3a10, #8a5828);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.3);
+}
+
+.gb-wee-tile:focus {
+    outline: 2px solid #d4a017;
+    outline-offset: 2px;
+}
+
+.gb-wee-tile:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+.gb-wee-icon {
+    font-size: 1.3em;
+    line-height: 1;
+}
+
+.gb-wee-label {
+    font-size: 0.82em;
+    font-weight: bold;
+    color: #f0d090;
+    letter-spacing: 0.02em;
+}
+
+/* ---------- Bag area layout in dark board panel ---------- */
+.gb-board-panel .gb-bag-count-badge {
+    color: #f5d07a;
+}
+
+.gb-board-panel #gbBagCount {
+    font-size: 0.72em;
+    color: #a88848;
+    margin: 0 0 10px 0;
 }
