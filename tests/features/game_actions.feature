@@ -211,3 +211,182 @@ Feature: Game turn actions
     When player 1 takes 1 ingredient from the bag
     And player 1 tries to claim that card
     Then the action should be rejected with a 409 error
+
+  # ── Priority 1: Card type effects ────────────────────────────────────────────
+
+  Scenario: Refresher card makes matching mixer subtract drunk even when spirits consumed
+    Given it is player 1's turn
+    And player 1 holds a COLA refresher card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 drinks cup 0
+    Then player 1's drunk level should be 0
+
+  Scenario: Store card transfers all matching bladder spirits to stored_spirits on claim
+    Given it is player 1's turn
+    And a store card is available in row 2
+    And player 1 has 3 spirits in their bladder
+    When player 1 claims that card
+    Then player 1 should have 1 card
+    And player 1's store card should have 3 stored spirits
+    And player 1's bladder should be empty
+
+  Scenario: Store card cost cannot be paid using same-type stored spirits
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 2 stored spirits
+    And a store card is available in row 2
+    And player 1 has 0 spirits in their bladder
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  Scenario: Karaoke card claim can use stored spirits toward the cost
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 1 stored spirit
+    And player 1 has 2 spirits in their bladder
+    And a karaoke card is available in row 1
+    When player 1 claims that card
+    Then player 1 should have 2 cards
+
+  Scenario: CupDoubler doubles points for a non-cocktail sell
+    Given it is player 1's turn
+    And player 1's cup 0 has the cup doubler effect
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 2 points
+
+  Scenario: CupDoubler does not double points for a cocktail sell
+    Given it is player 1's turn
+    And player 1's cup 0 has the cup doubler effect
+    And player 1's cup 0 contains 2 RUM and 1 SODA
+    And player 1 has "sugar" on their player mat
+    When player 1 sells cup 0 declaring specials "sugar"
+    Then player 1 should have 10 points
+
+  Scenario: Claiming a CupDoubler card without a cup_index is rejected
+    Given it is player 1's turn
+    And a cup doubler card is available in row 2
+    And player 1 has 3 spirits in their bladder
+    When player 1 tries to claim that cup doubler card without a cup_index
+    Then the action should be rejected with a 400 error
+
+  # ── Priority 2: Row and deck mechanics ───────────────────────────────────────
+
+  Scenario: RefreshCardRow is blocked for row 1 even when player is drunk enough
+    Given it is player 1's turn
+    And player 1 has a drunk level of 3
+    When player 1 tries to refresh card row 1
+    Then the action should be rejected with a 400 error
+
+  Scenario: Refreshing row 2 discards a karaoke card rather than returning it to row 1
+    Given it is player 1's turn
+    And player 1 has a drunk level of 3
+    And a karaoke card is available in row 2
+    When player 1 refreshes card row 2
+    Then row 2 should be refreshed with new cards
+    And the refreshed card should not appear in row 1
+
+  Scenario: Claiming a card when the deck is empty leaves the row slot vacant
+    Given it is player 1's turn
+    And the deck is empty
+    And a refresher card is available in row 2
+    And player 1 has 2 mixers in their bladder
+    When player 1 claims that card
+    Then row 2 should have 2 cards
+
+  Scenario: At game start row 1 has 3 karaoke cards and rows 2 and 3 have 3 cards each
+    Given it is player 1's turn
+    Then row 1 should have 3 cards
+    And all cards in row 1 should be karaoke type
+    And row 2 should have 3 cards
+    And row 3 should have 3 cards
+    And the deck should have 7 cards remaining
+
+  # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────
+
+  Scenario: GoForAWee does not flush stored spirits from a Store card
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 2 stored spirits
+    And player 1 has 3 ingredients in their bladder
+    When player 1 goes for a wee
+    Then player 1's bladder should be empty
+    And player 1's store card should have 2 stored spirits
+
+  Scenario: Stored spirits count toward karaoke cost but are not consumed on claim
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 1 stored spirit
+    And player 1 has 2 spirits in their bladder
+    And a karaoke card is available in row 1
+    When player 1 claims that card
+    Then player 1's store card should have 1 stored spirit
+
+  # ── Priority 4: Tequila Slammer scoring ──────────────────────────────────────
+
+  Scenario: Player sells a Tequila Slammer for 3 points
+    Given it is player 1's turn
+    And player 1's cup 0 contains 2 TEQUILA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 3 points
+    And cup 0 should be empty
+
+  Scenario: Tequila with a mixer is not a valid drink and is rejected
+    Given it is player 1's turn
+    And player 1's cup 0 contains 2 TEQUILA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then the action should be rejected with a 400 error
+
+  # ── Priority 5: Edge cases ────────────────────────────────────────────────────
+
+  Scenario: GoForAWee with no toilet tokens remaining still clears bladder and sobers up
+    Given it is player 1's turn
+    And player 1 has used all toilet tokens
+    And player 1 has 3 ingredients in their bladder
+    And player 1 has a drunk level of 2
+    When player 1 goes for a wee
+    Then player 1's bladder should be empty
+    And player 1's drunk level should be 1
+    And player 1's bladder capacity should be 4
+
+  Scenario: bladder_capacity does not go below the minimum of 4
+    Given it is player 1's turn
+    And player 1 has used all toilet tokens
+    When player 1 goes for a wee
+    Then player 1's bladder capacity should be 4
+
+  Scenario: GoForAWee is permitted with an empty bladder
+    Given it is player 1's turn
+    And player 1 has a drunk level of 2
+    When player 1 goes for a wee
+    Then player 1's bladder should be empty
+    And player 1's drunk level should be 1
+    And player 1's toilet tokens should decrease by 1
+
+  Scenario: TakeIngredients is rejected when bag and display have fewer than take_count ingredients
+    Given it is player 1's turn
+    And the bag and display together have fewer than 3 ingredients
+    When player 1 tries to take an ingredient
+    Then the action should be rejected with a 409 error
+
+  Scenario: Game state at turn 1 reflects the state after the first completed turn
+    Given player 1 has completed a turn
+    When player 1 requests the state at turn 1
+    Then the returned state should reflect turn 1
+
+  Scenario: Requesting game state at a non-existent turn is rejected
+    Given it is player 1's turn
+    When player 1 requests the state at turn 999
+    Then the action should be rejected with a 404 error
+
+  Scenario: A player who is not a game member cannot access the move history
+    Given player 1 has completed a turn
+    When a non-member tries to fetch the move history
+    Then the action should be rejected with a 403 error
+
+  Scenario: Player 2 is eliminated when drunk and bladder limits are both exceeded simultaneously
+    Given it is player 1's turn
+    And player 2 has a drunk level of 5
+    And player 2 has 8 ingredients in their bladder
+    And player 2's cup 0 contains 1 WHISKEY and 1 COLA
+    When player 1 goes for a wee
+    And player 2 drinks cup 0
+    Then player 2 should be eliminated
+    And the game should be over
+    And player 1 should be the winner

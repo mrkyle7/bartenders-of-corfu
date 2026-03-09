@@ -309,15 +309,17 @@ def refresher_card_in_row(ctx, row):
     def patch(gs):
         for r in gs.card_rows:
             if r.position == row:
-                r.cards.insert(
-                    0,
-                    _Card(
-                        id=new_card_id,
-                        card_type="refresher",
-                        name="Cola Refresher",
-                        mixer_type="COLA",
-                    ),
+                # Replace first card so row count stays the same (keeps deck-empty test correct)
+                new_card = _Card(
+                    id=new_card_id,
+                    card_type="refresher",
+                    name="Cola Refresher",
+                    mixer_type="COLA",
                 )
+                if r.cards:
+                    r.cards[0] = new_card
+                else:
+                    r.cards.append(new_card)
                 break
         return gs
 
@@ -438,6 +440,132 @@ def player_proposed_undo(ctx, n):
     )
     assert resp.status_code == 200, resp.text
     ctx["undo_request_id"] = resp.json()["undo_request"]["id"]
+
+
+@given(parsers.parse("player {n:d} holds a {mixer_type} refresher card"))
+def player_holds_refresher_card(ctx, n, mixer_type):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    _, pid = _player(ctx, n)
+    card = _Card(
+        id=str(_uuid.uuid4()),
+        card_type="refresher",
+        name=f"{mixer_type.upper()} Refresher",
+        mixer_type=mixer_type.upper(),
+    )
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.cards.append(card.to_dict())
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given(
+    parsers.parse("player {n:d} holds a VODKA store card with {count:d} stored spirits")
+)
+@given(
+    parsers.parse("player {n:d} holds a VODKA store card with {count:d} stored spirit")
+)
+def player_holds_store_card(ctx, n, count):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    _, pid = _player(ctx, n)
+    card = _Card(
+        id=str(_uuid.uuid4()),
+        card_type="store",
+        name="Vodka Store",
+        spirit_type="VODKA",
+        stored_spirits=["VODKA"] * count,
+    )
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.cards.append(card.to_dict())
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given(parsers.parse("player {n:d}'s cup {cup_index:d} has the cup doubler effect"))
+def player_cup_has_doubler(ctx, n, cup_index):
+    _, pid = _player(ctx, n)
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.cups[cup_index].has_cup_doubler = True
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given(
+    parsers.parse("a cup doubler card is available in row {row:d}"),
+    target_fixture="available_card_id",
+)
+def cup_doubler_card_in_row(ctx, row):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    new_card_id = str(_uuid.uuid4())
+
+    def patch(gs):
+        for r in gs.card_rows:
+            if r.position == row:
+                r.cards.insert(
+                    0,
+                    _Card(
+                        id=new_card_id,
+                        card_type="cup_doubler",
+                        name="Cup Doubler",
+                        spirit_type="VODKA",
+                    ),
+                )
+                break
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+    ctx["target_card_id"] = new_card_id
+    return new_card_id
+
+
+@given("the deck is empty")
+def deck_is_empty(ctx):
+    def patch(gs):
+        gs._deck_dicts = []
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given(parsers.parse("player {n:d} has used all toilet tokens"))
+def player_used_all_toilet_tokens(ctx, n):
+    from app.PlayerState import MIN_BLADDER_CAPACITY
+
+    _, pid = _player(ctx, n)
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.toilet_tokens = 0
+        ps.bladder_capacity = MIN_BLADDER_CAPACITY
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given("the bag and display together have fewer than 3 ingredients")
+def bag_and_display_too_few(ctx):
+    """Empty both bag and open display so any draw attempt fails with 409."""
+
+    def patch(gs):
+        gs.bag_contents = []
+        gs.open_display = []
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
 
 
 # ─── When steps ───────────────────────────────────────────────────────────────
@@ -626,11 +754,7 @@ def player_try_refresh_row(ctx, n, row):
 @when(parsers.parse("player {n:d} tries to take an ingredient"))
 def player_try_take_ingredient(ctx, n):
     token, _ = _player(ctx, n)
-    game = _get_game(token, ctx["game_id"])
-    bag = game["game_state"]["bag_contents"]
-    if not bag:
-        pytest.skip("No bag contents")
-    # Attempt the draw step — turn/player validation happens here
+    # Attempt the draw step — validates turn, player, and ingredient availability
     resp = _client.post(
         f"/v1/games/{ctx['game_id']}/actions/draw-from-bag",
         json={"count": 1},
@@ -707,6 +831,34 @@ def player_state_at_turn(ctx, n, turn):
     token, _ = _player(ctx, n)
     resp = _client.get(
         f"/v1/games/{ctx['game_id']}/history/{turn}",
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(
+    parsers.parse(
+        "player {n:d} tries to claim that cup doubler card without a cup_index"
+    )
+)
+def player_claim_cup_doubler_no_index(ctx, n):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/claim-card",
+        json={"card_id": ctx["target_card_id"], "spirit_type": "VODKA"},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when("a non-member tries to fetch the move history")
+def non_member_fetch_history(ctx):
+    outsider = _unique("outsider")
+    token, _ = _register(outsider)
+    resp = _client.get(
+        f"/v1/games/{ctx['game_id']}/history",
         cookies=_auth(token),
     )
     ctx["last_resp"] = resp
@@ -960,6 +1112,70 @@ def state_is_initial(ctx):
     state = ctx["last_resp"].json()["game_state"]
     assert state is not None
     assert state.get("turn_number", 0) == 0
+
+
+@then(parsers.parse("player {n:d}'s store card should have {count:d} stored spirits"))
+@then(parsers.parse("player {n:d}'s store card should have {count:d} stored spirit"))
+def player_store_card_has_spirits(ctx, n, count):
+    ps = _player_state(ctx, n)
+    store_cards = [c for c in ps["cards"] if c["card_type"] == "store"]
+    assert store_cards, f"Player {n} has no store cards"
+    total = sum(len(c.get("stored_spirits", [])) for c in store_cards)
+    assert total == count, f"Expected {count} stored spirits, got {total}"
+
+
+@then("the refreshed card should not appear in row 1")
+def refreshed_card_not_in_row1(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    rows = game["game_state"]["card_rows"]
+    row1_ids = [c["id"] for r in rows if r["position"] == 1 for c in r["cards"]]
+    assert ctx["target_card_id"] not in row1_ids, (
+        f"Refreshed card {ctx['target_card_id']} appeared in row 1"
+    )
+
+
+@then("all cards in row 1 should be karaoke type")
+def row1_all_karaoke(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    rows = game["game_state"]["card_rows"]
+    row1 = next((r for r in rows if r["position"] == 1), None)
+    assert row1 is not None, "Row 1 not found"
+    assert all(c["card_type"] == "karaoke" for c in row1["cards"]), (
+        f"Not all row 1 cards are karaoke: {[c['card_type'] for c in row1['cards']]}"
+    )
+
+
+@then("the deck should have 7 cards remaining")
+def deck_has_7_cards(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    deck_size = game["game_state"]["deck_size"]
+    assert deck_size == 7, f"Expected deck_size 7, got {deck_size}"
+
+
+@then(parsers.parse("player {n:d}'s bladder capacity should be {capacity:d}"))
+def player_bladder_capacity_check(ctx, n, capacity):
+    ps = _player_state(ctx, n)
+    assert ps["bladder_capacity"] == capacity, (
+        f"Expected bladder_capacity {capacity}, got {ps['bladder_capacity']}"
+    )
+
+
+@then("the returned state should reflect turn 1")
+def returned_state_is_turn1(ctx):
+    assert ctx["last_status"] == 200, ctx["last_resp"].text
+    state = ctx["last_resp"].json()["game_state"]
+    assert state is not None
+    assert state.get("turn_number") == 1, (
+        f"Expected turn_number 1, got {state.get('turn_number')}"
+    )
+
+
+@then(parsers.parse("player {n:d} should be eliminated"))
+def player_is_eliminated_check(ctx, n):
+    ps = _player_state(ctx, n)
+    assert ps["status"] in ("hospitalised", "wet"), (
+        f"Expected player {n} to be eliminated, got status {ps['status']}"
+    )
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -401,7 +401,7 @@ class Db:
         if next_move.data:
             return next_move.data[0]["state_before"]
 
-        # N is the last turn — return latest_state
+        # N is the last turn — only valid if N ≤ current turn_number
         resp = (
             self.supabase.table("games")
             .select("latest_state")
@@ -410,7 +410,12 @@ class Db:
         )
         if not resp.data:
             return None
-        return resp.data[0].get("latest_state")
+        latest = resp.data[0].get("latest_state")
+        if latest is None:
+            return None
+        if turn_number > latest.get("turn_number", 0):
+            return None
+        return latest
 
     # ─── Undo requests ────────────────────────────────────────────────────────
 
