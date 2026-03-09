@@ -1078,6 +1078,7 @@ input {
     align-items: center;
 }
 
+/* Slot is just a frame — the standard ingredient token inside provides colour */
 .gb-bladder-slot {
     width: 30px;
     height: 30px;
@@ -1086,14 +1087,10 @@ input {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 1em;        /* emoji size */
-    line-height: 1;
+    overflow: hidden;
+    /* Scale the standard token down to fit the frame */
+    font-size: 0.52em;
 }
-
-/* Filled: slot adopts ingredient colour, shows emoji icon */
-.gb-bladder-slot.filled.spirit  { background: linear-gradient(145deg, #e8b420, #c49010); box-shadow: 0 2px 0 rgba(0,0,0,0.28); }
-.gb-bladder-slot.filled.mixer   { background: linear-gradient(145deg, #5a8fc0, #3a6a90); box-shadow: 0 2px 0 rgba(0,0,0,0.28); }
-.gb-bladder-slot.filled.special { background: linear-gradient(145deg, #9050f8, #6425cc); box-shadow: 0 2px 0 rgba(0,0,0,0.28); }
 
 /* Empty open receptor */
 .gb-bladder-slot.empty {
@@ -1135,6 +1132,7 @@ input {
 }
 
 /* ── Physical cup slots ──────────────────────────────────────── */
+/* Slot is just a frame — the standard ingredient token inside provides colour */
 .gb-cup-slot {
     width: 28px;
     height: 28px;
@@ -1143,14 +1141,10 @@ input {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 0.95em;
-    line-height: 1;
+    overflow: hidden;
+    /* Scale the standard token down to fit the frame */
+    font-size: 0.48em;
 }
-
-/* Filled: slot adopts ingredient colour */
-.gb-cup-slot.filled.spirit  { background: linear-gradient(145deg, #e8b420, #c49010); box-shadow: 0 2px 0 rgba(0,0,0,0.25); }
-.gb-cup-slot.filled.mixer   { background: linear-gradient(145deg, #5a8fc0, #3a6a90); box-shadow: 0 2px 0 rgba(0,0,0,0.25); }
-.gb-cup-slot.filled.special { background: linear-gradient(145deg, #9050f8, #6425cc); box-shadow: 0 2px 0 rgba(0,0,0,0.25); }
 
 /* Empty receptor */
 .gb-cup-slot.empty {

@@ -50,8 +50,8 @@ const INGREDIENT_LABELS = {
 const INGREDIENT_ICONS = {
     WHISKEY:'🥃', WHISKY:'🥃',
     RUM:'🍾', VODKA:'🔮', GIN:'🌿', TEQUILA:'🌵',
-    COLA:'🥤', SODA:'💧', SODA_WATER:'💧',
-    TONIC:'💧', TONIC_WATER:'💧',
+    COLA:'🥤', SODA:'🫧', SODA_WATER:'🫧',
+    TONIC:'🍶', TONIC_WATER:'🍶',
     CRANBERRY:'🫐',
     BITTERS:'✨', COINTREAU:'🍊', LEMON:'🍋',
     SUGAR:'🍬', VERMOUTH:'🌹',
@@ -875,9 +875,8 @@ function makeBladderSlots(bladder, cap, toiletTokens) {
         const slot = document.createElement('div');
         if (i < bladder.length) {
             const ing = bladder[i];
-            slot.className = `gb-bladder-slot filled ${ingredientKind(ing)}`;
-            slot.textContent = ingredientIcon(ing) || ingredientLabel(ing).slice(0, 3);
-            slot.title = ingredientLabel(ing);
+            slot.className = 'gb-bladder-slot filled';
+            slot.appendChild(makeIngredientBadge(ing));
             slot.setAttribute('aria-label', ingredientLabel(ing));
         } else if (i < cap) {
             slot.className = 'gb-bladder-slot empty';
@@ -943,9 +942,8 @@ function renderMyCups(myState, isMyTurn, game, gs) {
             const slot = document.createElement('div');
             if (s < contents.length) {
                 const ing = contents[s];
-                slot.className = `gb-cup-slot filled ${ingredientKind(ing)}`;
-                slot.textContent = ingredientIcon(ing) || ingredientLabel(ing).slice(0, 3);
-                slot.title = ingredientLabel(ing);
+                slot.className = 'gb-cup-slot filled';
+                slot.appendChild(makeIngredientBadge(ing));
                 slot.setAttribute('aria-label', ingredientLabel(ing));
             } else {
                 slot.className = 'gb-cup-slot empty';
@@ -1159,9 +1157,8 @@ function buildOtherSheet(pid, pState, gs) {
             const slot = document.createElement('div');
             if (s < cup.length) {
                 const ing = cup[s];
-                slot.className = `gb-cup-slot filled ${ingredientKind(ing)}`;
-                slot.textContent = ingredientIcon(ing) || ingredientLabel(ing).slice(0, 3);
-                slot.title = ingredientLabel(ing);
+                slot.className = 'gb-cup-slot filled';
+                slot.appendChild(makeIngredientBadge(ing));
                 slot.setAttribute('aria-label', ingredientLabel(ing));
             } else {
                 slot.className = 'gb-cup-slot empty';
