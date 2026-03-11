@@ -647,6 +647,15 @@ function renderBoard(game, gs, isReplay) {
     });
 }
 
+const _CARD_ICONS = {
+    karaoke:     `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="8" y="1" width="8" height="14" rx="4"/><path d="M4 12a8 8 0 0016 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="7" y1="26" x2="17" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    store:       `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="9" y="1" width="6" height="4" rx="1"/><rect x="10" y="5" width="4" height="5"/><path d="M7 10h10l2 4v12a1 1 0 01-1 1H6a1 1 0 01-1-1V14l2-4z"/><rect x="7" y="17" width="10" height="5" rx="1" fill="white" opacity="0.3"/></svg>`,
+    refresher:   `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 2C8 10 4 16 4 21a8 8 0 0016 0C20 16 16 10 12 2z"/><ellipse cx="9" cy="22" rx="2" ry="3" fill="white" opacity="0.25" transform="rotate(-20 9 22)"/></svg>`,
+    cup_doubler: `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 3h8l-1.5 14H3.5L2 3z"/><rect x="2.5" y="17" width="7" height="1.5" rx="0.5"/><rect x="1" y="18.5" width="10" height="2" rx="1"/><path d="M14 3h8l-1.5 14H15.5L14 3z"/><rect x="14.5" y="17" width="7" height="1.5" rx="0.5"/><rect x="13" y="18.5" width="10" height="2" rx="1"/></svg>`,
+};
+const _CARD_COST_TOKEN = { karaoke: 'spirit', store: 'spirit', refresher: 'mixer', cup_doubler: 'spirit' };
+const _CARD_COST_COUNT = { karaoke: 3, store: 1, refresher: 2, cup_doubler: 3 };
+
 function buildCardElement(card, bladder, canClaim, gs) {
     const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
     const affordable = canClaim && canAffordCard(card, bladder, gs);
@@ -663,35 +672,42 @@ function buildCardElement(card, bladder, canClaim, gs) {
         cardEl.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doClaimCard(card, cardEl); } };
     }
 
-    const badge = document.createElement('span');
-    badge.className = 'gb-card-type-badge';
-    badge.textContent = typeLabel;
-    cardEl.appendChild(badge);
+    // Header: name (left) + cost pill (right)
+    const header = document.createElement('div');
+    header.className = 'gb-card-header';
 
-    // Card name — shown with main's gb-card-id styling
-    const idEl = document.createElement('div');
-    idEl.className = 'gb-card-id';
-    idEl.textContent = card.name || typeLabel;
-    cardEl.appendChild(idEl);
+    const nameEl = document.createElement('span');
+    nameEl.className = 'gb-card-name';
+    nameEl.textContent = card.name || typeLabel;
+    header.appendChild(nameEl);
 
-    const subEl = document.createElement('div');
-    subEl.className = 'gb-card-sub';
-    if (card.spirit_type) subEl.textContent = ingredientLabel(card.spirit_type);
-    else if (card.mixer_type) subEl.textContent = ingredientLabel(card.mixer_type);
-    if (subEl.textContent) cardEl.appendChild(subEl);
+    const costPill = document.createElement('span');
+    costPill.className = `gb-card-cost-pill ${_CARD_COST_TOKEN[cardType] || 'spirit'}`;
+    costPill.textContent = `${_CARD_COST_COUNT[cardType] ?? '?'}×`;
+    header.appendChild(costPill);
 
-    const costEl = document.createElement('div');
-    costEl.className = 'gb-card-cost';
-    costEl.textContent = costDesc;
-    cardEl.appendChild(costEl);
+    cardEl.appendChild(header);
 
-    // Show stored spirits on store cards
-    if (cardType === 'store' && card.stored_spirits && card.stored_spirits.length > 0) {
-        const storedEl = document.createElement('div');
-        storedEl.className = 'gb-card-stored';
-        storedEl.textContent = `Stored: ${card.stored_spirits.map(ingredientLabel).join(', ')}`;
-        cardEl.appendChild(storedEl);
-    }
+    // Art: type icon
+    const artEl = document.createElement('div');
+    artEl.className = 'gb-card-art';
+    artEl.innerHTML = _CARD_ICONS[cardType] || '';
+    cardEl.appendChild(artEl);
+
+    // Description: ingredient type + effect
+    const descEl = document.createElement('div');
+    descEl.className = 'gb-card-desc';
+    const parts = [];
+    if (card.spirit_type) parts.push(ingredientLabel(card.spirit_type));
+    else if (card.mixer_type) parts.push(ingredientLabel(card.mixer_type));
+    if (cardType === 'karaoke') parts.push('+5pts');
+    else if (cardType === 'store') {
+        const stored = card.stored_spirits ? card.stored_spirits.length : 0;
+        parts.push(stored > 0 ? `stored:${stored}` : 'store');
+    } else if (cardType === 'refresher') parts.push('+1pt');
+    else if (cardType === 'cup_doubler') parts.push('2×cup');
+    descEl.textContent = parts.join(' · ');
+    cardEl.appendChild(descEl);
 
     return cardEl;
 }

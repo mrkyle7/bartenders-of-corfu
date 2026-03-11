@@ -68,16 +68,17 @@
 
             <div id="gbBoardContent" class="hidden">
 
-                <!-- Open display + bag -->
-                <div class="gb-section-title">Bar</div>
-                
-                <div class="gb-bag-area" aria-label="Ingredient bag"><!-- bag SVG rendered by JS --></div>
-                <div class="gb-open-display" id="gbOpenDisplay" aria-label="Open ingredient display" role="list"></div>
-                <div class="gb-bag-count" id="gbBagCount" aria-label="Deck count"></div>
-
-                <!-- Card rows -->
-                <div class="gb-section-title" style="margin-top:14px">Card Rows</div>
+                <!-- Card rows above bar -->
                 <div class="gb-card-rows" id="gbCardRows" role="list" aria-label="Available cards"></div>
+
+                <!-- Bar: bag to the left of ingredients on same row -->
+                <div class="gb-bar-inline">
+                    <div class="gb-bag-anchor" aria-label="Ingredient bag">
+                        <!-- bag SVG inserted here by JS before gbBagCount -->
+                        <div class="gb-bag-count" id="gbBagCount" aria-label="Deck count"></div>
+                    </div>
+                    <div class="gb-open-display" id="gbOpenDisplay" aria-label="Open ingredient display" role="list"></div>
+                </div>
 
             </div>
         </section>
