@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game - Bartenders of Corfu</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <link rel="stylesheet" href="/static/styles.css">
-    <script src="/static/gameElements.js"></script>
-    <script src="/static/game.js"></script>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/game.css">
+    <script type="module" src="/static/game.js"></script>
 </head>
 
 <body>
@@ -33,6 +33,12 @@
             <div id="gbErrorBar" class="gb-error-bar" role="alert" aria-live="assertive"></div>
         </header>
 
+        <!-- ===== PLAYER STATS BAR ===== -->
+        <div id="gbPlayerStatsBar" class="gb-player-stats-bar hidden" aria-label="All player stats" aria-live="polite"></div>
+
+        <!-- ===== SCROLLABLE AREA (everything below sticky stats bar) ===== -->
+        <div class="gb-scroll-area">
+
         <!-- ===== REPLAY BAR ===== -->
         <div id="gbReplayBar" class="gb-replay-bar" role="region" aria-label="Replay controls">
             <div class="gb-replay-bar-row">
@@ -49,17 +55,14 @@
             <div class="gb-replay-bar-moves" id="gbReplayBarMoves" aria-live="polite"></div>
         </div>
 
-        <!-- ===== PLAYER STATS BAR ===== -->
-        <div id="gbPlayerStatsBar" class="gb-player-stats-bar hidden" aria-label="All player stats" aria-live="polite"></div>
-
         <!-- ===== BOARD SECTION (shared display + cards) ===== -->
         <section class="gb-board-section" id="gbBoardPanel" aria-label="Game board">
 
             <!-- LOBBY VIEW (shown for NEW games) -->
             <div id="gbLobbyPanel" class="hidden">
                 <div class="gb-section-title">Players in Lobby</div>
-                <ul id="playerList" role="list" aria-label="Players in lobby" style="list-style:none;padding:0;margin:0"></ul>
-                <div id="gbStartGameSection" style="margin-top:16px"></div>
+                <ul id="playerList" role="list" aria-label="Players in lobby" class="gb-list-plain"></ul>
+                <div id="gbStartGameSection" class="gb-mt-md"></div>
             </div>
 
             <div id="gbBoardLoading" class="gb-loading" aria-busy="true">
@@ -152,15 +155,15 @@
                             onclick="replayGo('last')" aria-label="Jump to current state">
                         Current &#9654;&#9654;
                     </button>
-                    <button class="gb-replay-btn" id="gbReplayExit"
-                            onclick="exitReplay()" aria-label="Exit replay mode"
-                            style="background:#b91c1c;margin-left:8px">
+                    <button class="gb-replay-btn gb-replay-exit-btn-tab" id="gbReplayExit"
+                            onclick="exitReplay()" aria-label="Exit replay mode">
                         Exit Replay
                     </button>
                 </div>
             </div>
         </div>
 
+        </div><!-- /.gb-scroll-area -->
     </div><!-- /.gb-page -->
 
     <!-- ===== TAKE INGREDIENTS MODAL ===== -->
@@ -181,7 +184,7 @@
             <div class="gb-modal-step-label" id="gbTakeStepLabel"></div>
 
             <!-- Cup reference — always visible -->
-            <div id="gbTakeModalCups" style="margin-bottom:10px;padding:8px;background:#fdf6e3;border:1px solid #e8d5b0;border-radius:6px;font-size:0.82em"></div>
+            <div id="gbTakeModalCups" class="gb-take-cup-ref"></div>
 
             <!-- STEP 0: select ingredients -->
             <div id="gbTakeStep0">
@@ -193,13 +196,13 @@
                 <div class="gb-modal-section">
                     <div class="gb-modal-section-title">
                         From Bag
-                        <span id="gbBagPickInfo" style="font-size:0.85em;font-weight:normal;color:#8a5c2e"></span>
+                        <span id="gbBagPickInfo" class="gb-text-info"></span>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-                        <label style="font-size:0.88em;color:#6b3a0f">
+                    <div class="gb-bag-draw-row">
+                        <label class="gb-bag-draw-label">
                             Draw
                             <input type="number" id="gbBagDrawCount" min="1" value="1"
-                                   style="width:3.2em;padding:2px 4px;border:1px solid #c8a96e;border-radius:4px;font-size:1em;text-align:center"
+                                   class="gb-input-number-sm"
                                    aria-label="Number of ingredients to draw from bag">
                             from bag
                         </label>
@@ -207,13 +210,13 @@
                                 aria-label="Draw ingredients from bag">
                             Draw from Bag
                         </button>
-                        <span id="gbBagDrawStatus" style="font-size:0.8em;color:#6b3a0f"></span>
+                        <span id="gbBagDrawStatus" class="gb-text-muted-sm"></span>
                     </div>
                     <!-- Drawn ingredients appear here (locked — cannot be removed) -->
-                    <div class="gb-pick-grid" id="gbPickBag" style="margin-top:4px"
+                    <div class="gb-pick-grid gb-mt-xs" id="gbPickBag"
                          role="group" aria-label="Drawn bag ingredients (locked)"></div>
                 </div>
-                <div style="font-size:0.8em;color:#6b3a0f;margin-bottom:8px">
+                <div class="gb-take-count-text">
                     Selected: <strong id="gbTakeCount">0</strong> / <strong id="gbTakeLimit">0</strong>
                 </div>
             </div>
@@ -237,7 +240,7 @@
                     Next &rarr;
                 </button>
             </div>
-            <div id="gbTakeModalError" class="gb-error-bar" style="margin-top:8px"></div>
+            <div id="gbTakeModalError" class="gb-error-bar gb-modal-error-mt"></div>
         </div>
     </div>
 
@@ -258,7 +261,7 @@
 
             <div class="gb-modal-section" id="gbSellSpecialsSection">
                 <div class="gb-modal-section-title">Declare Special Ingredients</div>
-                <div style="font-size:0.78em;color:#6b3a0f;margin-bottom:6px">
+                <div class="gb-sell-specials-info">
                     Select specials from your mat to declare for this cocktail:
                 </div>
                 <div id="gbSellSpecialsPicker" class="gb-pick-grid"
@@ -272,7 +275,7 @@
                     Sell Cup
                 </button>
             </div>
-            <div id="gbSellModalError" class="gb-error-bar" style="margin-top:8px"></div>
+            <div id="gbSellModalError" class="gb-error-bar gb-modal-error-mt"></div>
         </div>
     </div>
 
@@ -280,11 +283,11 @@
     <div class="gb-modal-overlay hidden" id="gbDrinkModal"
          role="dialog" aria-modal="true" aria-labelledby="gbDrinkModalTitle"
          tabindex="-1">
-        <div class="gb-modal" style="max-width:360px">
+        <div class="gb-modal gb-modal--narrow">
             <button class="gb-modal-close" onclick="closeDrinkModal()"
                     aria-label="Close drink cup dialog">&#x2715;</button>
             <div class="gb-modal-title" id="gbDrinkModalTitle">Drink Cup</div>
-            <div id="gbDrinkModalDesc" style="font-size:0.85em;color:#4a2c0e;margin-bottom:12px"></div>
+            <div id="gbDrinkModalDesc" class="gb-drink-desc"></div>
             <div class="gb-modal-actions">
                 <button class="gb-modal-btn cancel" onclick="closeDrinkModal()">Cancel</button>
                 <button class="gb-modal-btn danger" id="gbDrinkConfirmBtn"
@@ -292,7 +295,7 @@
                     Drink!
                 </button>
             </div>
-            <div id="gbDrinkModalError" class="gb-error-bar" style="margin-top:8px"></div>
+            <div id="gbDrinkModalError" class="gb-error-bar gb-modal-error-mt"></div>
         </div>
     </div>
 
@@ -304,7 +307,7 @@
             <button class="gb-modal-close" onclick="closeCupDoublerModal()" aria-label="Cancel">&#x2715;</button>
             <div class="gb-modal-title" id="gbCupDoublerModalTitle">Claim Cup Doubler</div>
             <div class="gb-modal-step-label">Choose a cup and the spirit type you're paying with.</div>
-            <div class="gb-modal-content" style="display:flex;flex-direction:column;gap:14px;margin-top:10px">
+            <div class="gb-modal-content gb-modal-content-col">
                 <div>
                     <label class="gb-modal-select-label" for="gbCupDoublerCupSelect">Apply doubler to:</label>
                     <select id="gbCupDoublerCupSelect" class="gb-modal-select">
@@ -322,7 +325,7 @@
                 <button class="gb-modal-btn confirm" id="gbCupDoublerConfirmBtn"
                         onclick="confirmCupDoubler()">Claim</button>
             </div>
-            <div id="gbCupDoublerModalError" class="gb-error-bar" style="margin-top:8px"></div>
+            <div id="gbCupDoublerModalError" class="gb-error-bar gb-modal-error-mt"></div>
         </div>
     </div>
 
@@ -553,9 +556,37 @@
         </div>
     </div>
 
-    <script>
-        load();
-    </script>
+    <!-- ===== SVG TEMPLATES ===== -->
+    <template id="tmplBagSvg">
+        <svg class="gb-bag-svg" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M15 36 Q7 36 6 47 L10 76 Q10 82 17 82 L63 82 Q70 82 70 76 L74 47 Q73 36 65 36 Z"
+                  fill="#7a3810" stroke="#4a1e06" stroke-width="1.5"/>
+            <path d="M14 37 Q7 37 6.5 47 L10.5 76 Q10.5 81 17 81 L63 81 Q69.5 81 69.5 76 L73.5 47 Q73 37 66 37 Z"
+                  fill="none" stroke="rgba(212,160,23,0.25)" stroke-width="1" stroke-dasharray="5,5"/>
+            <rect x="25" y="19" width="30" height="19" rx="5" fill="#6a2f0e" stroke="#4a1e06" stroke-width="1.5"/>
+            <path d="M27 30 Q40 25 53 30" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M32 26 Q27 16 25 21" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M48 26 Q53 16 55 21" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="40" cy="25" r="3.5" fill="#d4a060"/>
+            <path d="M21 47 Q20 62 22 74" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="5" stroke-linecap="round"/>
+            <path d="M32 42 Q30 55 31 70" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+    </template>
+
+    <template id="tmplCardIcon-karaoke">
+        <svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="8" y="1" width="8" height="14" rx="4"/><path d="M4 12a8 8 0 0016 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="7" y1="26" x2="17" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </template>
+    <template id="tmplCardIcon-store">
+        <svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="9" y="1" width="6" height="4" rx="1"/><rect x="10" y="5" width="4" height="5"/><path d="M7 10h10l2 4v12a1 1 0 01-1 1H6a1 1 0 01-1-1V14l2-4z"/><rect x="7" y="17" width="10" height="5" rx="1" fill="white" opacity="0.3"/></svg>
+    </template>
+    <template id="tmplCardIcon-refresher">
+        <svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 2C8 10 4 16 4 21a8 8 0 0016 0C20 16 16 10 12 2z"/><ellipse cx="9" cy="22" rx="2" ry="3" fill="white" opacity="0.25" transform="rotate(-20 9 22)"/></svg>
+    </template>
+    <template id="tmplCardIcon-cup_doubler">
+        <svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 3h8l-1.5 14H3.5L2 3z"/><rect x="2.5" y="17" width="7" height="1.5" rx="0.5"/><rect x="1" y="18.5" width="10" height="2" rx="1"/><path d="M14 3h8l-1.5 14H15.5L14 3z"/><rect x="14.5" y="17" width="7" height="1.5" rx="0.5"/><rect x="13" y="18.5" width="10" height="2" rx="1"/></svg>
+    </template>
+
+    <!-- load() is called at the end of game.js module -->
 </body>
 
 </html>

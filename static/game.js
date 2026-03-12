@@ -1,194 +1,26 @@
 /**
- * game.js — Bartenders of Corfu game board
- * Vanilla ES2022, no external dependencies.
+ * game.js — Bartenders of Corfu game board (entry point module).
+ * Vanilla ES2022.
  */
 
-'use strict';
-
-// ─────────────────────────────────────────────────────────────
-// Global state
-// ─────────────────────────────────────────────────────────────
-let _gameId        = null;
-let _game          = null;   // live game object from API
-let _me            = null;   // current user {id, username}
-let _players       = {};     // map pid → {id, username}
-let _pollTimer     = null;
-let _replayMode    = false;
-let _replayTurns   = [];     // list of turn numbers from history
-let _replayCursor  = -1;     // index into _replayTurns (-1 = live)
-let _historyMoves  = [];     // cached moves from /history
-let _pendingUndo   = null;   // current pending undo request object
-
-// Modal state
-let _takeStep           = 0;   // 0 = pick, 1 = assign
-let _takeDisplaySelected = []; // [{ingredient, source:'display', idx}]
-let _takeBagPending      = []; // [{ingredient, source:'pending'}] — server-confirmed draws
-let _sellCupIndex        = null;
-let _drinkCupIndex       = null;
-let _cupDoublerCard      = null;
-let _cupDoublerCardEl    = null;
-let _currentGs           = null;  // latest rendered game state (for modal use)
-
-// ─────────────────────────────────────────────────────────────
-// Constants / helpers
-// ─────────────────────────────────────────────────────────────
-const SPIRITS  = new Set(['WHISKEY','RUM','VODKA','GIN','TEQUILA']);
-const MIXERS   = new Set(['COLA','SODA','TONIC','CRANBERRY']);
-// The API may return various casings; normalise for display only
-const INGREDIENT_LABELS = {
-    WHISKEY:'Whiskey', WHISKY:'Whisky',
-    RUM:'Rum', VODKA:'Vodka', GIN:'Gin', TEQUILA:'Tequila',
-    COLA:'Cola', SODA:'Soda Water', SODA_WATER:'Soda Water',
-    TONIC:'Tonic Water', TONIC_WATER:'Tonic Water',
-    CRANBERRY:'Cranberry',
-    SPECIAL:'Special',
-    BITTERS:'Bitters', COINTREAU:'Cointreau', LEMON:'Lemon',
-    SUGAR:'Sugar', VERMOUTH:'Vermouth',
-};
-
-// Emoji icons for ingredients — quick visual recognition (BGA-style)
-const INGREDIENT_ICONS = {
-    WHISKEY:'🥃', WHISKY:'🥃',
-    RUM:'🍾', VODKA:'🔮', GIN:'🌿', TEQUILA:'🌵',
-    COLA:'🥤', SODA:'🫧', SODA_WATER:'🫧',
-    TONIC:'🍶', TONIC_WATER:'🍶',
-    CRANBERRY:'🫐',
-    BITTERS:'✨', COINTREAU:'🍊', LEMON:'🍋',
-    SUGAR:'🍬', VERMOUTH:'🌹',
-    SPECIAL:'✨',
-};
-
-function ingredientLabel(name) {
-    if (!name) return '?';
-    return INGREDIENT_LABELS[name.toUpperCase()] || name;
-}
-
-function ingredientIcon(name) {
-    if (!name) return '';
-    return INGREDIENT_ICONS[name.toUpperCase()] || '';
-}
-
-function ingredientKind(name) {
-    if (!name) return 'special';
-    const u = name.toUpperCase();
-    if (SPIRITS.has(u))  return 'spirit';
-    if (MIXERS.has(u))   return 'mixer';
-    return 'special';
-}
-
-/** Build a coloured ingredient token element (BGA-style raised token) */
-function makeIngredientBadge(name) {
-    const span = document.createElement('span');
-    span.className = `gb-ingredient ${ingredientKind(name)}`;
-    const icon = ingredientIcon(name);
-    const label = ingredientLabel(name);
-    span.textContent = icon ? `${icon} ${label}` : label;
-    span.setAttribute('aria-label', label);
-    span.title = label;
-    return span;
-}
-
-/** Build a cost badge element */
-function makeCostBadge(costItem) {
-    // costItem: {kind: 'spirit'|'mixer'|'special'|'...' , count: N}
-    const span = document.createElement('span');
-    const kindNorm = (costItem.kind || '').toLowerCase();
-    let cls = 'gb-cost-badge';
-    if (kindNorm.includes('spirit'))  cls += ' spirit';
-    else if (kindNorm.includes('mixer')) cls += ' mixer';
-    else if (kindNorm.includes('special')) cls += ' special';
-    span.className = cls;
-    span.textContent = `${costItem.count}× ${costItem.kind}`;
-    return span;
-}
-
-function el(id) { return document.getElementById(id); }
-
-function closeAllCupOverlays() {
-    document.querySelectorAll('.gb-cup-action-overlay').forEach(o => o.classList.add('hidden'));
-}
+import { SPIRITS, CARD_COST_TOKEN, CARD_COST_COUNT, MAX_SLOTS } from './constants.js';
+import { ingredientLabel, ingredientIcon, ingredientKind, makeIngredientBadge, makeCostBadge } from './ingredients.js';
+import { h, text, el, closeAllCupOverlays, showError, clearError, showModalError, clearModalError,
+         setButtonBusy, formatTime, flash, switchTab, openModal, closeModal } from './dom.js';
+import S from './state.js';
 
 // Close cup overlays when clicking outside a cup
 document.addEventListener('click', e => {
     if (!e.target.closest('.gb-cup-interactive')) closeAllCupOverlays();
 });
 
-function showError(msg) {
-    const bar = el('gbErrorBar');
-    bar.textContent = msg;
-    bar.classList.add('visible');
-}
-
-function clearError() {
-    const bar = el('gbErrorBar');
-    bar.textContent = '';
-    bar.classList.remove('visible');
-}
-
-function showModalError(elId, msg) {
-    const bar = el(elId);
-    if (!bar) return;
-    bar.textContent = msg;
-    bar.classList.add('visible');
-    bar.style.display = 'block';
-}
-
-function clearModalError(elId) {
-    const bar = el(elId);
-    if (!bar) return;
-    bar.textContent = '';
-    bar.classList.remove('visible');
-    bar.style.display = 'none';
-}
-
-function setButtonBusy(btn, busy, originalText) {
-    if (!btn) return;
-    if (busy) {
-        btn.disabled = true;
-        btn._origText = btn.innerHTML;
-        btn.innerHTML = `<span class="spinner" aria-hidden="true"></span>${originalText || 'Working…'}`;
-    } else {
-        btn.disabled = false;
-        if (btn._origText) btn.innerHTML = btn._origText;
-    }
-}
-
-function formatTime(iso) {
-    if (!iso) return '';
-    try {
-        const d = new Date(iso);
-        return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    } catch { return iso; }
-}
-
-function flash(elId, cssClass, msg, durationMs = 2500) {
-    const container = el(elId);
-    if (!container) return;
-    container.className = `gb-flash ${cssClass}`;
-    container.textContent = msg;
-    setTimeout(() => { container.className = 'gb-flash'; container.textContent = ''; }, durationMs);
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tab switching (bottom panel)
-// ─────────────────────────────────────────────────────────────
-function switchTab(name) {
-    ['history','replay'].forEach(t => {
-        const btn = el(`gbTabBtn${t.charAt(0).toUpperCase()+t.slice(1)}`);
-        const pane = el(`gbTab${t.charAt(0).toUpperCase()+t.slice(1)}`);
-        const active = t === name;
-        if (btn)  { btn.classList.toggle('active', active); btn.setAttribute('aria-selected', String(active)); }
-        if (pane) { pane.classList.toggle('active', active); }
-    });
-}
-
 // ─────────────────────────────────────────────────────────────
 // Initial load + polling
 // ─────────────────────────────────────────────────────────────
 async function load() {
     const sp = new URLSearchParams(window.location.search);
-    _gameId = sp.get('id');
-    if (!_gameId) {
+    S.gameId = sp.get('id');
+    if (!S.gameId) {
         showError('No game ID found in URL. Return to home page.');
         return;
     }
@@ -201,7 +33,7 @@ async function load() {
             return;
         }
         if (meResp.ok) {
-            _me = await meResp.json();
+            S.me = await meResp.json();
         }
     } catch (e) {
         console.warn('Could not fetch user details:', e);
@@ -212,9 +44,9 @@ async function load() {
 
     // Auto-enter replay if ?turn= is in the URL
     const turnParam = sp.get('turn');
-    if (turnParam !== null && _replayTurns.length > 0) {
+    if (turnParam !== null && S.replayTurns.length > 0) {
         const turnNumber = parseInt(turnParam, 10) - 1;  // convert display (1-indexed) to stored turn_number
-        const cursor = _replayTurns.indexOf(turnNumber);
+        const cursor = S.replayTurns.indexOf(turnNumber);
         if (cursor !== -1) await replayGoTo(cursor);
     }
 }
@@ -222,7 +54,7 @@ async function load() {
 async function refreshGame(quiet = false) {
     if (!quiet) clearError();
     try {
-        const resp = await fetch(`/v1/games/${_gameId}`);
+        const resp = await fetch(`/v1/games/${S.gameId}`);
         if (resp.status === 401 || resp.status === 403) {
             window.location.href = '/';
             return;
@@ -233,8 +65,8 @@ async function refreshGame(quiet = false) {
         }
         const game = await resp.json();
         await resolvePlayerNames(game.players);
-        _game = game;
-        _pendingUndo = game.pending_undo || null;
+        S.game = game;
+        S.pendingUndo = game.pending_undo || null;
         renderAll(game);
         schedulePoll(game);
     } catch (e) {
@@ -245,38 +77,38 @@ async function refreshGame(quiet = false) {
 }
 
 async function resolvePlayerNames(playerIds) {
-    const toFetch = playerIds.filter(pid => !_players[pid]);
+    const toFetch = playerIds.filter(pid => !S.players[pid]);
     if (toFetch.length === 0) return;
     await Promise.all(toFetch.map(async pid => {
         try {
             const r = await fetch(`/v1/users/${encodeURIComponent(pid)}`);
             if (r.ok) {
                 const u = await r.json();
-                _players[pid] = { id: pid, username: u.username || pid };
+                S.players[pid] = { id: pid, username: u.username || pid };
             } else {
-                _players[pid] = { id: pid, username: pid.slice(0, 8) };
+                S.players[pid] = { id: pid, username: pid.slice(0, 8) };
             }
         } catch {
-            _players[pid] = { id: pid, username: pid.slice(0, 8) };
+            S.players[pid] = { id: pid, username: pid.slice(0, 8) };
         }
     }));
 }
 
 function playerName(pid) {
     if (!pid) return 'Unknown';
-    if (_players[pid]) return _players[pid].username;
+    if (S.players[pid]) return S.players[pid].username;
     return pid.slice(0, 8);
 }
 
 function schedulePoll(game) {
-    if (_pollTimer) clearTimeout(_pollTimer);
-    if (_replayMode) return;  // pause polling while replaying
+    if (S.pollTimer) clearTimeout(S.pollTimer);
+    if (S.replayMode) return;  // pause polling while replaying
     if (!game || game.status !== 'STARTED') return;
     const gs = game.game_state || {};
-    const myTurn = _me && gs.player_turn === _me.id;
+    const myTurn = S.me && gs.player_turn === S.me.id;
     // Poll when it's not our turn, or when an undo vote is pending (any player needs updates)
-    if (!myTurn || _pendingUndo) {
-        _pollTimer = setTimeout(() => refreshGame(true), 3000);
+    if (!myTurn || S.pendingUndo) {
+        S.pollTimer = setTimeout(() => refreshGame(true), 3000);
     }
 }
 
@@ -285,7 +117,7 @@ function schedulePoll(game) {
 // ─────────────────────────────────────────────────────────────
 function renderAll(game, replayState = null) {
     const gs = replayState || game.game_state || {};
-    _currentGs = gs;
+    S.currentGs = gs;
     const isReplay = !!replayState;
 
     // Header
@@ -316,8 +148,8 @@ function renderAll(game, replayState = null) {
     renderBoard(game, gs, isReplay);
 
     // My sheet
-    if (_me && gs.player_states) {
-        const myState = gs.player_states[_me.id];
+    if (S.me && gs.player_states) {
+        const myState = gs.player_states[S.me.id];
         if (myState) {
             renderMySheet(game, gs, myState, isReplay);
         }
@@ -353,11 +185,11 @@ function renderAll(game, replayState = null) {
 function renderAllStats(game, gs) {
     const bar = el('gbPlayerStatsBar');
     if (!bar) return;
-    bar.innerHTML = '';
+    bar.replaceChildren();
     const gameEnded = game.status === 'ENDED';
     (game.players || []).forEach(pid => {
         const pState = gs.player_states ? gs.player_states[pid] : null;
-        const isMe = _me && pid === _me.id;
+        const isMe = S.me && pid === S.me.id;
         const isActive = !gameEnded && gs.player_turn === pid;
 
         const strip = document.createElement('div');
@@ -408,7 +240,7 @@ function renderTurnIndicator(game, gs) {
         return;
     }
     const currentPlayer = gs.player_turn;
-    const isMyTurn = _me && currentPlayer === _me.id;
+    const isMyTurn = S.me && currentPlayer === S.me.id;
     const turnDisplay = gs.turn_number !== null ? gs.turn_number + 1 : '?';
     if (isMyTurn) {
         ind.textContent = `Your turn  •  Turn ${turnDisplay}`;
@@ -426,12 +258,12 @@ function renderTurnIndicator(game, gs) {
 function renderLobby(game) {
     const list = el('playerList');
     if (!list) return;
-    list.innerHTML = '';
-    const isHost = _me && _me.id === game.host;
+    list.replaceChildren();
+    const isHost = S.me && S.me.id === game.host;
     (game.players || []).forEach(pid => {
         const entry = document.createElement('li');
         entry.className = 'player-entry';
-        entry.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;';
+        entry.classList.add('gb-lobby-entry');
 
         const nameSpan = document.createElement('span');
         nameSpan.textContent = playerName(pid);
@@ -449,7 +281,7 @@ function renderLobby(game) {
             btn.onclick = async () => {
                 btn.disabled = true;
                 try {
-                    const resp = await fetch(`/v1/games/${_gameId}/players/${encodeURIComponent(pid)}`, { method: 'DELETE' });
+                    const resp = await fetch(`/v1/games/${S.gameId}/players/${encodeURIComponent(pid)}`, { method: 'DELETE' });
                     if (resp.ok) {
                         await refreshGame();
                     } else {
@@ -471,7 +303,7 @@ function renderLobby(game) {
     // Start Game button — host only
     const section = el('gbStartGameSection');
     if (!section) return;
-    section.innerHTML = '';
+    section.replaceChildren();
     if (isHost) {
         const btn = document.createElement('button');
         btn.id = 'gbBtnStartGame';
@@ -488,7 +320,7 @@ async function startGame() {
     setButtonBusy(btn, true, 'Starting…');
     clearError();
     try {
-        const resp = await fetch(`/v1/games/${_gameId}/start`, { method: 'POST' });
+        const resp = await fetch(`/v1/games/${S.gameId}/start`, { method: 'POST' });
         if (resp.ok) {
             await refreshGame();
         } else {
@@ -503,8 +335,8 @@ async function startGame() {
 }
 
 function schedulePollLobby() {
-    if (_pollTimer) clearTimeout(_pollTimer);
-    _pollTimer = setTimeout(() => refreshGame(true), 3000);
+    if (S.pollTimer) clearTimeout(S.pollTimer);
+    S.pollTimer = setTimeout(() => refreshGame(true), 3000);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -526,23 +358,10 @@ function renderBagVisual(bagCount, isMyTurn, myState, gs) {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTakeModal(myState, gs); }
         };
     }
-    wrap.innerHTML = `
-        <svg class="gb-bag-svg" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M15 36 Q7 36 6 47 L10 76 Q10 82 17 82 L63 82 Q70 82 70 76 L74 47 Q73 36 65 36 Z"
-                  fill="#7a3810" stroke="#4a1e06" stroke-width="1.5"/>
-            <path d="M14 37 Q7 37 6.5 47 L10.5 76 Q10.5 81 17 81 L63 81 Q69.5 81 69.5 76 L73.5 47 Q73 37 66 37 Z"
-                  fill="none" stroke="rgba(212,160,23,0.25)" stroke-width="1" stroke-dasharray="5,5"/>
-            <rect x="25" y="19" width="30" height="19" rx="5" fill="#6a2f0e" stroke="#4a1e06" stroke-width="1.5"/>
-            <path d="M27 30 Q40 25 53 30" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M32 26 Q27 16 25 21" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M48 26 Q53 16 55 21" fill="none" stroke="#d4a060" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="40" cy="25" r="3.5" fill="#d4a060"/>
-            <path d="M21 47 Q20 62 22 74" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="5" stroke-linecap="round"/>
-            <path d="M32 42 Q30 55 31 70" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3" stroke-linecap="round"/>
-        </svg>
-        <div class="gb-bag-count-badge">${bagCount}</div>
-        ${isMyTurn ? '<div class="gb-bag-hint">draw</div>' : ''}
-    `;
+    const svgTmpl = document.getElementById('tmplBagSvg');
+    if (svgTmpl) wrap.appendChild(svgTmpl.content.cloneNode(true));
+    wrap.appendChild(h('div', { className: 'gb-bag-count-badge', textContent: String(bagCount) }));
+    if (isMyTurn) wrap.appendChild(h('div', { className: 'gb-bag-hint', textContent: 'draw' }));
 
     // Insert before gbBagCount
     const bagCountEl = el('gbBagCount');
@@ -553,18 +372,17 @@ function renderBagVisual(bagCount, isMyTurn, myState, gs) {
 // Board panel (open display + card rows)
 // ─────────────────────────────────────────────────────────────
 function renderBoard(game, gs, isReplay) {
-    const isMyTurn = !isReplay && _me && gs.player_turn === _me.id && game.status === 'STARTED';
-    const myState  = (_me && gs.player_states) ? gs.player_states[_me.id] : null;
+    const isMyTurn = !isReplay && S.me && gs.player_turn === S.me.id && game.status === 'STARTED';
+    const myState  = (S.me && gs.player_states) ? gs.player_states[S.me.id] : null;
 
     // Open display
     const dispEl = el('gbOpenDisplay');
-    dispEl.innerHTML = '';
+    dispEl.replaceChildren();
     const display = gs.open_display || [];
     if (display.length === 0) {
         const empty = document.createElement('em');
         empty.textContent = 'Empty';
-        empty.style.fontSize = '0.9em';
-        empty.style.color = '#c8a870';
+        empty.className = 'gb-empty-text';
         dispEl.appendChild(empty);
     } else {
         display.forEach((ing, idx) => {
@@ -592,7 +410,7 @@ function renderBoard(game, gs, isReplay) {
 
     // Card rows
     const rowsEl = el('gbCardRows');
-    rowsEl.innerHTML = '';
+    rowsEl.replaceChildren();
     const cardRows = gs.card_rows || [];
     const bladder  = myState ? (myState.bladder || []) : [];
 
@@ -602,10 +420,7 @@ function renderBoard(game, gs, isReplay) {
         rowWrap.dataset.rowPosition = row.position;
 
         const rowLabelRow = document.createElement('div');
-        rowLabelRow.style.display = 'flex';
-        rowLabelRow.style.alignItems = 'center';
-        rowLabelRow.style.gap = '8px';
-        rowLabelRow.style.marginBottom = '6px';
+        rowLabelRow.className = 'gb-card-row-label-row';
 
         const rowLabel = document.createElement('span');
         rowLabel.className = 'gb-card-row-label';
@@ -613,7 +428,7 @@ function renderBoard(game, gs, isReplay) {
         rowLabelRow.appendChild(rowLabel);
 
         // Refresh row button (needs drunk level >= 3; row 1 is karaoke row — never refreshable)
-        const isMyTurn = _me && gs.player_turn === _me.id;
+        const isMyTurn = S.me && gs.player_turn === S.me.id;
         const drunkLevel = myState ? (myState.drunk_level || 0) : 0;
         if (!isReplay && isMyTurn && drunkLevel >= 3 && row.position !== 1) {
             const refreshBtn = document.createElement('button');
@@ -636,8 +451,7 @@ function renderBoard(game, gs, isReplay) {
 
         if ((row.cards || []).length === 0) {
             const empty = document.createElement('em');
-            empty.style.fontSize = '0.78em';
-            empty.style.color = '#8a5c2e';
+            empty.className = 'gb-empty-hint';
             empty.textContent = 'No cards in this row';
             cardsRow.appendChild(empty);
         }
@@ -647,15 +461,10 @@ function renderBoard(game, gs, isReplay) {
     });
 }
 
-const _CARD_ICONS = {
-    karaoke:     `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="8" y="1" width="8" height="14" rx="4"/><path d="M4 12a8 8 0 0016 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="7" y1="26" x2="17" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
-    store:       `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="9" y="1" width="6" height="4" rx="1"/><rect x="10" y="5" width="4" height="5"/><path d="M7 10h10l2 4v12a1 1 0 01-1 1H6a1 1 0 01-1-1V14l2-4z"/><rect x="7" y="17" width="10" height="5" rx="1" fill="white" opacity="0.3"/></svg>`,
-    refresher:   `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 2C8 10 4 16 4 21a8 8 0 0016 0C20 16 16 10 12 2z"/><ellipse cx="9" cy="22" rx="2" ry="3" fill="white" opacity="0.25" transform="rotate(-20 9 22)"/></svg>`,
-    cup_doubler: `<svg viewBox="0 0 24 30" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 3h8l-1.5 14H3.5L2 3z"/><rect x="2.5" y="17" width="7" height="1.5" rx="0.5"/><rect x="1" y="18.5" width="10" height="2" rx="1"/><path d="M14 3h8l-1.5 14H15.5L14 3z"/><rect x="14.5" y="17" width="7" height="1.5" rx="0.5"/><rect x="13" y="18.5" width="10" height="2" rx="1"/></svg>`,
-};
-const _CARD_COST_TOKEN = { karaoke: 'spirit', store: 'spirit', refresher: 'mixer', cup_doubler: 'spirit' };
-const _CARD_COST_COUNT = { karaoke: 3, store: 1, refresher: 2, cup_doubler: 3 };
-
+function _cloneCardIcon(cardType) {
+    const tmpl = document.getElementById(`tmplCardIcon-${cardType}`);
+    return tmpl ? tmpl.content.cloneNode(true) : null;
+}
 function buildCardElement(card, bladder, canClaim, gs) {
     const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
     const affordable = canClaim && canAffordCard(card, bladder, gs);
@@ -682,8 +491,8 @@ function buildCardElement(card, bladder, canClaim, gs) {
     header.appendChild(nameEl);
 
     const costPill = document.createElement('span');
-    costPill.className = `gb-card-cost-pill ${_CARD_COST_TOKEN[cardType] || 'spirit'}`;
-    costPill.textContent = `${_CARD_COST_COUNT[cardType] ?? '?'}×`;
+    costPill.className = `gb-card-cost-pill ${CARD_COST_TOKEN[cardType] || 'spirit'}`;
+    costPill.textContent = `${CARD_COST_COUNT[cardType] ?? '?'}×`;
     header.appendChild(costPill);
 
     cardEl.appendChild(header);
@@ -691,7 +500,8 @@ function buildCardElement(card, bladder, canClaim, gs) {
     // Art: type icon
     const artEl = document.createElement('div');
     artEl.className = 'gb-card-art';
-    artEl.innerHTML = _CARD_ICONS[cardType] || '';
+    const iconContent = _cloneCardIcon(cardType);
+    if (iconContent) artEl.appendChild(iconContent);
     cardEl.appendChild(artEl);
 
     // Description: ingredient type + effect
@@ -725,7 +535,7 @@ function _cardCostDesc(card) {
 
 function canAffordCard(card, bladder, gs) {
     const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
-    const myState = (_me && gs && gs.player_states) ? gs.player_states[_me.id] : null;
+    const myState = (S.me && gs && gs.player_states) ? gs.player_states[S.me.id] : null;
     const myCards = myState ? (myState.cards || []) : [];
 
     function bladderCountOf(type) {
@@ -763,12 +573,12 @@ function canAffordCard(card, bladder, gs) {
 // My player sheet
 // ─────────────────────────────────────────────────────────────
 function renderMySheet(game, gs, myState, isReplay) {
-    const isMyTurn = _me && gs.player_turn === _me.id && game.status === 'STARTED';
+    const isMyTurn = S.me && gs.player_turn === S.me.id && game.status === 'STARTED';
     const gameEnded = game.status === 'ENDED';
 
     // BGA-style player strip
     const nameEl = el('gbMyName');
-    nameEl.innerHTML = '';
+    nameEl.replaceChildren();
     const strip = document.createElement('div');
     const stripClass = gameEnded ? 'game-ended' : (isMyTurn ? 'my-turn' : 'waiting');
     strip.className = `gb-player-strip ${stripClass}`;
@@ -776,7 +586,7 @@ function renderMySheet(game, gs, myState, isReplay) {
 
     const stripName = document.createElement('span');
     stripName.className = 'gb-player-strip-name';
-    stripName.textContent = (_me && _me.username) ? _me.username : 'Me';
+    stripName.textContent = (S.me && S.me.username) ? S.me.username : 'Me';
     strip.appendChild(stripName);
 
     if (isMyTurn && !gameEnded) {
@@ -801,12 +611,12 @@ function renderMySheet(game, gs, myState, isReplay) {
 
     // Special ingredients — only show section if non-empty
     const specialsEl = el('gbMySpecials');
-    specialsEl.innerHTML = '';
+    specialsEl.replaceChildren();
     const specials = myState.special_ingredients || [];
     if (specials.length > 0) {
         const specialsTitle = document.createElement('div');
         specialsTitle.className = 'gb-section-title';
-        specialsTitle.style.marginTop = '6px';
+        specialsTitle.classList.add('gb-section-title--mt');
         specialsTitle.textContent = 'Specials on Mat';
         specialsEl.appendChild(specialsTitle);
         specials.forEach(s => specialsEl.appendChild(makeIngredientBadge(s)));
@@ -814,12 +624,12 @@ function renderMySheet(game, gs, myState, isReplay) {
 
     // Claimed cards — only show section if non-empty
     const claimedEl = el('gbMyClaimedCards');
-    claimedEl.innerHTML = '';
+    claimedEl.replaceChildren();
     const cards = myState.cards || [];
     if (cards.length > 0) {
         const claimedTitle = document.createElement('div');
         claimedTitle.className = 'gb-section-title';
-        claimedTitle.style.marginTop = '6px';
+        claimedTitle.classList.add('gb-section-title--mt');
         claimedTitle.textContent = 'Claimed Cards';
         claimedEl.appendChild(claimedTitle);
         cards.forEach(c => {
@@ -847,7 +657,7 @@ function renderMySheet(game, gs, myState, isReplay) {
 
 function renderMyStats(myState, gs) {
     const statsEl = el('gbMyStats');
-    statsEl.innerHTML = '';
+    statsEl.replaceChildren();
 
     // Drunk meter (pips only, no fraction label)
     const drunkLevel = myState.drunk_level || 0;
@@ -926,8 +736,8 @@ function makeStat(label, value) {
 
 function renderMyCups(myState, isMyTurn, game, gs) {
     const cupsEl = el('gbMyCups');
-    cupsEl.innerHTML = '';
-    const MAX_SLOTS = 5;
+    cupsEl.replaceChildren();
+
 
     const cupData = [
         { index: 0, contents: (myState.cups?.[0]?.ingredients) || [], hasDoubler: !!(myState.cups?.[0]?.has_cup_doubler) },
@@ -942,13 +752,9 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 
         const title = document.createElement('div');
         title.className = 'gb-cup-title';
-        title.innerHTML = `🥂 <span>Cup ${index + 1}</span>`;
+        title.append('🥂 ', h('span', null, `Cup ${index + 1}`));
         if (hasDoubler) {
-            const badge = document.createElement('span');
-            badge.className = 'gb-cup-doubler-badge';
-            badge.title = 'Cup Doubler active — non-cocktail drinks score ×2';
-            badge.textContent = '×2';
-            title.appendChild(badge);
+            title.appendChild(h('span', { className: 'gb-cup-doubler-badge', title: 'Cup Doubler active — non-cocktail drinks score ×2', textContent: '×2' }));
         }
         cupEl.appendChild(title);
 
@@ -984,7 +790,7 @@ function renderMyCups(myState, isMyTurn, game, gs) {
             sellTile.setAttribute('role', 'button');
             sellTile.setAttribute('tabindex', '0');
             sellTile.setAttribute('aria-label', `Sell cup ${index + 1}`);
-            sellTile.innerHTML = `<span class="gb-cup-action-icon">💰</span><span class="gb-cup-action-label">Sell</span>`;
+            sellTile.append(h('span', { className: 'gb-cup-action-icon' }, '💰'), h('span', { className: 'gb-cup-action-label' }, 'Sell'));
             sellTile.onclick = e => { e.stopPropagation(); closeAllCupOverlays(); openSellModal(index, contents, myState); };
             sellTile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); closeAllCupOverlays(); openSellModal(index, contents, myState); } };
             overlay.appendChild(sellTile);
@@ -994,7 +800,7 @@ function renderMyCups(myState, isMyTurn, game, gs) {
             drinkTile.setAttribute('role', 'button');
             drinkTile.setAttribute('tabindex', '0');
             drinkTile.setAttribute('aria-label', `Drink cup ${index + 1}`);
-            drinkTile.innerHTML = `<span class="gb-cup-action-icon">🍺</span><span class="gb-cup-action-label">Drink</span>`;
+            drinkTile.append(h('span', { className: 'gb-cup-action-icon' }, '🍺'), h('span', { className: 'gb-cup-action-label' }, 'Drink'));
             drinkTile.onclick = e => { e.stopPropagation(); closeAllCupOverlays(); openDrinkModal(index, contents); };
             drinkTile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); closeAllCupOverlays(); openDrinkModal(index, contents); } };
             overlay.appendChild(drinkTile);
@@ -1024,7 +830,7 @@ function renderActionButtons(isMyTurn, myState, game, gs) {
     // Render the wee tile in the dedicated container
     const weeContainer = el('gbWeeTile');
     if (!weeContainer) return;
-    weeContainer.innerHTML = '';
+    weeContainer.replaceChildren();
 
     if (isMyTurn) {
         const tile = document.createElement('div');
@@ -1032,7 +838,7 @@ function renderActionButtons(isMyTurn, myState, game, gs) {
         tile.setAttribute('role', 'button');
         tile.setAttribute('tabindex', '0');
         tile.setAttribute('aria-label', 'Go for a wee — empties bladder, sobers up 1 level');
-        tile.innerHTML = `<span class="gb-wee-icon">🚽</span><span class="gb-wee-label">Go for a Wee</span>`;
+        tile.append(h('span', { className: 'gb-wee-icon' }, '🚽'), h('span', { className: 'gb-wee-label' }, 'Go for a Wee'));
         tile.onclick = () => doWee(tile);
         tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
         weeContainer.appendChild(tile);
@@ -1044,9 +850,9 @@ function renderActionButtons(isMyTurn, myState, game, gs) {
 // ─────────────────────────────────────────────────────────────
 function renderOthers(game, gs, isReplay) {
     const othersEl = el('gbOthers');
-    othersEl.innerHTML = '';
+    othersEl.replaceChildren();
 
-    const otherIds = (game.players || []).filter(pid => !_me || pid !== _me.id);
+    const otherIds = (game.players || []).filter(pid => !S.me || pid !== S.me.id);
     otherIds.forEach(pid => {
         const pState = gs.player_states ? gs.player_states[pid] : null;
         const sheet = buildOtherSheet(pid, pState, gs);
@@ -1091,7 +897,7 @@ function buildOtherSheet(pid, pState, gs) {
         const body = document.createElement('div');
         body.className = 'gb-mat-body';
         const na = document.createElement('em');
-        na.style.fontSize = '0.75em';
+        na.className = 'gb-no-data-text';
         na.textContent = 'No data';
         body.appendChild(na);
         div.appendChild(body);
@@ -1147,7 +953,7 @@ function buildOtherSheet(pid, pState, gs) {
     // Cups — physical 5-slot cups
     const cupsRow = document.createElement('div');
     cupsRow.className = 'gb-cups';
-    const MAX_SLOTS = 5;
+
     [pState.cups?.[0] || {}, pState.cups?.[1] || {}].forEach((cupObj, i) => {
         const cup = cupObj.ingredients || [];
         const hasDoubler = !!(cupObj.has_cup_doubler);
@@ -1157,13 +963,9 @@ function buildOtherSheet(pid, pState, gs) {
 
         const title = document.createElement('div');
         title.className = 'gb-cup-title';
-        title.innerHTML = `🥂 <span>Cup ${i + 1}</span>`;
+        title.append('🥂 ', h('span', null, `Cup ${i + 1}`));
         if (hasDoubler) {
-            const badge = document.createElement('span');
-            badge.className = 'gb-cup-doubler-badge';
-            badge.title = 'Cup Doubler — ×2 non-cocktail pts';
-            badge.textContent = '×2';
-            title.appendChild(badge);
+            title.appendChild(h('span', { className: 'gb-cup-doubler-badge', title: 'Cup Doubler — ×2 non-cocktail pts', textContent: '×2' }));
         }
         cupEl.appendChild(title);
 
@@ -1192,11 +994,11 @@ function buildOtherSheet(pid, pState, gs) {
     if (specials.length > 0) {
         const specialTitle = document.createElement('div');
         specialTitle.className = 'gb-section-title';
-        specialTitle.style.marginTop = '6px';
+        specialTitle.classList.add('gb-section-title--mt');
         specialTitle.textContent = 'Specials on Mat';
         body.appendChild(specialTitle);
         const specialRow = document.createElement('div');
-        specialRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px;';
+        specialRow.className = 'gb-specials-row';
         specials.forEach(s => specialRow.appendChild(makeIngredientBadge(s)));
         body.appendChild(specialRow);
     }
@@ -1218,17 +1020,17 @@ function renderUndoSection(game, isReplay) {
     section.classList.remove('hidden');
 
     const content = el('gbUndoContent');
-    content.innerHTML = '';
+    content.replaceChildren();
 
-    if (_pendingUndo && _pendingUndo.status === 'pending') {
+    if (S.pendingUndo && S.pendingUndo.status === 'pending') {
         // Show pending vote UI
         const info = document.createElement('div');
         info.className = 'gb-undo-info';
-        info.textContent = `${playerName(_pendingUndo.proposed_by)} proposed to undo turn ${_pendingUndo.target_turn_number + 1}.`;
+        info.textContent = `${playerName(S.pendingUndo.proposed_by)} proposed to undo turn ${S.pendingUndo.target_turn_number + 1}.`;
         content.appendChild(info);
 
         // Per-player vote status
-        const voteMap = _pendingUndo.votes || {};
+        const voteMap = S.pendingUndo.votes || {};
         const votesEl = document.createElement('div');
         votesEl.className = 'gb-undo-votes';
         (game.players || []).forEach(pid => {
@@ -1246,7 +1048,7 @@ function renderUndoSection(game, isReplay) {
         });
         content.appendChild(votesEl);
 
-        const alreadyVoted = _me && (_me.id in voteMap);
+        const alreadyVoted = S.me && (S.me.id in voteMap);
 
         const btns = document.createElement('div');
         btns.className = 'gb-undo-btns';
@@ -1267,7 +1069,7 @@ function renderUndoSection(game, isReplay) {
             btns.appendChild(disagreeBtn);
         } else {
             const voted = document.createElement('em');
-            voted.style.fontSize = '0.78em';
+            voted.className = 'gb-text-voted';
             voted.textContent = 'You have voted.';
             btns.appendChild(voted);
         }
@@ -1281,7 +1083,7 @@ function renderUndoSection(game, isReplay) {
         content.appendChild(flashEl);
     } else {
         // Show propose undo button
-        const canPropose = _historyMoves && _historyMoves.length > 0;
+        const canPropose = S.historyMoves && S.historyMoves.length > 0;
         const proposeBtn = document.createElement('button');
         proposeBtn.className = 'gb-undo-btn agree';
         proposeBtn.textContent = 'Propose Undo';
@@ -1301,14 +1103,14 @@ function renderUndoSection(game, isReplay) {
 // History / Replay
 // ─────────────────────────────────────────────────────────────
 async function refreshHistory() {
-    if (!_gameId) return;
+    if (!S.gameId) return;
     try {
-        const resp = await fetch(`/v1/games/${_gameId}/history`);
+        const resp = await fetch(`/v1/games/${S.gameId}/history`);
         if (!resp.ok) return;
         const data = await resp.json();
-        _historyMoves = data.moves || [];
-        renderHistoryLog(_historyMoves);
-        buildReplayTurns(_historyMoves);
+        S.historyMoves = data.moves || [];
+        renderHistoryLog(S.historyMoves);
+        buildReplayTurns(S.historyMoves);
     } catch (e) {
         console.warn('History fetch failed:', e);
     }
@@ -1317,11 +1119,10 @@ async function refreshHistory() {
 function renderHistoryLog(moves) {
     const log = el('gbHistoryLog');
     if (!log) return;
-    log.innerHTML = '';
+    log.replaceChildren();
     if (moves.length === 0) {
         const em = document.createElement('em');
-        em.style.fontSize = '0.8em';
-        em.style.color = '#8a5c2e';
+        em.className = 'gb-history-empty';
         em.textContent = 'No moves yet.';
         log.appendChild(em);
         return;
@@ -1336,17 +1137,18 @@ function renderHistoryLog(moves) {
         entry.setAttribute('aria-expanded', 'false');
         entry.setAttribute('role', 'button');
         entry.setAttribute('tabindex', '0');
-        entry.innerHTML =
-            `<span class="gb-history-chevron" aria-hidden="true">&#9654;</span> ` +
-            `<span class="gb-history-turn">Turn ${move.turn_number + 1}</span> &bull; ` +
-            `<span class="gb-history-player">${escHtml(playerName(move.player_id))}</span> &bull; ` +
-            `<span class="gb-history-action">${escHtml(formatAction(move))}</span> ` +
-            `<span class="gb-history-time">${formatTime(move.created_at)}</span>`;
+        entry.append(
+            h('span', { className: 'gb-history-chevron', 'aria-hidden': 'true' }, '\u25B6'), ' ',
+            h('span', { className: 'gb-history-turn' }, `Turn ${move.turn_number + 1}`), ' \u2022 ',
+            h('span', { className: 'gb-history-player' }, playerName(move.player_id)), ' \u2022 ',
+            h('span', { className: 'gb-history-action' }, formatAction(move)), ' ',
+            h('span', { className: 'gb-history-time' }, formatTime(move.created_at))
+        );
 
         const detail = document.createElement('div');
         detail.className = 'gb-history-detail';
         detail.setAttribute('aria-hidden', 'true');
-        detail.innerHTML = formatActionDetail(move);
+        detail.appendChild(formatActionDetail(move));
 
         const toggle = () => {
             const expanded = entry.getAttribute('aria-expanded') === 'true';
@@ -1381,6 +1183,7 @@ function formatAction(move) {
     }
 }
 
+/** Returns a DocumentFragment with the detail content for a move. */
 function formatActionDetail(move) {
     const a = move.action || {};
     switch (a.type) {
@@ -1390,26 +1193,51 @@ function formatActionDetail(move) {
         case 'go_for_a_wee':    return _detailGoForAWee(a);
         case 'claim_card':       return _detailClaimCard(a);
         case 'refresh_card_row': return _detailRefreshCardRow(a);
-        case 'undo':             return `<em>Undid turn ${(a.target_turn_number ?? 0) + 1}</em>`;
-        case 'draw_from_bag':    return `<em>Drew ${(a.drawn || []).length} item(s) from the bag</em>`;
-        default:                 return '<em>No details available</em>';
+        case 'undo':             return _frag(h('em', null, `Undid turn ${(a.target_turn_number ?? 0) + 1}`));
+        case 'draw_from_bag':    return _frag(h('em', null, `Drew ${(a.drawn || []).length} item(s) from the bag`));
+        default:                 return _frag(h('em', null, 'No details available'));
     }
 }
 
-function _ingBadgesHtml(names) {
-    if (!names || names.length === 0) return '<em>none</em>';
-    return names.map(n =>
-        `<span class="gb-ingredient gb-ing-${ingredientKind(n)}">${escHtml(ingredientLabel(n))}</span>`
-    ).join(' ');
+/** Wrap one or more nodes in a DocumentFragment. */
+function _frag(...nodes) {
+    const f = document.createDocumentFragment();
+    for (const n of nodes) f.appendChild(n);
+    return f;
 }
 
-function _detailRow(label, content) {
-    return `<div class="gb-detail-row"><span class="gb-detail-label">${escHtml(label)}</span>${content}</div>`;
+/** Build ingredient badge spans, returns a DocumentFragment. */
+function _ingBadges(names) {
+    if (!names || names.length === 0) return _frag(h('em', null, 'none'));
+    const f = document.createDocumentFragment();
+    names.forEach((n, i) => {
+        if (i > 0) f.appendChild(text(' '));
+        f.appendChild(h('span', { className: `gb-ingredient gb-ing-${ingredientKind(n)}` }, ingredientLabel(n)));
+    });
+    return f;
+}
+
+/** Build a detail row: label span + content fragment, returns a div element. */
+function _detailRow(label, contentFrag) {
+    const row = h('div', { className: 'gb-detail-row' },
+        h('span', { className: 'gb-detail-label' }, label)
+    );
+    row.appendChild(contentFrag);
+    return row;
+}
+
+function _specialBadges(specials) {
+    const f = document.createDocumentFragment();
+    specials.forEach((s, i) => {
+        if (i > 0) f.appendChild(text(' '));
+        f.appendChild(h('span', { className: 'gb-special-badge' }, s));
+    });
+    return f;
 }
 
 function _detailTakeIngredients(a) {
     const taken = a.taken || [];
-    if (taken.length === 0) return '<em>No ingredients recorded</em>';
+    if (taken.length === 0) return _frag(h('em', null, 'No ingredients recorded'));
     const cups = [[], []];
     const drunk = [];
     const specials = [];
@@ -1418,94 +1246,92 @@ function _detailTakeIngredients(a) {
         else if (t.disposition === 'drink') drunk.push(t.ingredient);
         else if (t.disposition === 'special') specials.push(t.special_type || t.ingredient);
     });
-    const rows = [];
-    if (cups[0].length) rows.push(_detailRow('Cup 1:', _ingBadgesHtml(cups[0])));
-    if (cups[1].length) rows.push(_detailRow('Cup 2:', _ingBadgesHtml(cups[1])));
-    if (drunk.length)   rows.push(_detailRow('Drank:', _ingBadgesHtml(drunk)));
-    if (specials.length) rows.push(_detailRow('Special rolls:',
-        specials.map(s => `<span class="gb-special-badge">${escHtml(s)}</span>`).join(' ')));
-    return rows.join('');
+    const f = document.createDocumentFragment();
+    if (cups[0].length) f.appendChild(_detailRow('Cup 1:', _ingBadges(cups[0])));
+    if (cups[1].length) f.appendChild(_detailRow('Cup 2:', _ingBadges(cups[1])));
+    if (drunk.length)   f.appendChild(_detailRow('Drank:', _ingBadges(drunk)));
+    if (specials.length) f.appendChild(_detailRow('Special rolls:', _specialBadges(specials)));
+    return f;
 }
 
 function _detailSellCup(a) {
     const cupNum = (a.cup_index ?? 0) + 1;
     const pts = a.points_earned ?? 0;
     const specials = a.declared_specials || [];
-    let html = _detailRow(`Cup ${cupNum}:`, _ingBadgesHtml(a.ingredients));
-    if (specials.length) html += _detailRow('Specials:',
-        specials.map(s => `<span class="gb-special-badge">${escHtml(s)}</span>`).join(' '));
-    html += _detailRow('Earned:', `<span class="gb-points-badge">+${pts} pts</span>`);
-    return html;
+    const f = document.createDocumentFragment();
+    f.appendChild(_detailRow(`Cup ${cupNum}:`, _ingBadges(a.ingredients)));
+    if (specials.length) f.appendChild(_detailRow('Specials:', _specialBadges(specials)));
+    f.appendChild(_detailRow('Earned:', _frag(h('span', { className: 'gb-points-badge' }, `+${pts} pts`))));
+    return f;
 }
 
 function _detailDrinkCup(a) {
     const cupNum = (a.cup_index ?? 0) + 1;
-    return _detailRow(`Cup ${cupNum}:`, _ingBadgesHtml(a.ingredients));
+    return _frag(_detailRow(`Cup ${cupNum}:`, _ingBadges(a.ingredients)));
 }
 
 function _detailGoForAWee(a) {
     const excreted = a.excreted || [];
-    if (excreted.length === 0) return '<div class="gb-detail-row"><em>Bladder was empty</em></div>';
-    return _detailRow('Flushed:', _ingBadgesHtml(excreted));
+    if (excreted.length === 0) return _frag(h('div', { className: 'gb-detail-row' }, h('em', null, 'Bladder was empty')));
+    return _frag(_detailRow('Flushed:', _ingBadges(excreted)));
 }
 
 function _detailClaimCard(a) {
     const row = a.row_position ?? '?';
-    const karaokeTag = a.is_karaoke
-        ? ' <span class="gb-karaoke-badge">&#127908; Karaoke</span>' : '';
-    return _detailRow('Row:', `${row}${karaokeTag}`);
+    const content = document.createDocumentFragment();
+    content.appendChild(text(String(row)));
+    if (a.is_karaoke) {
+        content.appendChild(text(' '));
+        content.appendChild(h('span', { className: 'gb-karaoke-badge' }, '\uD83C\uDFA4 Karaoke'));
+    }
+    return _frag(_detailRow('Row:', content));
 }
 
 function _detailRefreshCardRow(a) {
     const row = a.row_position ?? '?';
     const n = a.cards_removed ?? '?';
-    return _detailRow('Row:', `${row} &mdash; ${n} card${n !== 1 ? 's' : ''} swapped out`);
+    const content = document.createDocumentFragment();
+    content.appendChild(text(`${row} \u2014 ${n} card${n !== 1 ? 's' : ''} swapped out`));
+    return _frag(_detailRow('Row:', content));
 }
 
-function escHtml(str) {
-    return String(str)
-        .replace(/&/g,'&amp;')
-        .replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;');
-}
 
 function buildReplayTurns(moves) {
     // Unique turn numbers
     const turns = [...new Set(moves.map(m => m.turn_number))].sort((a,b) => a-b);
-    _replayTurns = turns;
+    S.replayTurns = turns;
     updateReplayLabel();
 }
 
 function updateReplayLabel() {
     const lbl = el('gbReplayLabel');
     const barLbl = el('gbReplayBarLabel');
-    if (!_replayMode) {
-        const txt = `Turns: ${_replayTurns.length}`;
+    if (!S.replayMode) {
+        const txt = `Turns: ${S.replayTurns.length}`;
         if (lbl) lbl.textContent = txt;
         if (barLbl) barLbl.textContent = txt;
         return;
     }
-    const cur = _replayTurns[_replayCursor];
-    const last = _replayTurns[_replayTurns.length - 1];
+    const cur = S.replayTurns[S.replayCursor];
+    const last = S.replayTurns[S.replayTurns.length - 1];
     const txt = `Turn ${(cur ?? 0) + 1} / ${(last ?? 0) + 1}`;
     if (lbl) lbl.textContent = txt;
     if (barLbl) barLbl.textContent = txt;
 }
 
 async function replayGo(direction) {
-    if (_replayTurns.length === 0) return;
+    if (S.replayTurns.length === 0) return;
 
-    let newCursor = _replayCursor;
+    let newCursor = S.replayCursor;
     if (direction === 'first') { newCursor = 0; }
-    else if (direction === 'prev') { newCursor = Math.max(0, _replayCursor === -1 ? _replayTurns.length - 1 : _replayCursor - 1); }
+    else if (direction === 'prev') { newCursor = Math.max(0, S.replayCursor === -1 ? S.replayTurns.length - 1 : S.replayCursor - 1); }
     else if (direction === 'next') {
-        if (_replayCursor === -1) return; // already live
-        if (_replayCursor >= _replayTurns.length - 1) {
+        if (S.replayCursor === -1) return; // already live
+        if (S.replayCursor >= S.replayTurns.length - 1) {
             exitReplay();
             return;
         }
-        newCursor = _replayCursor + 1;
+        newCursor = S.replayCursor + 1;
     }
     else if (direction === 'last') { exitReplay(); return; }
 
@@ -1513,13 +1339,13 @@ async function replayGo(direction) {
 }
 
 async function replayGoTo(cursor) {
-    _replayCursor = cursor;
-    _replayMode = true;
+    S.replayCursor = cursor;
+    S.replayMode = true;
 
     el('gbReplayBar').classList.add('visible');
     el('gbBoardPanel').classList.add('replay-mode');
 
-    const turn = _replayTurns[_replayCursor];
+    const turn = S.replayTurns[S.replayCursor];
     updateReplayLabel();
     renderReplayBarMoves(turn);
     clearReplayHighlights();
@@ -1531,13 +1357,13 @@ async function replayGoTo(cursor) {
 
     // Fetch historical state
     try {
-        const resp = await fetch(`/v1/games/${_gameId}/history/${turn}`);
+        const resp = await fetch(`/v1/games/${S.gameId}/history/${turn}`);
         if (!resp.ok) { showError('Failed to load replay state.'); return; }
         const data = await resp.json();
         const replayGs = data.game_state;
-        if (replayGs && _game) {
-            renderAll(_game, replayGs);
-            applyReplayHighlights(_historyMoves.filter(m => m.turn_number === turn));
+        if (replayGs && S.game) {
+            renderAll(S.game, replayGs);
+            applyReplayHighlights(S.historyMoves.filter(m => m.turn_number === turn));
         }
     } catch (e) {
         showError('Failed to load replay state.');
@@ -1546,8 +1372,8 @@ async function replayGoTo(cursor) {
 }
 
 function exitReplay() {
-    _replayMode = false;
-    _replayCursor = -1;
+    S.replayMode = false;
+    S.replayCursor = -1;
     el('gbReplayBar').classList.remove('visible');
     el('gbBoardPanel').classList.remove('replay-mode');
     clearReplayHighlights();
@@ -1557,9 +1383,9 @@ function exitReplay() {
     spExit.delete('turn');
     const qsExit = spExit.toString();
     history.replaceState(null, '', qsExit ? `?${qsExit}` : window.location.pathname);
-    if (_game) {
-        renderAll(_game);
-        schedulePoll(_game);
+    if (S.game) {
+        renderAll(S.game);
+        schedulePoll(S.game);
     }
 }
 
@@ -1568,7 +1394,7 @@ function clearReplayHighlights() {
 }
 
 function _replayFindCup(playerId, cupIndex) {
-    if (_me && playerId === _me.id) {
+    if (S.me && playerId === S.me.id) {
         const cupsEl = document.getElementById('gbMyCups');
         return cupsEl ? cupsEl.querySelector(`[data-cup-index="${cupIndex}"]`) : null;
     }
@@ -1630,20 +1456,24 @@ function applyReplayHighlights(moves) {
 function renderReplayBarMoves(turnNumber) {
     const container = el('gbReplayBarMoves');
     if (!container) return;
-    const moves = _historyMoves.filter(m => m.turn_number === turnNumber);
+    const moves = S.historyMoves.filter(m => m.turn_number === turnNumber);
     if (moves.length === 0) {
-        container.innerHTML = '<em style="opacity:0.6;font-size:0.8em">No moves recorded for this turn</em>';
+        container.replaceChildren(h('em', { className: 'gb-no-data-text' }, 'No moves recorded for this turn'));
         return;
     }
-    container.innerHTML = moves.map(m =>
-        `<div class="gb-replay-move-card">` +
-        `<div class="gb-replay-move-card-header">` +
-        `<strong>${escHtml(playerName(m.player_id))}</strong>` +
-        `<span class="gb-replay-move-card-action">${escHtml(formatAction(m))}</span>` +
-        `</div>` +
-        `<div class="gb-replay-move-card-detail">${formatActionDetail(m)}</div>` +
-        `</div>`
-    ).join('');
+    const frag = document.createDocumentFragment();
+    for (const m of moves) {
+        const card = h('div', { className: 'gb-replay-move-card' },
+            h('div', { className: 'gb-replay-move-card-header' },
+                h('strong', null, playerName(m.player_id)),
+                h('span', { className: 'gb-replay-move-card-action' }, formatAction(m))
+            ),
+            h('div', { className: 'gb-replay-move-card-detail' })
+        );
+        card.querySelector('.gb-replay-move-card-detail').appendChild(formatActionDetail(m));
+        frag.appendChild(card);
+    }
+    container.replaceChildren(frag);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1657,7 +1487,7 @@ async function gameAction(action, body = null) {
         headers: body ? { 'Content-Type': 'application/json' } : {},
     };
     if (body) opts.body = JSON.stringify(body);
-    const resp = await fetch(`/v1/games/${_gameId}/actions/${action}`, opts);
+    const resp = await fetch(`/v1/games/${S.gameId}/actions/${action}`, opts);
     if (resp.status === 401 || resp.status === 403) {
         window.location.href = '/';
         throw new Error('Unauthorized');
@@ -1666,7 +1496,7 @@ async function gameAction(action, body = null) {
 }
 
 async function doWee(tile) {
-    if (tile) { tile.style.pointerEvents = 'none'; tile.style.opacity = '0.6'; }
+    if (tile) tile.classList.add('is-busy');
     clearError();
     try {
         const resp = await gameAction('go-for-a-wee');
@@ -1680,7 +1510,7 @@ async function doWee(tile) {
     } catch (e) {
         if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
-        if (tile) { tile.style.pointerEvents = ''; tile.style.opacity = ''; }
+        if (tile) tile.classList.remove('is-busy');
     }
 }
 
@@ -1692,7 +1522,7 @@ async function doClaimCard(card, cardEl) {
         return;
     }
 
-    if (cardEl) { cardEl.style.pointerEvents = 'none'; cardEl.style.opacity = '0.6'; }
+    if (cardEl) cardEl.classList.add('is-busy');
     clearError();
     try {
         const resp = await gameAction('claim-card', { card_id: card.id || card });
@@ -1706,20 +1536,20 @@ async function doClaimCard(card, cardEl) {
     } catch (e) {
         if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
-        if (cardEl) { cardEl.style.pointerEvents = ''; cardEl.style.opacity = ''; }
+        if (cardEl) cardEl.classList.remove('is-busy');
     }
 }
 
 function openCupDoublerModal(card, cardEl) {
-    _cupDoublerCard   = card;
-    _cupDoublerCardEl = cardEl;
+    S.cupDoublerCard   = card;
+    S.cupDoublerCardEl = cardEl;
     clearModalError('gbCupDoublerModalError');
 
     // Populate spirit dropdown with spirits that have >= 3 in bladder
     const spiritSel = el('gbCupDoublerSpiritSelect');
-    spiritSel.innerHTML = '';
-    const bladder = (_currentGs && _me)
-        ? (_currentGs.player_states?.[_me.id]?.bladder || [])
+    spiritSel.replaceChildren();
+    const bladder = (S.currentGs && S.me)
+        ? (S.currentGs.player_states?.[S.me.id]?.bladder || [])
         : [];
 
     const countOf = s => bladder.filter(i => i === s).length;
@@ -1744,13 +1574,13 @@ function openCupDoublerModal(card, cardEl) {
 
 function closeCupDoublerModal() {
     closeModal('gbCupDoublerModal');
-    if (_cupDoublerCardEl) { _cupDoublerCardEl.style.pointerEvents = ''; _cupDoublerCardEl.style.opacity = ''; }
-    _cupDoublerCard   = null;
-    _cupDoublerCardEl = null;
+    if (S.cupDoublerCardEl) S.cupDoublerCardEl.classList.remove('is-busy');
+    S.cupDoublerCard   = null;
+    S.cupDoublerCardEl = null;
 }
 
 async function confirmCupDoubler() {
-    const card = _cupDoublerCard;
+    const card = S.cupDoublerCard;
     if (!card) return;
 
     const cupIndex   = parseInt(el('gbCupDoublerCupSelect').value, 10);
@@ -1802,12 +1632,12 @@ async function doRefreshRow(rowPosition, btn) {
 // ─────────────────────────────────────────────────────────────
 
 function _maybeAutoOpenTakeModal(game, gs, isReplay) {
-    if (isReplay || !_me || game.status !== 'STARTED') return;
-    if (gs.player_turn !== _me.id) return;
+    if (isReplay || !S.me || game.status !== 'STARTED') return;
+    if (gs.player_turn !== S.me.id) return;
     // Don't re-open if already visible
     const modal = el('gbTakeModal');
     if (modal && !modal.classList.contains('hidden')) return;
-    const myState = gs.player_states?.[_me.id];
+    const myState = gs.player_states?.[S.me.id];
     if (!myState) return;
     const totalLimit = myState.take_count || 3;
     const alreadyTaken = gs.ingredients_taken_this_turn || 0;
@@ -1818,9 +1648,9 @@ function _maybeAutoOpenTakeModal(game, gs, isReplay) {
 }
 
 function openTakeModal(myState, gs) {
-    _takeStep = 0;
-    _takeDisplaySelected = [];
-    _takeBagPending = [];
+    S.takeStep = 0;
+    S.takeDisplaySelected = [];
+    S.takeBagPending = [];
     clearModalError('gbTakeModalError');
 
     const totalLimit = myState.take_count || 3;
@@ -1831,7 +1661,7 @@ function openTakeModal(myState, gs) {
     // skip straight to assignment.
     const serverPending = gs.bag_draw_pending || [];
     if (serverPending.length > 0) {
-        _takeBagPending = serverPending.map(ing => ({ ingredient: ing, source: 'pending' }));
+        S.takeBagPending = serverPending.map(ing => ({ ingredient: ing, source: 'pending' }));
         _openAssignStep(myState);
         openModal('gbTakeModal');
         return;
@@ -1851,11 +1681,11 @@ function openTakeModal(myState, gs) {
 
     // Display picks
     const pickDisplayEl = el('gbPickDisplay');
-    pickDisplayEl.innerHTML = '';
+    pickDisplayEl.replaceChildren();
     const display = gs.open_display || [];
     if (display.length === 0) {
         const em = document.createElement('em');
-        em.style.fontSize = '0.78em'; em.style.color = '#8a5c2e';
+        em.className = 'gb-empty-hint';
         em.textContent = 'Display is empty';
         pickDisplayEl.appendChild(em);
     } else {
@@ -1867,7 +1697,7 @@ function openTakeModal(myState, gs) {
     // Bag draw controls
     const bagCount = (gs.bag_contents || []).length;
     el('gbBagPickInfo').textContent = `(${bagCount} in bag)`;
-    el('gbPickBag').innerHTML = '';
+    el('gbPickBag').replaceChildren();
     el('gbBagDrawStatus').textContent = '';
 
     const drawCountEl = el('gbBagDrawCount');
@@ -1894,23 +1724,23 @@ function _buildDisplayPickItem(ing, idx, batchLimit) {
     item.setAttribute('aria-label', `${ingredientLabel(ing)} from display`);
     item.dataset.idx = idx;
     const badge = makeIngredientBadge(ing);
-    badge.style.pointerEvents = 'none';
+    badge.classList.add('gb-no-pointer');
     item.appendChild(badge);
     item.onclick = () => {
         const isSelected = item.classList.contains('selected');
-        const total = _takeDisplaySelected.length + _takeBagPending.length;
+        const total = S.takeDisplaySelected.length + S.takeBagPending.length;
         if (!isSelected && total >= batchLimit) {
             showModalError('gbTakeModalError', `You can only take ${batchLimit} ingredients total.`);
             return;
         }
         clearModalError('gbTakeModalError');
         if (isSelected) {
-            const pos = _takeDisplaySelected.findIndex(s => s.idx === idx);
-            if (pos !== -1) _takeDisplaySelected.splice(pos, 1);
+            const pos = S.takeDisplaySelected.findIndex(s => s.idx === idx);
+            if (pos !== -1) S.takeDisplaySelected.splice(pos, 1);
             item.classList.remove('selected');
             item.setAttribute('aria-checked', 'false');
         } else {
-            _takeDisplaySelected.push({ ingredient: ing, source: 'display', idx });
+            S.takeDisplaySelected.push({ ingredient: ing, source: 'display', idx });
             item.classList.add('selected');
             item.setAttribute('aria-checked', 'true');
         }
@@ -1921,7 +1751,7 @@ function _buildDisplayPickItem(ing, idx, batchLimit) {
 
 async function _doDrawFromBag(myState, batchLimit) {
     const count = parseInt(el('gbBagDrawCount').value) || 0;
-    const alreadySelected = _takeDisplaySelected.length + _takeBagPending.length;
+    const alreadySelected = S.takeDisplaySelected.length + S.takeBagPending.length;
     const remaining = batchLimit - alreadySelected;
 
     if (count < 1 || count > remaining) {
@@ -1949,20 +1779,20 @@ async function _doDrawFromBag(myState, batchLimit) {
         const drawn = data.drawn || [];
 
         // Store as pending (server-confirmed, cannot be removed)
-        _takeBagPending = drawn.map(ing => ({ ingredient: ing, source: 'pending' }));
+        S.takeBagPending = drawn.map(ing => ({ ingredient: ing, source: 'pending' }));
 
         // Show drawn ingredients as locked badges
         const pickBagEl = el('gbPickBag');
-        pickBagEl.innerHTML = '';
+        pickBagEl.replaceChildren();
         drawn.forEach(ing => {
             const wrap = document.createElement('div');
-            wrap.style.cssText = 'display:inline-flex;align-items:center;gap:3px;';
+            wrap.className = 'gb-bag-drawn-wrap';
             const badge = makeIngredientBadge(ing);
             badge.title = `${ingredientLabel(ing)} (drawn from bag — locked)`;
             wrap.appendChild(badge);
             const lock = document.createElement('span');
             lock.textContent = '🔒';
-            lock.style.cssText = 'font-size:0.7em;opacity:0.6;';
+            lock.className = 'gb-bag-drawn-lock';
             wrap.appendChild(lock);
             pickBagEl.appendChild(wrap);
         });
@@ -1979,39 +1809,39 @@ async function _doDrawFromBag(myState, batchLimit) {
 }
 
 function _updateTakeCount() {
-    el('gbTakeCount').textContent = _takeDisplaySelected.length + _takeBagPending.length;
+    el('gbTakeCount').textContent = S.takeDisplaySelected.length + S.takeBagPending.length;
 }
 
 function renderTakeModalCups(myState) {
     const cupsEl = el('gbTakeModalCups');
     if (!cupsEl) return;
-    cupsEl.innerHTML = '';
+    cupsEl.replaceChildren();
 
     const label = document.createElement('div');
-    label.style.cssText = 'font-weight:600;color:#6b3a0f;margin-bottom:4px;';
+    label.className = 'gb-take-cups-label';
     label.textContent = 'Your cups:';
     cupsEl.appendChild(label);
 
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:16px;flex-wrap:wrap;';
+    row.className = 'gb-take-cups-row';
 
     [{ index: 0, label: 'Cup 1' }, { index: 1, label: 'Cup 2' }].forEach(({ index, label: cupLabel }) => {
         const cup = (myState.cups?.[index]?.ingredients) || [];
         const div = document.createElement('div');
-        div.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;';
+        div.className = 'gb-take-cup-item';
         const lbl = document.createElement('span');
-        lbl.style.cssText = 'color:#6b3a0f;white-space:nowrap;';
+        lbl.className = 'gb-take-cup-lbl';
         lbl.textContent = `${cupLabel} (${cup.length}/5): `;
         div.appendChild(lbl);
         if (cup.length === 0) {
             const em = document.createElement('em');
-            em.style.color = '#8a5c2e';
+            em.className = 'gb-empty-hint';
             em.textContent = 'empty';
             div.appendChild(em);
         } else {
             cup.forEach(ing => {
                 const b = makeIngredientBadge(ing);
-                b.style.fontSize = '0.78em';
+                b.classList.add('gb-badge-sm');
                 div.appendChild(b);
             });
         }
@@ -2029,15 +1859,15 @@ function updateStepDots(step) {
 }
 
 function takeModalNext() {
-    if (_takeStep === 0) {
-        const total = _takeDisplaySelected.length + _takeBagPending.length;
+    if (S.takeStep === 0) {
+        const total = S.takeDisplaySelected.length + S.takeBagPending.length;
         if (total === 0) {
             showModalError('gbTakeModalError', 'Select at least one ingredient before continuing.');
             return;
         }
         clearModalError('gbTakeModalError');
-        const myState = _me && _game && _game.game_state
-            ? _game.game_state.player_states[_me.id]
+        const myState = S.me && S.game && S.game.game_state
+            ? S.game.game_state.player_states[S.me.id]
             : null;
         _openAssignStep(myState);
     } else {
@@ -2046,7 +1876,7 @@ function takeModalNext() {
 }
 
 function _openAssignStep(myState) {
-    _takeStep = 1;
+    S.takeStep = 1;
     el('gbTakeStep0').classList.add('hidden');
     el('gbTakeStep1').classList.remove('hidden');
     el('gbTakeNextBtn').textContent = 'Submit';
@@ -2057,13 +1887,13 @@ function _openAssignStep(myState) {
 
 function _buildAssignTable(myState) {
     const tbody = el('gbAssignTableBody');
-    tbody.innerHTML = '';
+    tbody.replaceChildren();
 
     const cup1Count = myState ? ((myState.cups?.[0]?.ingredients) || []).length : 0;
     const cup2Count = myState ? ((myState.cups?.[1]?.ingredients) || []).length : 0;
     const CUP_MAX = 5;
 
-    const allItems = [..._takeDisplaySelected, ..._takeBagPending];
+    const allItems = [...S.takeDisplaySelected, ...S.takeBagPending];
 
     allItems.forEach((sel, i) => {
         const tr = document.createElement('tr');
@@ -2071,7 +1901,7 @@ function _buildAssignTable(myState) {
         const tdIng = document.createElement('td');
         tdIng.appendChild(makeIngredientBadge(sel.ingredient));
         const srcLabel = document.createElement('span');
-        srcLabel.style.cssText = 'font-size:0.7em;color:#8a5c2e;margin-left:4px;';
+        srcLabel.className = 'gb-assign-src';
         srcLabel.textContent = sel.source === 'pending' ? '(bag)' : '(display)';
         tdIng.appendChild(srcLabel);
         tr.appendChild(tdIng);
@@ -2081,7 +1911,7 @@ function _buildAssignTable(myState) {
 
         if (kind === 'special') {
             const note = document.createElement('em');
-            note.style.fontSize = '0.82em';
+            note.className = 'gb-assign-note';
             note.textContent = 'Auto-placed on mat (server rolls)';
             tdAssign.appendChild(note);
             sel.disposition = 'drink';
@@ -2132,7 +1962,7 @@ async function submitTakeIngredients() {
     const btn = el('gbTakeNextBtn');
     setButtonBusy(btn, true, 'Submitting…');
 
-    const allItems = [..._takeDisplaySelected, ..._takeBagPending];
+    const allItems = [...S.takeDisplaySelected, ...S.takeBagPending];
     const assignments = allItems.map(sel => {
         const a = {
             ingredient: sel.ingredient,
@@ -2162,9 +1992,9 @@ async function submitTakeIngredients() {
 
 function closeTakeModal() {
     closeModal('gbTakeModal');
-    _takeDisplaySelected = [];
-    _takeBagPending = [];
-    _takeStep = 0;
+    S.takeDisplaySelected = [];
+    S.takeBagPending = [];
+    S.takeStep = 0;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2183,26 +2013,26 @@ function closeRules() { closeModal('gbRulesModal'); }
 // Sell Cup modal
 // ─────────────────────────────────────────────────────────────
 function openSellModal(cupIndex, contents, myState) {
-    _sellCupIndex = cupIndex;
+    S.sellCupIndex = cupIndex;
     clearModalError('gbSellModalError');
 
     el('gbSellModalDesc').textContent = `Selling Cup ${cupIndex + 1}`;
 
     // Cup contents display
     const contentsEl = el('gbSellCupContents');
-    contentsEl.innerHTML = '';
+    contentsEl.replaceChildren();
     contents.forEach(ing => contentsEl.appendChild(makeIngredientBadge(ing)));
 
     // Specials picker
     const specials = myState.special_ingredients || [];
     const pickerEl = el('gbSellSpecialsPicker');
-    pickerEl.innerHTML = '';
+    pickerEl.replaceChildren();
     const section = el('gbSellSpecialsSection');
 
     if (specials.length === 0) {
-        section.style.display = 'none';
+        section.classList.add('hidden');
     } else {
-        section.style.display = '';
+        section.classList.remove('hidden');
         specials.forEach((s, i) => {
             const item = document.createElement('button');
             item.className = `gb-pick-item special`;
@@ -2236,7 +2066,7 @@ async function confirmSell() {
 
     try {
         const resp = await gameAction('sell-cup', {
-            cup_index: _sellCupIndex,
+            cup_index: S.sellCupIndex,
             declared_specials: declaredSpecials,
         });
         if (!resp.ok) {
@@ -2256,26 +2086,31 @@ async function confirmSell() {
 
 function closeSellModal() {
     closeModal('gbSellModal');
-    _sellCupIndex = null;
+    S.sellCupIndex = null;
 }
 
 // ─────────────────────────────────────────────────────────────
 // Drink Cup modal
 // ─────────────────────────────────────────────────────────────
 function openDrinkModal(cupIndex, contents) {
-    _drinkCupIndex = cupIndex;
+    S.drinkCupIndex = cupIndex;
     clearModalError('gbDrinkModalError');
 
     el('gbDrinkModalTitle').textContent = `Drink Cup ${cupIndex + 1}`;
     const ingNames = contents.map(ingredientLabel).join(', ');
     const spiritCount = contents.filter(i => ingredientKind(i) === 'spirit').length;
 
-    el('gbDrinkModalDesc').innerHTML =
-        `Are you sure you want to drink Cup ${cupIndex + 1}?<br>` +
-        `<strong>Contents:</strong> ${ingNames || 'empty'}<br>` +
-        (spiritCount > 0
-            ? `<span style="color:#b91c1c">Warning: contains ${spiritCount} spirit${spiritCount > 1 ? 's' : ''} — your drunk level will increase by ${spiritCount}!</span>`
-            : `<span style="color:#4b7ca8">Mixers only — will sober you up.</span>`);
+    const descEl = el('gbDrinkModalDesc');
+    const warning = spiritCount > 0
+        ? h('span', { className: 'gb-text-warning' }, `Warning: contains ${spiritCount} spirit${spiritCount > 1 ? 's' : ''} — your drunk level will increase by ${spiritCount}!`)
+        : h('span', { className: 'gb-text-safe' }, 'Mixers only — will sober you up.');
+    descEl.replaceChildren(
+        text(`Are you sure you want to drink Cup ${cupIndex + 1}?`),
+        document.createElement('br'),
+        h('strong', null, 'Contents:'), text(` ${ingNames || 'empty'}`),
+        document.createElement('br'),
+        warning
+    );
 
     openModal('gbDrinkModal');
     el('gbDrinkConfirmBtn').disabled = false;
@@ -2287,7 +2122,7 @@ async function confirmDrink() {
     setButtonBusy(btn, true, 'Drinking…');
 
     try {
-        const resp = await gameAction('drink-cup', { cup_index: _drinkCupIndex });
+        const resp = await gameAction('drink-cup', { cup_index: S.drinkCupIndex });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
             showModalError('gbDrinkModalError', d.detail || d.error || 'Cannot drink that cup.');
@@ -2305,7 +2140,7 @@ async function confirmDrink() {
 
 function closeDrinkModal() {
     closeModal('gbDrinkModal');
-    _drinkCupIndex = null;
+    S.drinkCupIndex = null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2315,14 +2150,14 @@ async function proposeUndo(btn) {
     setButtonBusy(btn, true, 'Proposing…');
     clearError();
     try {
-        const resp = await fetch(`/v1/games/${_gameId}/undo`, { method: 'POST' });
+        const resp = await fetch(`/v1/games/${S.gameId}/undo`, { method: 'POST' });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
             showError(d.detail || d.error || 'Failed to propose undo.');
         } else {
             const data = await resp.json();
-            _pendingUndo = data.undo_request || null;
-            if (_game) renderUndoSection(_game, false);
+            S.pendingUndo = data.undo_request || null;
+            if (S.game) renderUndoSection(S.game, false);
         }
     } catch (e) {
         showError('Network error proposing undo.');
@@ -2332,16 +2167,16 @@ async function proposeUndo(btn) {
 }
 
 async function voteUndo(vote, agreeBtn, disagreeBtn) {
-    if (!_pendingUndo) return;
+    if (!S.pendingUndo) return;
     const activeBtn = vote === 'agree' ? agreeBtn : disagreeBtn;
     setButtonBusy(agreeBtn, true);
     setButtonBusy(disagreeBtn, true);
     clearError();
     try {
-        const resp = await fetch(`/v1/games/${_gameId}/undo/vote`, {
+        const resp = await fetch(`/v1/games/${S.gameId}/undo/vote`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ request_id: _pendingUndo.id, vote }),
+            body: JSON.stringify({ request_id: S.pendingUndo.id, vote }),
         });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
@@ -2353,11 +2188,11 @@ async function voteUndo(vote, agreeBtn, disagreeBtn) {
             const status = data.status;
             if (status === 'approved') {
                 flash('gbUndoFlash', 'success', 'Undo applied!', 2000);
-                _pendingUndo = null;
+                S.pendingUndo = null;
                 setTimeout(async () => { await refreshGame(); await refreshHistory(); }, 2100);
             } else if (status === 'rejected') {
                 flash('gbUndoFlash', 'error', 'Undo rejected.', 2000);
-                _pendingUndo = null;
+                S.pendingUndo = null;
                 setTimeout(async () => { await refreshGame(); }, 2100);
             } else {
                 // Still pending — refresh from server to get updated vote counts
@@ -2372,45 +2207,17 @@ async function voteUndo(vote, agreeBtn, disagreeBtn) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Modal open/close helpers + focus trap
+// Window exports for HTML onclick handlers
 // ─────────────────────────────────────────────────────────────
-function openModal(id) {
-    const overlay = el(id);
-    if (!overlay) return;
-    overlay.classList.remove('hidden');
-    overlay.style.display = 'flex';
-    // Focus the modal itself
-    setTimeout(() => {
-        const focusable = overlay.querySelector('button:not([disabled]), select, [tabindex="0"]');
-        if (focusable) focusable.focus();
-        else overlay.focus();
-    }, 30);
+Object.assign(window, {
+    openMenu, closeMenu, openRules, closeRules,
+    switchTab, replayGo, exitReplay,
+    closeTakeModal, takeModalNext,
+    closeSellModal, confirmSell,
+    closeDrinkModal, confirmDrink,
+    closeCupDoublerModal, confirmCupDoubler,
+    showGameError: showError, clearGameError: clearError,
+});
 
-    // ESC to close
-    overlay._escHandler = (e) => {
-        if (e.key === 'Escape') closeModal(id);
-    };
-    document.addEventListener('keydown', overlay._escHandler);
-}
-
-function closeModal(id) {
-    const overlay = el(id);
-    if (!overlay) return;
-    overlay.classList.add('hidden');
-    overlay.style.display = '';
-    if (overlay._escHandler) {
-        document.removeEventListener('keydown', overlay._escHandler);
-        overlay._escHandler = null;
-    }
-    // Return focus to bag visual if available
-    const focusReturn = el('gbBagVisual');
-    if (focusReturn) focusReturn.focus();
-}
-
-// ─────────────────────────────────────────────────────────────
-// Backward-compat stubs (called from existing HTML scaffolding)
-// ─────────────────────────────────────────────────────────────
-
-// These were in the old game.js — keep stubs to avoid errors
-function showGameError(msg) { showError(msg); }
-function clearGameError()   { clearError(); }
+// Auto-start
+load();
