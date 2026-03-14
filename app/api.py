@@ -25,6 +25,51 @@ gameManager = GameManager()
 userManager = UserManager()
 jwt_handler = JWTHandler()
 
+
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse(
+        os.path.join("static", "sw.js"),
+        media_type="application/javascript",
+        headers={
+            "Service-Worker-Allowed": "/",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
+
+
+@app.get("/manifest.json")
+async def manifest():
+    return FileResponse(
+        os.path.join("static", "manifest.json"),
+        media_type="application/json",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
+
+
+@app.post("/refresh-token")
+async def refresh_token(request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    user = userManager.get_user(token_user.id)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "User not found"})
+    token = jwt_handler.sign(user)
+    response = JSONResponse(content={"ok": True})
+    response.set_cookie(
+        key="userjwt",
+        value=token,
+        httponly=True,
+        secure=False,
+        samesite="Strict",
+        max_age=14 * 24 * 60 * 60,
+    )
+    return response
+
+
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

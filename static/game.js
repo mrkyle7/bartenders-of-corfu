@@ -39,10 +39,30 @@ async function load() {
         console.warn('Could not fetch user details:', e);
     }
 
+    // Register service worker for PWA + notification click handling
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
     // Request browser notification permission (no-op if already granted/denied)
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
     }
+
+    // Background polling: tell SW to poll when tab is hidden
+    document.addEventListener('visibilitychange', () => {
+        if (!navigator.serviceWorker?.controller) return;
+        if (document.visibilityState === 'hidden') {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'START_POLL',
+                gameId: S.gameId,
+                playerId: S.me?.id,
+                lastKnownTurn: S.lastKnownTurn,
+            });
+        } else {
+            navigator.serviceWorker.controller.postMessage({ type: 'STOP_POLL' });
+        }
+    });
 
     await refreshGame();
     await refreshHistory();
@@ -77,6 +97,12 @@ async function refreshGame(quiet = false) {
         const turnChanged = S.lastKnownTurn !== null && newTurn !== S.lastKnownTurn;
         if (isMyTurn && turnChanged) notifyMyTurn();
         S.lastKnownTurn = newTurn;
+        // Keep SW in sync with current turn
+        if (turnChanged && navigator.serviceWorker?.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'UPDATE_TURN', lastKnownTurn: newTurn
+            });
+        }
         renderAll(game);
         schedulePoll(game);
     } catch (e) {
@@ -110,13 +136,32 @@ function playerName(pid) {
     return pid.slice(0, 8);
 }
 
-function notifyMyTurn() {
+async function notifyMyTurn() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    if (document.visibilityState === 'visible') return;  // already looking at the game
-    new Notification("Bartenders of Corfu", {
-        body: "It's your turn!",
-        icon: '/favicon.ico',
-    });
+    if (document.visibilityState === 'visible') return;
+
+    // Prefer SW-based notification (supports click-to-focus)
+    const reg = await navigator.serviceWorker?.ready;
+    if (reg) {
+        await reg.showNotification('Bartenders of Corfu', {
+            body: "It's your turn!",
+            icon: '/static/favicon.ico',
+            tag: 'turn-notification',
+            data: { url: window.location.href },
+        });
+    } else {
+        new Notification("Bartenders of Corfu", {
+            body: "It's your turn!",
+            icon: '/static/favicon.ico',
+        });
+    }
+
+    // Keep SW in sync so it doesn't re-notify
+    if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'UPDATE_TURN', lastKnownTurn: S.lastKnownTurn
+        });
+    }
 }
 
 function schedulePoll(game) {
@@ -128,6 +173,14 @@ function schedulePoll(game) {
     // Poll when it's not our turn, or when an undo vote is pending (any player needs updates)
     if (!myTurn || S.pendingUndo) {
         S.pollTimer = setTimeout(() => refreshGame(true), 3000);
+    }
+
+    // Periodic token refresh (every 6 hours)
+    const now = Date.now();
+    if (!S._lastTokenRefresh) S._lastTokenRefresh = now;
+    if (now - S._lastTokenRefresh > 6 * 60 * 60 * 1000) {
+        S._lastTokenRefresh = now;
+        fetch('/refresh-token', { method: 'POST' }).catch(() => {});
     }
 }
 
