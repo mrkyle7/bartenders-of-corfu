@@ -39,6 +39,11 @@ async function load() {
         console.warn('Could not fetch user details:', e);
     }
 
+    // Request browser notification permission (no-op if already granted/denied)
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
     await refreshGame();
     await refreshHistory();
 
@@ -67,6 +72,11 @@ async function refreshGame(quiet = false) {
         await resolvePlayerNames(game.players);
         S.game = game;
         S.pendingUndo = game.pending_undo || null;
+        const newTurn = game.game_state && game.game_state.player_turn;
+        const isMyTurn = S.me && newTurn === S.me.id;
+        const turnChanged = S.lastKnownTurn !== null && newTurn !== S.lastKnownTurn;
+        if (isMyTurn && turnChanged) notifyMyTurn();
+        S.lastKnownTurn = newTurn;
         renderAll(game);
         schedulePoll(game);
     } catch (e) {
@@ -98,6 +108,15 @@ function playerName(pid) {
     if (!pid) return 'Unknown';
     if (S.players[pid]) return S.players[pid].username;
     return pid.slice(0, 8);
+}
+
+function notifyMyTurn() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (document.visibilityState === 'visible') return;  // already looking at the game
+    new Notification("Bartenders of Corfu", {
+        body: "It's your turn!",
+        icon: '/favicon.ico',
+    });
 }
 
 function schedulePoll(game) {
