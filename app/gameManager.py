@@ -194,6 +194,26 @@ class GameManager:
         self._apply_action(game, player_id, "claim_card", new_state, payload)
         return new_state, payload
 
+    def drink_stored_spirit(
+        self, game: Game, player_id: UUID, store_card_index: int, count: int
+    ) -> tuple[GameState, dict]:
+        self._require_started(game)
+        new_state, payload = actions.drink_stored_spirit(
+            game.game_state, player_id, store_card_index, count
+        )
+        self._apply_action(game, player_id, "drink_stored_spirit", new_state, payload)
+        return new_state, payload
+
+    def use_stored_spirit(
+        self, game: Game, player_id: UUID, store_card_index: int, cup_index: int
+    ) -> tuple[GameState, dict]:
+        self._require_started(game)
+        new_state, payload = actions.use_stored_spirit(
+            game.game_state, player_id, store_card_index, cup_index
+        )
+        self._apply_action(game, player_id, "use_stored_spirit", new_state, payload)
+        return new_state, payload
+
     def refresh_card_row(
         self, game: Game, player_id: UUID, row_position: int
     ) -> tuple[GameState, dict]:

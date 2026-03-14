@@ -1195,3 +1195,84 @@ def _parse_ingredient_spec(spec: str) -> list[Ingredient]:
             except (ValueError, KeyError):
                 pass
     return result
+
+
+# ── Drink Stored Spirit steps ──────────────────────────────────────────────
+
+
+@when(
+    parsers.parse("player {n:d} drinks {count:d} stored spirits from card {card_idx:d}")
+)
+@when(
+    parsers.parse("player {n:d} drinks {count:d} stored spirit from card {card_idx:d}")
+)
+def player_drink_stored_spirit(ctx, n, count, card_idx):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/drink-stored-spirit",
+        json={"store_card_index": card_idx, "count": count},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(
+    parsers.parse(
+        "player {n:d} tries to drink {count:d} stored spirits from card {card_idx:d}"
+    )
+)
+@when(
+    parsers.parse(
+        "player {n:d} tries to drink {count:d} stored spirit from card {card_idx:d}"
+    )
+)
+def player_try_drink_stored_spirit(ctx, n, count, card_idx):
+    player_drink_stored_spirit(ctx, n, count, card_idx)
+
+
+# ── Use Stored Spirit steps ───────────────────────────────────────────────
+
+
+@when(
+    parsers.parse(
+        "player {n:d} uses a stored spirit from card {card_idx:d} into cup {cup_idx:d}"
+    )
+)
+def player_use_stored_spirit(ctx, n, card_idx, cup_idx):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/use-stored-spirit",
+        json={"store_card_index": card_idx, "cup_index": cup_idx},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(
+    parsers.parse(
+        "player {n:d} tries to use a stored spirit from card {card_idx:d} into cup {cup_idx:d}"
+    )
+)
+def player_try_use_stored_spirit(ctx, n, card_idx, cup_idx):
+    player_use_stored_spirit(ctx, n, card_idx, cup_idx)
+
+
+# ── Shared "then" steps for free actions ──────────────────────────────────
+
+
+@then(parsers.parse("it should still be player {n:d}'s turn"))
+def still_players_turn(ctx, n):
+    _, pid = _player(ctx, n)
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    gs = game["game_state"]
+    assert gs["player_turn"] == pid, (
+        f"Expected player {n} ({pid}) to still have the turn, "
+        f"but player_turn is {gs['player_turn']}"
+    )
+
+
+@then("the action should succeed")
+def action_should_succeed(ctx):
+    assert ctx["last_status"] == 200, f"Expected 200 but got {ctx['last_status']}"

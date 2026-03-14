@@ -619,6 +619,13 @@
 .gb-refresh-row-btn:hover { background: var(--color-brown-medium); transform: none; }
 .gb-refresh-row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.gb-refresh-hint {
+    font-size: 0.7em;
+    color: var(--color-brown-light);
+    font-style: italic;
+    margin-left: 4px;
+}
+
 /* ---------- Ingredient tokens (BGA-style physical tokens) ---------- */
 .gb-ingredient {
     display: inline-flex;
@@ -959,6 +966,33 @@
     background: #fdf4ff;
     color: #6b21a8;
 }
+
+.gb-store-card-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.gb-store-action-btn {
+    padding: 2px 8px;
+    font-size: 0.85em;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.gb-store-action-btn.drink {
+    background: #fbbf24;
+    color: #78350f;
+}
+.gb-store-action-btn.drink:hover { background: #f59e0b; }
+
+.gb-store-action-btn.use {
+    background: #60a5fa;
+    color: #1e3a5f;
+}
+.gb-store-action-btn.use:hover { background: #3b82f6; }
 
 /* Actions */
 .gb-actions {

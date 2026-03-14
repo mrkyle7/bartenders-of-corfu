@@ -717,6 +717,60 @@ async def action_claim_card(game_id: str, body: ClaimCardRequest, request: Reque
         return JSONResponse(status_code=500, content={"error": "Action failed"})
 
 
+class DrinkStoredSpiritRequest(BaseModel):
+    store_card_index: int
+    count: int = 1
+
+
+@app.post("/v1/games/{game_id}/actions/drink-stored-spirit")
+async def action_drink_stored_spirit(
+    game_id: str, body: DrinkStoredSpiritRequest, request: Request
+):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.drink_stored_spirit(
+            game, token_user.id, body.store_card_index, body.count
+        )
+        logger.info("%s drank stored spirit in game %s", token_user.username, game_id)
+        return JSONResponse(
+            content={"game_state": new_state.to_dict(), "move": payload}
+        )
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in drink-stored-spirit for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+class UseStoredSpiritRequest(BaseModel):
+    store_card_index: int
+    cup_index: int
+
+
+@app.post("/v1/games/{game_id}/actions/use-stored-spirit")
+async def action_use_stored_spirit(
+    game_id: str, body: UseStoredSpiritRequest, request: Request
+):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.use_stored_spirit(
+            game, token_user.id, body.store_card_index, body.cup_index
+        )
+        logger.info("%s used stored spirit in game %s", token_user.username, game_id)
+        return JSONResponse(
+            content={"game_state": new_state.to_dict(), "move": payload}
+        )
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in use-stored-spirit for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
 class RefreshRowRequest(BaseModel):
     row_position: int
 

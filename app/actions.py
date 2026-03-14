@@ -743,6 +743,112 @@ def claim_card(
     return gs, payload
 
 
+def drink_stored_spirit(
+    gs: GameState,
+    player_id: UUID,
+    store_card_index: int,
+    count: int,
+) -> tuple[GameState, dict]:
+    """DrinkStoredSpirit — free action (does not end turn).
+
+    Moves spirits from a store card into the bladder and applies drunk modifier.
+    Players can use this at any time during their turn to increase drunk level
+    (e.g. to qualify for RefreshCardRow).
+    """
+    gs = _deep_copy_state(gs)
+    _require_turn(gs, player_id)
+    ps = gs.player_states[player_id]
+    _require_active(ps)
+    _require_no_take_in_progress(gs)
+
+    if count < 1:
+        raise GameException("Must drink at least 1 spirit", status_code=400)
+
+    if store_card_index < 0 or store_card_index >= len(ps.cards):
+        raise GameException("Invalid store card index", status_code=400)
+
+    card_dict = ps.cards[store_card_index]
+    if card_dict.get("card_type") != "store":
+        raise GameException("Card at that index is not a store card", status_code=400)
+
+    stored = card_dict.get("stored_spirits", [])
+    if len(stored) < count:
+        raise GameException(
+            f"Store card only has {len(stored)} spirit(s); requested {count}",
+            status_code=400,
+        )
+
+    # Remove spirits from store card and add to bladder
+    drunk_ingredients: list[Ingredient] = []
+    spirit_type = card_dict.get("spirit_type", "")
+    spirit_ing = _spirit_ingredient(spirit_type)
+    for _ in range(count):
+        card_dict["stored_spirits"] = card_dict["stored_spirits"][:-1]
+        _drink_ingredient(gs, player_id, spirit_ing)
+        drunk_ingredients.append(spirit_ing)
+
+    # Apply drunk modifier for the batch
+    _apply_drunk_modifier(gs, player_id, drunk_ingredients)
+
+    payload = {
+        "store_card_index": store_card_index,
+        "spirit_type": spirit_type,
+        "count": count,
+        "new_drunk_level": ps.drunk_level,
+    }
+    return gs, payload
+
+
+def use_stored_spirit(
+    gs: GameState,
+    player_id: UUID,
+    store_card_index: int,
+    cup_index: int,
+) -> tuple[GameState, dict]:
+    """UseStoredSpirit — free action (does not end turn).
+
+    Moves one spirit from a store card into a cup for selling.
+    """
+    gs = _deep_copy_state(gs)
+    _require_turn(gs, player_id)
+    ps = gs.player_states[player_id]
+    _require_active(ps)
+    _require_no_take_in_progress(gs)
+
+    if store_card_index < 0 or store_card_index >= len(ps.cards):
+        raise GameException("Invalid store card index", status_code=400)
+
+    card_dict = ps.cards[store_card_index]
+    if card_dict.get("card_type") != "store":
+        raise GameException("Card at that index is not a store card", status_code=400)
+
+    stored = card_dict.get("stored_spirits", [])
+    if len(stored) < 1:
+        raise GameException("Store card has no spirits remaining", status_code=400)
+
+    if cup_index not in (0, 1):
+        raise GameException("cup_index must be 0 or 1", status_code=400)
+
+    cup = ps.cups[cup_index]
+    if cup.is_full:
+        raise GameException(
+            f"Cup {cup_index} is full (max {MAX_CUP_INGREDIENTS})",
+            status_code=400,
+        )
+
+    # Pop one spirit from store card and add to cup
+    spirit_name = card_dict["stored_spirits"].pop()
+    spirit_ing = _spirit_ingredient(spirit_name)
+    cup.ingredients.append(spirit_ing)
+
+    payload = {
+        "store_card_index": store_card_index,
+        "cup_index": cup_index,
+        "spirit_type": spirit_name,
+    }
+    return gs, payload
+
+
 def refresh_card_row(
     gs: GameState,
     player_id: UUID,

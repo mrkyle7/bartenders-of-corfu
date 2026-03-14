@@ -329,6 +329,23 @@
         </div>
     </div>
 
+    <!-- ===== USE STORED SPIRIT MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbUseStoredSpiritModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbUseStoredSpiritModalTitle"
+         tabindex="-1" onclick="if(event.target===this)closeUseStoredSpiritModal()">
+        <div class="gb-modal gb-modal--narrow">
+            <button class="gb-modal-close" onclick="closeUseStoredSpiritModal()" aria-label="Cancel">&#x2715;</button>
+            <div class="gb-modal-title" id="gbUseStoredSpiritModalTitle">Add to Cup</div>
+            <div class="gb-modal-step-label" id="gbUseStoredSpiritDesc"></div>
+            <div class="gb-modal-actions">
+                <button class="gb-modal-btn cancel" onclick="closeUseStoredSpiritModal()">Cancel</button>
+                <button class="gb-modal-btn confirm" onclick="confirmUseStoredSpirit(0)" aria-label="Add spirit to Cup 1">Cup 1</button>
+                <button class="gb-modal-btn confirm" onclick="confirmUseStoredSpirit(1)" aria-label="Add spirit to Cup 2">Cup 2</button>
+            </div>
+            <div id="gbUseStoredSpiritModalError" class="gb-error-bar gb-modal-error-mt"></div>
+        </div>
+    </div>
+
     <!-- ===== COCKTAIL MENU MODAL ===== -->
     <div class="gb-modal-overlay hidden" id="gbMenuModal"
          role="dialog" aria-modal="true" aria-labelledby="gbMenuModalTitle"

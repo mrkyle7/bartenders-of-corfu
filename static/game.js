@@ -430,13 +430,23 @@ function renderBoard(game, gs, isReplay) {
         // Refresh row button (needs drunk level >= 3; row 1 is karaoke row — never refreshable)
         const isMyTurn = S.me && gs.player_turn === S.me.id;
         const drunkLevel = myState ? (myState.drunk_level || 0) : 0;
-        if (!isReplay && isMyTurn && drunkLevel >= 3 && row.position !== 1) {
-            const refreshBtn = document.createElement('button');
-            refreshBtn.className = 'gb-refresh-row-btn';
-            refreshBtn.textContent = 'Refresh Row';
-            refreshBtn.setAttribute('aria-label', `Refresh card row ${row.position}`);
-            refreshBtn.onclick = () => doRefreshRow(row.position, refreshBtn);
-            rowLabelRow.appendChild(refreshBtn);
+        if (!isReplay && isMyTurn && row.position !== 1) {
+            if (drunkLevel >= 3) {
+                const refreshBtn = document.createElement('button');
+                refreshBtn.className = 'gb-refresh-row-btn';
+                refreshBtn.textContent = 'Refresh Row';
+                refreshBtn.setAttribute('aria-label', `Refresh card row ${row.position}`);
+                refreshBtn.onclick = () => doRefreshRow(row.position, refreshBtn);
+                rowLabelRow.appendChild(refreshBtn);
+            } else {
+                const hasStoredSpirits = (myState.cards || []).some(c => c.card_type === 'store' && (c.stored_spirits || []).length > 0);
+                if (hasStoredSpirits) {
+                    const hint = document.createElement('span');
+                    hint.className = 'gb-refresh-hint';
+                    hint.textContent = `Drunk ${drunkLevel}/3 — drink stored spirits to refresh`;
+                    rowLabelRow.appendChild(hint);
+                }
+            }
         }
 
         rowWrap.appendChild(rowLabelRow);
@@ -632,7 +642,7 @@ function renderMySheet(game, gs, myState, isReplay) {
         claimedTitle.classList.add('gb-section-title--mt');
         claimedTitle.textContent = 'Claimed Cards';
         claimedEl.appendChild(claimedTitle);
-        cards.forEach(c => {
+        cards.forEach((c, cardIndex) => {
             const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
             const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
             const div = document.createElement('div');
@@ -646,6 +656,28 @@ function renderMySheet(game, gs, myState, isReplay) {
                 stored.className = 'gb-card-stored';
                 stored.textContent = `Stored: ${c.stored_spirits.map(ingredientLabel).join(', ')}`;
                 div.appendChild(stored);
+
+                // Store card actions (free actions, available on player's turn)
+                if (isMyTurn && !isReplay && cardType === 'store') {
+                    const actions = document.createElement('div');
+                    actions.className = 'gb-store-card-actions';
+
+                    const drinkBtn = document.createElement('button');
+                    drinkBtn.className = 'gb-store-action-btn drink';
+                    drinkBtn.textContent = 'Drink';
+                    drinkBtn.setAttribute('aria-label', `Drink a stored ${ingredientLabel(c.spirit_type)} spirit`);
+                    drinkBtn.onclick = (e) => { e.stopPropagation(); doDrinkStoredSpirit(cardIndex, c); };
+                    actions.appendChild(drinkBtn);
+
+                    const useBtn = document.createElement('button');
+                    useBtn.className = 'gb-store-action-btn use';
+                    useBtn.textContent = 'Add to Cup';
+                    useBtn.setAttribute('aria-label', `Add a stored ${ingredientLabel(c.spirit_type)} spirit to a cup`);
+                    useBtn.onclick = (e) => { e.stopPropagation(); openUseStoredSpiritModal(cardIndex, c); };
+                    actions.appendChild(useBtn);
+
+                    div.appendChild(actions);
+                }
             }
             claimedEl.appendChild(div);
         });
@@ -1001,6 +1033,31 @@ function buildOtherSheet(pid, pState, gs) {
         specialRow.className = 'gb-specials-row';
         specials.forEach(s => specialRow.appendChild(makeIngredientBadge(s)));
         body.appendChild(specialRow);
+    }
+
+    // Claimed cards (read-only)
+    const cards = pState.cards || [];
+    if (cards.length > 0) {
+        const claimedTitle = document.createElement('div');
+        claimedTitle.className = 'gb-section-title gb-section-title--mt';
+        claimedTitle.textContent = 'Claimed Cards';
+        body.appendChild(claimedTitle);
+        cards.forEach(c => {
+            const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
+            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
+            const cardEl = document.createElement('div');
+            cardEl.className = `gb-claimed-card ${cardType}`;
+            const namePart = c.name || (c.id || '').slice(0, 8);
+            const subPart = c.spirit_type ? ` (${ingredientLabel(c.spirit_type)})` : c.mixer_type ? ` (${ingredientLabel(c.mixer_type)})` : '';
+            cardEl.textContent = `${typeLabel}: ${namePart}${subPart}`;
+            if (c.stored_spirits && c.stored_spirits.length > 0) {
+                const stored = document.createElement('div');
+                stored.className = 'gb-card-stored';
+                stored.textContent = `Stored: ${c.stored_spirits.map(ingredientLabel).join(', ')}`;
+                cardEl.appendChild(stored);
+            }
+            body.appendChild(cardEl);
+        });
     }
 
     div.appendChild(body);
@@ -1627,6 +1684,65 @@ async function doRefreshRow(rowPosition, btn) {
     }
 }
 
+async function doDrinkStoredSpirit(cardIndex, card) {
+    const spiritLabel = ingredientLabel(card.spirit_type);
+    const storedCount = (card.stored_spirits || []).length;
+    let count = 1;
+    if (storedCount > 1) {
+        const input = prompt(`How many ${spiritLabel} spirits to drink? (1-${storedCount})\nWarning: this will increase your drunk level!`, '1');
+        if (input === null) return;
+        count = parseInt(input, 10);
+        if (isNaN(count) || count < 1 || count > storedCount) {
+            showError(`Must drink between 1 and ${storedCount} spirits.`);
+            return;
+        }
+    }
+    clearError();
+    try {
+        const resp = await gameAction('drink-stored-spirit', { store_card_index: cardIndex, count });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.detail || d.error || 'Cannot drink stored spirits right now.');
+        } else {
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
+    }
+}
+
+function openUseStoredSpiritModal(cardIndex, card) {
+    S.useStoredSpiritCardIndex = cardIndex;
+    const spiritLabel = ingredientLabel(card.spirit_type);
+    document.getElementById('gbUseStoredSpiritDesc').textContent = `Add a ${spiritLabel} from your store card to a cup.`;
+    document.getElementById('gbUseStoredSpiritModalError').textContent = '';
+    openModal('gbUseStoredSpiritModal');
+}
+
+function closeUseStoredSpiritModal() {
+    closeModal('gbUseStoredSpiritModal');
+}
+
+async function confirmUseStoredSpirit(cupIndex) {
+    const cardIndex = S.useStoredSpiritCardIndex;
+    const errEl = document.getElementById('gbUseStoredSpiritModalError');
+    errEl.textContent = '';
+    try {
+        const resp = await gameAction('use-stored-spirit', { store_card_index: cardIndex, cup_index: cupIndex });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            errEl.textContent = d.detail || d.error || 'Cannot use stored spirit right now.';
+        } else {
+            closeUseStoredSpiritModal();
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') errEl.textContent = 'Network error. Please try again.';
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Take Ingredients modal
 // ─────────────────────────────────────────────────────────────
@@ -2216,6 +2332,7 @@ Object.assign(window, {
     closeSellModal, confirmSell,
     closeDrinkModal, confirmDrink,
     closeCupDoublerModal, confirmCupDoubler,
+    closeUseStoredSpiritModal, confirmUseStoredSpirit,
     showGameError: showError, clearGameError: clearError,
 });
 

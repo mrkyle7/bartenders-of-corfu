@@ -390,3 +390,79 @@ Feature: Game turn actions
     Then player 2 should be eliminated
     And the game should be over
     And player 1 should be the winner
+
+  # ── Drink Stored Spirit ──────────────────────────────────────────────────────
+
+  Scenario: Drink stored spirit increases drunk level and adds to bladder
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 3 stored spirits
+    And player 1 has a drunk level of 0
+    When player 1 drinks 2 stored spirits from card 0
+    Then player 1's drunk level should be 2
+    And player 1's bladder should contain 2 ingredients
+    And player 1's store card should have 1 stored spirit
+    And it should still be player 1's turn
+
+  Scenario: Drink stored spirit rejected when card has no spirits
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 0 stored spirits
+    When player 1 tries to drink 1 stored spirit from card 0
+    Then the action should be rejected with a 400 error
+
+  Scenario: Drink stored spirit rejected for non-store card
+    Given it is player 1's turn
+    And player 1 holds a COLA refresher card
+    When player 1 tries to drink 1 stored spirit from card 0
+    Then the action should be rejected with a 400 error
+
+  Scenario: Drink stored spirit rejected when not your turn
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 2 stored spirits
+    When player 2 tries to drink 1 stored spirit from card 0
+    Then the action should be rejected with a 409 error
+
+  # ── Use Stored Spirit ────────────────────────────────────────────────────────
+
+  Scenario: Use stored spirit moves spirit from store card to cup
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 2 stored spirits
+    And player 1 has an empty cup 0
+    When player 1 uses a stored spirit from card 0 into cup 0
+    Then player 1's cup 0 should contain 1 ingredients
+    And player 1's store card should have 1 stored spirit
+    And it should still be player 1's turn
+
+  Scenario: Use stored spirit rejected when cup is full
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 1 stored spirit
+    And player 1's cup 0 contains 5 VODKA
+    When player 1 tries to use a stored spirit from card 0 into cup 0
+    Then the action should be rejected with a 400 error
+
+  Scenario: Use stored spirit rejected when card has no spirits
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 0 stored spirits
+    When player 1 tries to use a stored spirit from card 0 into cup 0
+    Then the action should be rejected with a 400 error
+
+  # ── Integration: Drink stored to qualify for refresh row ─────────────────────
+
+  Scenario: Drink stored spirits to reach drunk level 3 then refresh row
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 3 stored spirits
+    And player 1 has a drunk level of 0
+    When player 1 drinks 3 stored spirits from card 0
+    Then player 1's drunk level should be 3
+    And it should still be player 1's turn
+    When player 1 refreshes card row 2
+    Then the action should succeed
+
+  # ── Integration: Use stored spirit then sell cup ─────────────────────────────
+
+  Scenario: Use stored spirit to add to cup then sell
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 1 stored spirit
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 uses a stored spirit from card 0 into cup 0
+    Then player 1's cup 0 should contain 3 ingredients
+    And it should still be player 1's turn
