@@ -49,15 +49,16 @@ async function load() {
         Notification.requestPermission();
     }
 
-    // Background polling: tell SW to poll when tab is hidden
+    // Background polling: tell SW to poll all games when tab is hidden
     document.addEventListener('visibilitychange', () => {
         if (!navigator.serviceWorker?.controller) return;
         if (document.visibilityState === 'hidden') {
+            const turns = {};
+            if (S.gameId && S.lastKnownTurn) turns[S.gameId] = S.lastKnownTurn;
             navigator.serviceWorker.controller.postMessage({
                 type: 'START_POLL',
-                gameId: S.gameId,
                 playerId: S.me?.id,
-                lastKnownTurn: S.lastKnownTurn,
+                knownTurns: turns,
             });
         } else {
             navigator.serviceWorker.controller.postMessage({ type: 'STOP_POLL' });
@@ -102,7 +103,7 @@ async function refreshGame(quiet = false) {
         // Keep SW in sync with current turn
         if (turnChanged && navigator.serviceWorker?.controller) {
             navigator.serviceWorker.controller.postMessage({
-                type: 'UPDATE_TURN', lastKnownTurn: newTurn
+                type: 'UPDATE_TURN', gameId: S.gameId, lastKnownTurn: newTurn
             });
         }
         renderAll(game);

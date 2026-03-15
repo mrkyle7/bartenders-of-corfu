@@ -394,4 +394,28 @@ async function init() {
     await setUserHeader();
     await listGames();
     setInterval(listGames, 30000);
+
+    // Register service worker for PWA notifications
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
+    // Background polling: tell SW to poll all games when tab is hidden
+    document.addEventListener('visibilitychange', () => {
+        if (!navigator.serviceWorker?.controller || !user) return;
+        if (document.visibilityState === 'hidden') {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'START_POLL',
+                playerId: user.id,
+                knownTurns: {},
+            });
+        } else {
+            navigator.serviceWorker.controller.postMessage({ type: 'STOP_POLL' });
+        }
+    });
 }
