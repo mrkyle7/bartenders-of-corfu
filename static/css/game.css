@@ -2483,9 +2483,9 @@
         gap: 5px;
     }
 
-    /* Bottom panel minimal — just the tab bar visible by default */
+    /* Bottom panel: enough room for tab bar + scrollable history */
     .gb-bottom-panel {
-        max-height: 54px;
+        max-height: 160px;
     }
 
     /* Row label compact */
