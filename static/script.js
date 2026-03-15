@@ -1,6 +1,7 @@
 let user;
 let listGamesInProgress = false;
 let initialLoadDone = false;
+let myTurnCount = 0;
 
 const PAGE_SIZE = 20;
 let myGamesPage = 1;
@@ -56,6 +57,19 @@ function clearGameListError() {
 
 const STATUS_LABEL = { NEW: 'Not Started', STARTED: 'In Progress', ENDED: 'Ended' };
 
+function getTurnUsername(game) {
+    if (game.status !== 'STARTED' || !game.game_state) return null;
+    const turnId = game.game_state.player_turn;
+    if (!turnId || !game.players) return null;
+    const idx = game.players.indexOf(turnId);
+    if (idx === -1 || !game.player_usernames) return null;
+    return game.player_usernames[idx];
+}
+
+function isMyTurn(game) {
+    return user && game.status === 'STARTED' && game.game_state && game.game_state.player_turn === user.id;
+}
+
 function buildGameItem(game) {
     const li = document.createElement('li');
     if (game.id) li.dataset.gameId = game.id;
@@ -83,6 +97,19 @@ function buildGameItem(game) {
     const playerCount = game.players ? game.players.length : 1;
     statusEl.textContent = `${STATUS_LABEL[game.status] ?? game.status} \u00b7 ${playerCount}/4 players`;
     info.appendChild(statusEl);
+
+    if (game.status === 'STARTED') {
+        const turnEl = document.createElement('div');
+        turnEl.className = 'game-turn';
+        if (isMyTurn(game)) {
+            turnEl.classList.add('my-turn');
+            turnEl.textContent = 'Your turn!';
+        } else {
+            const turnName = getTurnUsername(game);
+            if (turnName) turnEl.textContent = `${turnName}'s turn`;
+        }
+        if (turnEl.textContent) info.appendChild(turnEl);
+    }
 
     li.appendChild(info);
 
@@ -164,19 +191,26 @@ async function loadMyGames(page, append = false) {
     myGamesPage = page;
     myGamesTotal = data.total;
 
-    if (!append) list.innerHTML = '';
+    if (!append) {
+        list.innerHTML = '';
+        myTurnCount = 0;
+    }
     const existingMore = list.querySelector('.load-more-item');
     if (existingMore) existingMore.remove();
 
     if (data.games.length === 0 && !append) {
         list.appendChild(_emptyPlaceholder('You have no active games.'));
     } else {
-        data.games.forEach(g => list.appendChild(buildGameItem(g)));
+        data.games.forEach(g => {
+            if (isMyTurn(g)) myTurnCount++;
+            list.appendChild(buildGameItem(g));
+        });
     }
 
     if (page * PAGE_SIZE < myGamesTotal) {
         list.appendChild(_loadMoreItem(() => loadMyGames(page + 1, true)));
     }
+    updateNotificationBell();
 }
 
 async function loadJoinableGames(page, append = false) {
@@ -324,6 +358,19 @@ async function joinGame(gameId) {
         if (actionEl !== null) actionEl.innerHTML = originalHTML;
         const data = await response.json().catch(() => ({}));
         showGameListError(data.error || 'Failed to join game. Please try again.');
+    }
+}
+
+function updateNotificationBell() {
+    const bell = document.getElementById('notificationBell');
+    if (!bell) return;
+    const badge = bell.querySelector('.notif-badge');
+    if (myTurnCount > 0) {
+        bell.classList.remove('hidden');
+        badge.textContent = myTurnCount;
+        bell.setAttribute('aria-label', `${myTurnCount} game${myTurnCount === 1 ? '' : 's'} waiting for your turn`);
+    } else {
+        bell.classList.add('hidden');
     }
 }
 

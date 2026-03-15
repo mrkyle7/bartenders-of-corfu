@@ -369,3 +369,52 @@ input {
     color: var(--color-brown-medium);
     opacity: 0.7;
 }
+
+/* Turn indicator on game cards */
+.game-turn {
+    font-size: 0.8em;
+    color: var(--color-brown-light);
+    font-style: italic;
+}
+
+.game-turn.my-turn {
+    color: var(--color-green);
+    font-weight: bold;
+    font-style: normal;
+}
+
+/* Notification bell */
+.notif-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-brown-medium);
+    text-decoration: none;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.notif-bell:hover {
+    color: var(--color-gold-dark);
+    text-decoration: none;
+}
+
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    background: var(--color-red);
+    color: var(--color-white);
+    font-size: 0.65em;
+    font-weight: bold;
+    font-style: normal;
+    border-radius: var(--radius-pill);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+}
