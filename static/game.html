@@ -78,8 +78,20 @@
 
             <div id="gbBoardContent" class="hidden">
 
-                <!-- Card rows above bar -->
+                <!-- Card rows + deck side-by-side -->
+            <div class="gb-board-row">
                 <div class="gb-card-rows" id="gbCardRows" role="list" aria-label="Available cards"></div>
+                <div class="gb-deck-sidebar" id="gbDeckSidebar" aria-label="Card deck">
+                    <div class="gb-deck-visual" id="gbDeckVisual">
+                        <div class="gb-deck-stack">
+                            <div class="gb-deck-card gb-deck-card-3"></div>
+                            <div class="gb-deck-card gb-deck-card-2"></div>
+                            <div class="gb-deck-card gb-deck-card-1"></div>
+                        </div>
+                        <div class="gb-deck-count" id="gbDeckCount">0 cards</div>
+                    </div>
+                </div>
+            </div>
 
                 <!-- Bar: bag to the left of ingredients on same row -->
                 <div class="gb-bar-inline">
@@ -103,15 +115,24 @@
                 </div>
                 <div id="gbMySheetContent" class="hidden">
                     <div id="gbMyName"></div>
-                    <div class="gb-mat-body">
-                        <div class="gb-stats-row" id="gbMyStats" role="group" aria-label="My stats"></div>
-                        <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
-                        <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
-                        <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
-                        <div id="gbWeeTile"></div>
-                        <div id="gbUndoSection" class="gb-undo-section hidden" aria-label="Undo controls">
-                            <div class="gb-undo-title">Undo</div>
-                            <div id="gbUndoContent"></div>
+                    <div class="gb-mat-body gb-mat-body--restructured">
+                        <div class="gb-mat-left" id="gbMatLeft" aria-label="Drunk track">
+                            <!-- Vertical drunk track rendered by JS -->
+                        </div>
+                        <div class="gb-mat-right">
+                            <div class="gb-mat-top-row">
+                                <div class="gb-points-karaoke" id="gbPointsKaraoke" role="group" aria-label="Points and karaoke"></div>
+                            </div>
+                            <div class="gb-bladder-wee-row" id="gbBladderWeeRow" role="group" aria-label="Bladder and wee">
+                                <!-- Bladder slots + wee button rendered by JS -->
+                            </div>
+                            <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
+                            <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
+                            <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
+                            <div id="gbUndoSection" class="gb-undo-section hidden" aria-label="Undo controls">
+                                <div class="gb-undo-title">Undo</div>
+                                <div id="gbUndoContent"></div>
+                            </div>
                         </div>
                     </div>
                 </div>

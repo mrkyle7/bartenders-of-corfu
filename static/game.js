@@ -503,7 +503,11 @@ function renderBoard(game, gs, isReplay) {
     // Bag visual + count
     const bagContents = gs.bag_contents || [];
     renderBagVisual(bagContents.length, isMyTurn, myState, gs);
-    el('gbBagCount').textContent = `Deck: ${gs.deck_size ?? '?'} cards`;
+    el('gbBagCount').textContent = `Bag: ${bagContents.length}`;
+
+    // Deck sidebar count (face-down cards next to rows)
+    const deckCount = el('gbDeckCount');
+    if (deckCount) deckCount.textContent = `${gs.deck_size ?? '?'} cards`;
 
     // Card rows
     const rowsEl = el('gbCardRows');
@@ -599,7 +603,14 @@ function buildCardElement(card, bladder, canClaim, gs) {
 
     const costPill = document.createElement('span');
     costPill.className = `gb-card-cost-pill ${CARD_COST_TOKEN[cardType] || 'spirit'}`;
-    costPill.textContent = `${CARD_COST_COUNT[cardType] ?? '?'}×`;
+    // Show ingredient type required (e.g. "3× Rum" or "2× mixer")
+    const costCount = CARD_COST_COUNT[cardType] ?? '?';
+    const costToken = CARD_COST_TOKEN[cardType] || 'spirit';
+    let costTypeLabel = costToken === 'spirit' ? '🍾' : '🥤';
+    if (card.spirit_type) costTypeLabel = ingredientIcon(card.spirit_type) || '🍾';
+    else if (card.mixer_type) costTypeLabel = ingredientIcon(card.mixer_type) || '🥤';
+    costPill.textContent = `${costCount}×${costTypeLabel}`;
+    costPill.title = _cardCostDesc(card);
     header.appendChild(costPill);
 
     cardEl.appendChild(header);
@@ -710,8 +721,14 @@ function renderMySheet(game, gs, myState, isReplay) {
 
     nameEl.appendChild(strip);
 
-    // Stats
-    renderMyStats(myState, gs);
+    // Drunk track (vertical, left side) + must-take
+    renderDrunkTrackVertical(myState, gs);
+
+    // Points + Karaoke row
+    renderPointsKaraoke(myState);
+
+    // Bladder + Wee row
+    renderBladderWeeRow(myState, isMyTurn && !isReplay, game, gs);
 
     // Cups
     renderMyCups(myState, isMyTurn && !isReplay, game, gs);
@@ -730,6 +747,141 @@ function renderMySheet(game, gs, myState, isReplay) {
     }
 
     // Claimed cards — only show section if non-empty
+    renderClaimedCards(myState, isMyTurn && !isReplay, isReplay);
+}
+
+function renderDrunkTrackVertical(myState, gs) {
+    const container = el('gbMatLeft');
+    if (!container) return;
+    container.replaceChildren();
+
+    const drunkLevel = myState.drunk_level || 0;
+
+    const track = document.createElement('div');
+    track.className = 'gb-drunk-track-v';
+    track.setAttribute('aria-label', `Drunk level ${drunkLevel} of 5`);
+
+    // Title
+    const title = document.createElement('div');
+    title.className = 'gb-drunk-track-title';
+    title.textContent = 'DRUNK';
+    track.appendChild(title);
+
+    // Vertical pips (top = level 5, bottom = level 1)
+    for (let i = 4; i >= 0; i--) {
+        const pip = document.createElement('div');
+        const filled = i < drunkLevel;
+        pip.className = 'gb-drunk-pip-v' + (filled ? (drunkLevel >= 4 ? ' danger' : ' filled') : '');
+        const level = i + 1;
+        pip.setAttribute('aria-hidden', 'true');
+
+        // Fun labels
+        const labels = ['', '', '', '🥴', '🤢'];
+        if (labels[i]) {
+            const emoji = document.createElement('span');
+            emoji.className = 'gb-drunk-pip-emoji';
+            emoji.textContent = labels[i];
+            pip.appendChild(emoji);
+        }
+
+        const num = document.createElement('span');
+        num.className = 'gb-drunk-pip-num';
+        num.textContent = level;
+        pip.appendChild(num);
+
+        track.appendChild(pip);
+    }
+
+    // Level indicator
+    const levelLabel = document.createElement('div');
+    levelLabel.className = 'gb-drunk-level-label';
+    const drunkEmojis = ['🙂', '😊', '😄', '🥴', '😵', '🤮'];
+    levelLabel.textContent = drunkEmojis[Math.min(drunkLevel, 5)];
+    track.appendChild(levelLabel);
+
+    container.appendChild(track);
+
+    // Must Take — next to drunk track
+    const mustTake = document.createElement('div');
+    mustTake.className = 'gb-must-take-badge';
+    mustTake.setAttribute('aria-label', `Must take ${myState.take_count ?? 3} ingredients`);
+    const mtLabel = document.createElement('div');
+    mtLabel.className = 'gb-must-take-label';
+    mtLabel.textContent = 'MUST TAKE';
+    mustTake.appendChild(mtLabel);
+    const mtVal = document.createElement('div');
+    mtVal.className = 'gb-must-take-value';
+    mtVal.textContent = myState.take_count ?? 3;
+    mustTake.appendChild(mtVal);
+    container.appendChild(mustTake);
+}
+
+function renderPointsKaraoke(myState) {
+    const container = el('gbPointsKaraoke');
+    if (!container) return;
+    container.replaceChildren();
+
+    // Points
+    const pointsStat = document.createElement('div');
+    pointsStat.className = 'gb-points-stat';
+    const ptsLabel = document.createElement('span');
+    ptsLabel.className = 'gb-points-label';
+    ptsLabel.textContent = 'Points';
+    pointsStat.appendChild(ptsLabel);
+    const ptsVal = document.createElement('span');
+    ptsVal.className = 'gb-points-value';
+    ptsVal.textContent = `${myState.points || 0}/40`;
+    pointsStat.appendChild(ptsVal);
+    container.appendChild(pointsStat);
+
+    // Karaoke (next to points)
+    const karaokeStat = document.createElement('div');
+    karaokeStat.className = 'gb-karaoke-stat';
+    const kLabel = document.createElement('span');
+    kLabel.className = 'gb-karaoke-label';
+    kLabel.textContent = '🎤 Karaoke';
+    karaokeStat.appendChild(kLabel);
+    const kVal = document.createElement('span');
+    kVal.className = 'gb-karaoke-value';
+    kVal.textContent = `${myState.karaoke_cards_claimed ?? 0}/3`;
+    karaokeStat.appendChild(kVal);
+    container.appendChild(karaokeStat);
+}
+
+function renderBladderWeeRow(myState, isMyTurn, game, gs) {
+    const container = el('gbBladderWeeRow');
+    if (!container) return;
+    container.replaceChildren();
+
+    // Bladder slots
+    const bladder = myState.bladder || [];
+    const cap = myState.bladder_capacity || 8;
+    const toiletTokens = myState.toilet_tokens ?? 4;
+
+    const bladderWrap = document.createElement('div');
+    bladderWrap.className = 'gb-bladder-section';
+    const bLabel = document.createElement('strong');
+    bLabel.className = 'gb-stat-label';
+    bLabel.textContent = 'Bladder';
+    bladderWrap.appendChild(bLabel);
+    bladderWrap.appendChild(makeBladderSlots(bladder, cap, toiletTokens));
+    container.appendChild(bladderWrap);
+
+    // Wee button (next to bladder)
+    if (isMyTurn) {
+        const tile = document.createElement('div');
+        tile.className = 'gb-wee-tile';
+        tile.setAttribute('role', 'button');
+        tile.setAttribute('tabindex', '0');
+        tile.setAttribute('aria-label', 'Go for a wee — empties bladder, sobers up 1 level');
+        tile.append(h('span', { className: 'gb-wee-icon' }, '🚽'), h('span', { className: 'gb-wee-label' }, 'Wee'));
+        tile.onclick = () => doWee(tile);
+        tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
+        container.appendChild(tile);
+    }
+}
+
+function renderClaimedCards(myState, isMyTurn, isReplay) {
     const claimedEl = el('gbMyClaimedCards');
     claimedEl.replaceChildren();
     const cards = myState.cards || [];
@@ -744,14 +896,34 @@ function renderMySheet(game, gs, myState, isReplay) {
             const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
             const div = document.createElement('div');
             div.className = `gb-claimed-card ${cardType}`;
-            div.title = c.id || '';
-            const namePart = c.name || (c.id || '').slice(0, 8);
-            const subPart = c.spirit_type ? ` (${ingredientLabel(c.spirit_type)})` : c.mixer_type ? ` (${ingredientLabel(c.mixer_type)})` : '';
-            div.textContent = `${typeLabel}: ${namePart}${subPart}`;
+
+            // Card type icon + name (no ID)
+            const headerSpan = document.createElement('span');
+            headerSpan.className = 'gb-claimed-card-header';
+            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂' };
+            headerSpan.textContent = `${typeIcons[cardType] || ''} ${typeLabel}: ${c.name || typeLabel}`;
+            div.appendChild(headerSpan);
+
+            // Show required ingredient type as a token badge
+            if (c.spirit_type) {
+                div.appendChild(document.createTextNode(' '));
+                div.appendChild(makeIngredientBadge(c.spirit_type));
+            } else if (c.mixer_type) {
+                div.appendChild(document.createTextNode(' '));
+                div.appendChild(makeIngredientBadge(c.mixer_type));
+            }
+
+            // Store card: show stored ingredients as tokens
             if (c.stored_spirits && c.stored_spirits.length > 0) {
                 const stored = document.createElement('div');
                 stored.className = 'gb-card-stored';
-                stored.textContent = `Stored: ${c.stored_spirits.map(ingredientLabel).join(', ')}`;
+                const storedLabel = document.createElement('span');
+                storedLabel.className = 'gb-card-stored-label';
+                storedLabel.textContent = 'Stored: ';
+                stored.appendChild(storedLabel);
+                c.stored_spirits.forEach(s => {
+                    stored.appendChild(makeIngredientBadge(s));
+                });
                 div.appendChild(stored);
 
                 // Store card actions (free actions, available on player's turn)
@@ -779,43 +951,6 @@ function renderMySheet(game, gs, myState, isReplay) {
             claimedEl.appendChild(div);
         });
     }
-
-    // Actions
-    renderActionButtons(isMyTurn && !isReplay, myState, game, gs);
-}
-
-function renderMyStats(myState, gs) {
-    const statsEl = el('gbMyStats');
-    statsEl.replaceChildren();
-
-    // Drunk meter (pips only, no fraction label)
-    const drunkLevel = myState.drunk_level || 0;
-    const drunkStat = makeStat('Drunk', '');
-    const meterEl = document.createElement('div');
-    meterEl.className = 'gb-drunk-meter';
-    meterEl.setAttribute('aria-label', `Drunk level ${drunkLevel} of 5`);
-    for (let i = 0; i < 5; i++) {
-        const pip = document.createElement('span');
-        const filled = i < drunkLevel;
-        pip.className = 'gb-drunk-pip' + (filled ? (drunkLevel >= 4 ? ' danger' : ' filled') : '');
-        pip.setAttribute('aria-hidden', 'true');
-        meterEl.appendChild(pip);
-    }
-    drunkStat.querySelector('strong').after(meterEl);
-    statsEl.appendChild(drunkStat);
-
-    // Bladder — physical slots (filled ingredients + empty + sealed by toilet tokens)
-    const bladder = myState.bladder || [];
-    const cap = myState.bladder_capacity || 8;
-    const toiletTokens = myState.toilet_tokens ?? 4;
-    const bladderStat = makeStat('Bladder', '');
-    const slotsEl = makeBladderSlots(bladder, cap, toiletTokens);
-    bladderStat.querySelector('strong').after(slotsEl);
-    statsEl.appendChild(bladderStat);
-
-    // Take count + Karaoke — compact
-    statsEl.appendChild(makeStat('Must Take', myState.take_count ?? 3));
-    statsEl.appendChild(makeStat('Karaoke', `${myState.karaoke_cards_claimed ?? 0}/3`));
 }
 
 // Render a row of INITIAL_BLADDER_CAPACITY (8) physical bladder slots.
@@ -956,22 +1091,7 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 }
 
 function renderActionButtons(isMyTurn, myState, game, gs) {
-    // Render the wee tile in the dedicated container
-    const weeContainer = el('gbWeeTile');
-    if (!weeContainer) return;
-    weeContainer.replaceChildren();
-
-    if (isMyTurn) {
-        const tile = document.createElement('div');
-        tile.className = 'gb-wee-tile';
-        tile.setAttribute('role', 'button');
-        tile.setAttribute('tabindex', '0');
-        tile.setAttribute('aria-label', 'Go for a wee — empties bladder, sobers up 1 level');
-        tile.append(h('span', { className: 'gb-wee-icon' }, '🚽'), h('span', { className: 'gb-wee-label' }, 'Go for a Wee'));
-        tile.onclick = () => doWee(tile);
-        tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
-        weeContainer.appendChild(tile);
-    }
+    // Wee button is now rendered inline in renderBladderWeeRow
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1142,15 +1262,32 @@ function buildOtherSheet(pid, pState, gs) {
         cards.forEach(c => {
             const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
             const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
+            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂' };
             const cardEl = document.createElement('div');
             cardEl.className = `gb-claimed-card ${cardType}`;
-            const namePart = c.name || (c.id || '').slice(0, 8);
-            const subPart = c.spirit_type ? ` (${ingredientLabel(c.spirit_type)})` : c.mixer_type ? ` (${ingredientLabel(c.mixer_type)})` : '';
-            cardEl.textContent = `${typeLabel}: ${namePart}${subPart}`;
+
+            const headerSpan = document.createElement('span');
+            headerSpan.textContent = `${typeIcons[cardType] || ''} ${typeLabel}: ${c.name || typeLabel}`;
+            cardEl.appendChild(headerSpan);
+
+            if (c.spirit_type) {
+                cardEl.appendChild(document.createTextNode(' '));
+                cardEl.appendChild(makeIngredientBadge(c.spirit_type));
+            } else if (c.mixer_type) {
+                cardEl.appendChild(document.createTextNode(' '));
+                cardEl.appendChild(makeIngredientBadge(c.mixer_type));
+            }
+
             if (c.stored_spirits && c.stored_spirits.length > 0) {
                 const stored = document.createElement('div');
                 stored.className = 'gb-card-stored';
-                stored.textContent = `Stored: ${c.stored_spirits.map(ingredientLabel).join(', ')}`;
+                const storedLabel = document.createElement('span');
+                storedLabel.className = 'gb-card-stored-label';
+                storedLabel.textContent = 'Stored: ';
+                stored.appendChild(storedLabel);
+                c.stored_spirits.forEach(s => {
+                    stored.appendChild(makeIngredientBadge(s));
+                });
                 cardEl.appendChild(stored);
             }
             body.appendChild(cardEl);
