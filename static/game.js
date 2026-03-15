@@ -49,15 +49,16 @@ async function load() {
         Notification.requestPermission();
     }
 
-    // Background polling: tell SW to poll when tab is hidden
+    // Background polling: tell SW to poll all games when tab is hidden
     document.addEventListener('visibilitychange', () => {
         if (!navigator.serviceWorker?.controller) return;
         if (document.visibilityState === 'hidden') {
+            const turns = {};
+            if (S.gameId && S.lastKnownTurn) turns[S.gameId] = S.lastKnownTurn;
             navigator.serviceWorker.controller.postMessage({
                 type: 'START_POLL',
-                gameId: S.gameId,
                 playerId: S.me?.id,
-                lastKnownTurn: S.lastKnownTurn,
+                knownTurns: turns,
             });
         } else {
             navigator.serviceWorker.controller.postMessage({ type: 'STOP_POLL' });
@@ -66,6 +67,7 @@ async function load() {
 
     await refreshGame();
     await refreshHistory();
+    refreshNotificationBell();
 
     // Auto-enter replay if ?turn= is in the URL
     const turnParam = sp.get('turn');
@@ -96,11 +98,12 @@ async function refreshGame(quiet = false) {
         const isMyTurn = S.me && newTurn === S.me.id;
         const turnChanged = S.lastKnownTurn !== null && newTurn !== S.lastKnownTurn;
         if (isMyTurn && turnChanged) notifyMyTurn();
+        if (turnChanged) refreshNotificationBell();
         S.lastKnownTurn = newTurn;
         // Keep SW in sync with current turn
         if (turnChanged && navigator.serviceWorker?.controller) {
             navigator.serviceWorker.controller.postMessage({
-                type: 'UPDATE_TURN', lastKnownTurn: newTurn
+                type: 'UPDATE_TURN', gameId: S.gameId, lastKnownTurn: newTurn
             });
         }
         renderAll(game);
@@ -162,6 +165,28 @@ async function notifyMyTurn() {
             type: 'UPDATE_TURN', lastKnownTurn: S.lastKnownTurn
         });
     }
+}
+
+async function refreshNotificationBell() {
+    if (!S.me) return;
+    try {
+        const resp = await fetch(`/v1/games?player_id=${encodeURIComponent(S.me.id)}&page=1&page_size=100`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const count = data.games.filter(g =>
+            g.status === 'STARTED' && g.game_state && g.game_state.player_turn === S.me.id
+        ).length;
+        const bell = document.getElementById('gbNotificationBell');
+        if (!bell) return;
+        const badge = bell.querySelector('.notif-badge');
+        if (count > 0) {
+            bell.classList.remove('hidden');
+            badge.textContent = count;
+            bell.setAttribute('aria-label', `${count} game${count === 1 ? '' : 's'} waiting for your turn`);
+        } else {
+            bell.classList.add('hidden');
+        }
+    } catch { /* ignore */ }
 }
 
 function schedulePoll(game) {
