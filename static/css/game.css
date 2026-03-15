@@ -277,6 +277,15 @@
     text-align: center;
 }
 
+.gb-player-strip-karaoke {
+    font-size: 0.72em;
+    font-weight: bold;
+    background: rgba(107,33,168,0.35);
+    padding: 2px 6px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
 .gb-player-strip-turn-tag {
     font-size: 0.65em;
     background: rgba(255,255,255,0.25);
@@ -488,11 +497,11 @@
     border: 1px solid rgba(180,130,40,0.5);
     border-radius: 8px;
     padding: 0;
-    width: 84px;
-    min-width: 84px;
-    max-width: 84px;
-    height: 118px;
-    flex: 0 0 84px;
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+    height: 132px;
+    flex: 0 0 88px;
     cursor: default;
     display: flex;
     flex-direction: column;
@@ -1991,7 +2000,7 @@
 
 @media (max-width: 320px) {
     .gb-header-gameid { display: none; }
-    .gb-card { width: 58px; min-width: 58px; max-width: 58px; flex-basis: 58px; height: 82px; }
+    .gb-card { width: 64px; min-width: 64px; max-width: 64px; flex-basis: 64px; height: 96px; }
 }
 
 /* ============================================================
@@ -2277,43 +2286,36 @@
    ============================================================ */
 
 /* Header: name left, cost pill right */
+/* ── Card header: points (left) + cost words (right) ─────── */
 .gb-card-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 3px;
-    padding: 5px 5px 3px;
-    border-bottom: 1px solid rgba(0,0,0,0.07);
+    gap: 2px;
+    padding: 3px 5px 2px;
     flex-shrink: 0;
 }
 
-.gb-card-name {
-    font-size: 0.62em;
-    font-weight: bold;
-    color: #2a1606;
+.gb-card-pts {
+    font-size: 0.58em;
+    font-weight: 900;
+    color: #b45309;
     line-height: 1.2;
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
 }
 
-/* Cost pill: coloured token in top-right */
-.gb-card-cost-pill {
-    font-size: 0.62em;
+.gb-card-cost-words {
+    font-size: 0.52em;
     font-weight: bold;
     color: #fff;
     padding: 1px 4px;
-    border-radius: 8px;
+    border-radius: 6px;
+    line-height: 1.3;
+    white-space: nowrap;
     flex-shrink: 0;
-    line-height: 1.4;
-    align-self: flex-start;
 }
-.gb-card-cost-pill.spirit  { background: linear-gradient(135deg, #e8b420, #c49010); }
-.gb-card-cost-pill.mixer   { background: linear-gradient(135deg, #5a8fc0, #3a6a90); }
-.gb-card-cost-pill.special { background: linear-gradient(135deg, #9050f8, #6425cc); }
+.gb-card-cost-words.spirit  { background: linear-gradient(135deg, #e8b420, #c49010); }
+.gb-card-cost-words.mixer   { background: linear-gradient(135deg, #5a8fc0, #3a6a90); }
+.gb-card-cost-words.special { background: linear-gradient(135deg, #9050f8, #6425cc); }
 
 /* Art: centred SVG icon */
 .gb-card-art {
@@ -2321,29 +2323,44 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 2px;
+    padding: 2px 2px 0;
     min-height: 0;
 }
 
 .gb-card-art svg {
-    width: 34px;
-    height: 42px;
+    width: 30px;
+    height: 34px;
     display: block;
 }
 
-/* Description: small text at bottom */
-.gb-card-desc {
-    font-size: 0.58em;
-    color: #3a1c06;
-    padding: 3px 5px 4px;
+/* Title: card name centred below image */
+.gb-card-title {
+    font-size: 0.56em;
+    font-weight: bold;
+    color: #2a1606;
     text-align: center;
-    background: rgba(0,0,0,0.05);
-    border-top: 1px solid rgba(0,0,0,0.08);
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 0 4px 2px;
+    line-height: 1.2;
     flex-shrink: 0;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+/* Description: ability text at bottom with horizontal line */
+.gb-card-desc {
+    font-size: 0.48em;
+    color: #5a3a1a;
+    padding: 2px 4px 3px;
+    text-align: center;
+    border-top: 1px solid rgba(0,0,0,0.15);
+    line-height: 1.25;
+    flex-shrink: 0;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
 }
 
 /* Icon colours per card type */
@@ -2418,21 +2435,30 @@
     }
 
     .gb-card-art svg {
-        width: 26px;
-        height: 32px;
+        width: 22px;
+        height: 26px;
     }
 
     .gb-card-header {
-        padding: 4px 4px 2px;
+        padding: 2px 3px 1px;
     }
 
-    .gb-card-name {
-        font-size: 0.58em;
+    .gb-card-pts {
+        font-size: 0.5em;
+    }
+
+    .gb-card-cost-words {
+        font-size: 0.44em;
+    }
+
+    .gb-card-title {
+        font-size: 0.48em;
+        padding: 0 3px 1px;
     }
 
     .gb-card-desc {
-        font-size: 0.54em;
-        padding: 2px 4px 3px;
+        font-size: 0.42em;
+        padding: 2px 3px;
     }
 
     /* Compact bag on mobile */
@@ -2457,9 +2483,9 @@
         gap: 5px;
     }
 
-    /* Bottom panel minimal — just the tab bar visible by default */
+    /* Bottom panel: enough room for tab bar + scrollable history */
     .gb-bottom-panel {
-        max-height: 54px;
+        max-height: 160px;
     }
 
     /* Row label compact */

@@ -592,49 +592,52 @@ function buildCardElement(card, bladder, canClaim, gs) {
         cardEl.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doClaimCard(card, cardEl); } };
     }
 
-    // Header: name (left) + cost pill (right)
+    // Header row: points (left) + cost as words (right)
     const header = document.createElement('div');
     header.className = 'gb-card-header';
 
-    const nameEl = document.createElement('span');
-    nameEl.className = 'gb-card-name';
-    nameEl.textContent = card.name || typeLabel;
-    header.appendChild(nameEl);
+    const ptsEl = document.createElement('span');
+    ptsEl.className = 'gb-card-pts';
+    const cardPts = { karaoke: 5, store: 1, refresher: 1, cup_doubler: 2 }[cardType] ?? 0;
+    ptsEl.textContent = `${cardPts} pt${cardPts !== 1 ? 's' : ''}`;
+    header.appendChild(ptsEl);
 
-    const costPill = document.createElement('span');
-    costPill.className = `gb-card-cost-pill ${CARD_COST_TOKEN[cardType] || 'spirit'}`;
-    // Show ingredient type required (e.g. "3× Rum" or "2× mixer")
+    const costEl = document.createElement('span');
+    costEl.className = `gb-card-cost-words ${CARD_COST_TOKEN[cardType] || 'spirit'}`;
     const costCount = CARD_COST_COUNT[cardType] ?? '?';
-    const costToken = CARD_COST_TOKEN[cardType] || 'spirit';
-    let costTypeLabel = costToken === 'spirit' ? '🍾' : '🥤';
-    if (card.spirit_type) costTypeLabel = ingredientIcon(card.spirit_type) || '🍾';
-    else if (card.mixer_type) costTypeLabel = ingredientIcon(card.mixer_type) || '🥤';
-    costPill.textContent = `${costCount}×${costTypeLabel}`;
-    costPill.title = _cardCostDesc(card);
-    header.appendChild(costPill);
+    let costIngName = '';
+    if (card.spirit_type) costIngName = ingredientLabel(card.spirit_type);
+    else if (card.mixer_type) costIngName = ingredientLabel(card.mixer_type);
+    else costIngName = CARD_COST_TOKEN[cardType] === 'mixer' ? 'Mixer' : 'Spirit';
+    costEl.textContent = `${costCount} ${costIngName}`;
+    costEl.title = _cardCostDesc(card);
+    header.appendChild(costEl);
 
     cardEl.appendChild(header);
 
-    // Art: type icon
+    // Art: centred type icon
     const artEl = document.createElement('div');
     artEl.className = 'gb-card-art';
     const iconContent = _cloneCardIcon(cardType);
     if (iconContent) artEl.appendChild(iconContent);
     cardEl.appendChild(artEl);
 
-    // Description: ingredient type + effect
+    // Title: card name centred below image
+    const titleEl = document.createElement('div');
+    titleEl.className = 'gb-card-title';
+    titleEl.textContent = card.name || typeLabel;
+    cardEl.appendChild(titleEl);
+
+    // Description: ability text with horizontal line above
     const descEl = document.createElement('div');
     descEl.className = 'gb-card-desc';
-    const parts = [];
-    if (card.spirit_type) parts.push(ingredientLabel(card.spirit_type));
-    else if (card.mixer_type) parts.push(ingredientLabel(card.mixer_type));
-    if (cardType === 'karaoke') parts.push('+5pts');
-    else if (cardType === 'store') {
-        const stored = card.stored_spirits ? card.stored_spirits.length : 0;
-        parts.push(stored > 0 ? `stored:${stored}` : 'store');
-    } else if (cardType === 'refresher') parts.push('+1pt');
-    else if (cardType === 'cup_doubler') parts.push('2×cup');
-    descEl.textContent = parts.join(' · ');
+    const descTexts = {
+        karaoke: 'Counts toward karaoke victory',
+        store: 'Stores spirits for later use',
+        refresher: 'Mixer always sobers, even with spirits',
+        cup_doubler: 'Doubles non-cocktail cup points',
+    };
+    descEl.textContent = descTexts[cardType] || '';
     cardEl.appendChild(descEl);
 
     return cardEl;
@@ -714,6 +717,12 @@ function renderMySheet(game, gs, myState, isReplay) {
         strip.appendChild(tag);
     }
 
+    const karaokeTag = document.createElement('span');
+    karaokeTag.className = 'gb-player-strip-karaoke';
+    karaokeTag.textContent = `🎤 ${myState.karaoke_cards_claimed ?? 0}/3`;
+    karaokeTag.title = 'Karaoke cards claimed';
+    strip.appendChild(karaokeTag);
+
     const score = document.createElement('span');
     score.className = 'gb-player-strip-score';
     score.textContent = `${myState.points || 0} / 40 pts`;
@@ -723,9 +732,6 @@ function renderMySheet(game, gs, myState, isReplay) {
 
     // Drunk track (vertical, left side) + must-take
     renderDrunkTrackVertical(myState, gs);
-
-    // Points + Karaoke row
-    renderPointsKaraoke(myState);
 
     // Bladder + Wee row
     renderBladderWeeRow(myState, isMyTurn && !isReplay, game, gs);
@@ -816,37 +822,7 @@ function renderDrunkTrackVertical(myState, gs) {
     container.appendChild(mustTake);
 }
 
-function renderPointsKaraoke(myState) {
-    const container = el('gbPointsKaraoke');
-    if (!container) return;
-    container.replaceChildren();
-
-    // Points
-    const pointsStat = document.createElement('div');
-    pointsStat.className = 'gb-points-stat';
-    const ptsLabel = document.createElement('span');
-    ptsLabel.className = 'gb-points-label';
-    ptsLabel.textContent = 'Points';
-    pointsStat.appendChild(ptsLabel);
-    const ptsVal = document.createElement('span');
-    ptsVal.className = 'gb-points-value';
-    ptsVal.textContent = `${myState.points || 0}/40`;
-    pointsStat.appendChild(ptsVal);
-    container.appendChild(pointsStat);
-
-    // Karaoke (next to points)
-    const karaokeStat = document.createElement('div');
-    karaokeStat.className = 'gb-karaoke-stat';
-    const kLabel = document.createElement('span');
-    kLabel.className = 'gb-karaoke-label';
-    kLabel.textContent = '🎤 Karaoke';
-    karaokeStat.appendChild(kLabel);
-    const kVal = document.createElement('span');
-    kVal.className = 'gb-karaoke-value';
-    kVal.textContent = `${myState.karaoke_cards_claimed ?? 0}/3`;
-    karaokeStat.appendChild(kVal);
-    container.appendChild(karaokeStat);
-}
+// renderPointsKaraoke removed — points shown in strip, karaoke moved to strip
 
 function renderBladderWeeRow(myState, isMyTurn, game, gs) {
     const container = el('gbBladderWeeRow');
@@ -1136,6 +1112,14 @@ function buildOtherSheet(pid, pState, gs) {
         strip.appendChild(tag);
     }
 
+    if (pState) {
+        const karaokeTag = document.createElement('span');
+        karaokeTag.className = 'gb-player-strip-karaoke';
+        karaokeTag.textContent = `🎤 ${pState.karaoke_cards_claimed ?? 0}/3`;
+        karaokeTag.title = 'Karaoke cards claimed';
+        strip.appendChild(karaokeTag);
+    }
+
     const scoreEl = document.createElement('span');
     scoreEl.className = 'gb-player-strip-score';
     scoreEl.textContent = `${pState ? (pState.points || 0) : '?'} / 40 pts`;
@@ -1176,7 +1160,6 @@ function buildOtherSheet(pid, pState, gs) {
     statsRow.appendChild(drunkWrap);
 
     [
-        `Karaoke: ${pState.karaoke_cards_claimed||0}/3`,
         `Cards: ${(pState.cards||[]).length}`,
     ].forEach(t => {
         const s = document.createElement('span');
