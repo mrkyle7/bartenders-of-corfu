@@ -2713,3 +2713,358 @@
     font-size: 0.8em;
     color: var(--color-brown-light);
 }
+
+/* ============================================================
+   RESTRUCTURED PLAYER MAT — drunk track left, new layout
+   ============================================================ */
+
+.gb-mat-body--restructured {
+    display: flex;
+    gap: 10px;
+    padding: 6px 10px 10px;
+}
+
+.gb-mat-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.gb-mat-right {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Vertical drunk track ──────────────────────────────────── */
+.gb-drunk-track-v {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(180deg, #3d1008 0%, #5a1a0c 30%, #7a3010 60%, #a0682a 100%);
+    border: 2px solid rgba(212,160,23,0.5);
+    border-radius: 12px;
+    padding: 8px 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+    min-width: 44px;
+}
+
+.gb-drunk-track-title {
+    font-size: 0.58em;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--color-gold-light);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.gb-drunk-pip-v {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid rgba(212,160,23,0.5);
+    background: rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.gb-drunk-pip-v.filled {
+    background: linear-gradient(135deg, #f5d020, #f5ab20);
+    border-color: #e8b420;
+    box-shadow: 0 0 8px rgba(245,210,32,0.5), inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+.gb-drunk-pip-v.danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    border-color: #b91c1c;
+    box-shadow: 0 0 10px rgba(239,68,68,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+    animation: drunk-danger-pulse 1s ease-in-out infinite;
+}
+
+@keyframes drunk-danger-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(239,68,68,0.4); }
+    50%       { box-shadow: 0 0 16px rgba(239,68,68,0.8); }
+}
+
+.gb-drunk-pip-num {
+    font-size: 0.65em;
+    font-weight: bold;
+    color: rgba(255,255,255,0.5);
+}
+
+.gb-drunk-pip-v.filled .gb-drunk-pip-num,
+.gb-drunk-pip-v.danger .gb-drunk-pip-num {
+    color: rgba(255,255,255,0.9);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.gb-drunk-pip-emoji {
+    position: absolute;
+    top: -2px;
+    right: -6px;
+    font-size: 0.7em;
+    pointer-events: none;
+}
+
+.gb-drunk-level-label {
+    font-size: 1.3em;
+    margin-top: 2px;
+}
+
+/* ── Must Take badge (next to drunk track) ─────────────────── */
+.gb-must-take-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(135deg, #4a2c0e, #6b3a10);
+    border: 1.5px solid rgba(212,160,23,0.4);
+    border-radius: 8px;
+    padding: 4px 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.gb-must-take-label {
+    font-size: 0.5em;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-gold-muted);
+}
+
+.gb-must-take-value {
+    font-size: 1.2em;
+    font-weight: 900;
+    color: var(--color-gold-light);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* ── Points + Karaoke row ──────────────────────────────────── */
+.gb-points-karaoke {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.gb-points-stat,
+.gb-karaoke-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(212,160,23,0.12);
+    border: 1px solid rgba(212,160,23,0.35);
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+
+.gb-points-label,
+.gb-karaoke-label {
+    font-size: 0.72em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-brown-light);
+}
+
+.gb-points-value {
+    font-size: 1em;
+    font-weight: 900;
+    color: var(--color-brown-dark);
+}
+
+.gb-karaoke-value {
+    font-size: 1em;
+    font-weight: 900;
+    color: #6b21a8;
+}
+
+/* ── Bladder + Wee row ─────────────────────────────────────── */
+.gb-bladder-wee-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.gb-bladder-section {
+    flex: 1;
+    min-width: 0;
+}
+
+.gb-bladder-wee-row .gb-wee-tile {
+    flex-shrink: 0;
+    margin-top: 14px;  /* align with bladder slots */
+}
+
+/* ============================================================
+   DECK SIDEBAR — face-down card stack next to card rows
+   ============================================================ */
+
+.gb-board-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.gb-board-row .gb-card-rows {
+    flex: 1;
+    min-width: 0;
+}
+
+.gb-deck-sidebar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.gb-deck-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.gb-deck-stack {
+    position: relative;
+    width: 52px;
+    height: 72px;
+}
+
+.gb-deck-card {
+    position: absolute;
+    width: 48px;
+    height: 68px;
+    border-radius: 6px;
+    background:
+        repeating-linear-gradient(
+            45deg,
+            rgba(212,160,23,0.15) 0px,
+            rgba(212,160,23,0.15) 2px,
+            transparent 2px,
+            transparent 8px
+        ),
+        linear-gradient(160deg, #3d2410, #2c1a0e);
+    border: 1.5px solid rgba(212,160,23,0.5);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+.gb-deck-card::after {
+    content: '🃏';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.2em;
+    opacity: 0.6;
+}
+
+.gb-deck-card-1 {
+    top: 0;
+    left: 2px;
+}
+
+.gb-deck-card-2 {
+    top: -2px;
+    left: 0;
+}
+
+.gb-deck-card-3 {
+    top: -4px;
+    left: 3px;
+}
+
+.gb-deck-count {
+    font-size: 0.68em;
+    font-weight: bold;
+    color: var(--color-gold-light);
+    text-align: center;
+    white-space: nowrap;
+    margin-top: 2px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* ── Claimed card stored tokens ────────────────────────────── */
+.gb-card-stored {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    margin-top: 4px;
+}
+
+.gb-card-stored-label {
+    font-size: 0.85em;
+    color: var(--color-brown-light);
+    font-weight: bold;
+}
+
+.gb-card-stored .gb-ingredient {
+    font-size: 0.78em;
+}
+
+.gb-claimed-card-header {
+    font-weight: bold;
+}
+
+.gb-claimed-card .gb-ingredient {
+    font-size: 0.78em;
+    vertical-align: middle;
+}
+
+/* ── Mobile adjustments for restructured layout ────────────── */
+@media (max-width: 480px) {
+    .gb-mat-body--restructured {
+        gap: 6px;
+    }
+
+    .gb-drunk-track-v {
+        padding: 6px 4px;
+        min-width: 36px;
+    }
+
+    .gb-drunk-pip-v {
+        width: 26px;
+        height: 26px;
+    }
+
+    .gb-drunk-pip-num {
+        font-size: 0.55em;
+    }
+
+    .gb-drunk-level-label {
+        font-size: 1em;
+    }
+
+    .gb-board-row {
+        gap: 6px;
+    }
+
+    .gb-deck-stack {
+        width: 40px;
+        height: 56px;
+    }
+
+    .gb-deck-card {
+        width: 36px;
+        height: 52px;
+    }
+
+    .gb-deck-card::after {
+        font-size: 0.9em;
+    }
+
+    .gb-must-take-badge {
+        padding: 3px 6px;
+    }
+
+    .gb-must-take-value {
+        font-size: 1em;
+    }
+}
