@@ -126,6 +126,19 @@
                             <div class="gb-bladder-wee-row" id="gbBladderWeeRow" role="group" aria-label="Bladder and wee">
                                 <!-- Bladder slots + wee button rendered by JS -->
                             </div>
+                            <!-- Staging area for ingredient assignment (inline, replaces Take modal) -->
+                            <div class="gb-staging-area hidden" id="gbStagingArea" role="region" aria-label="Assign ingredients">
+                                <div class="gb-staging-header">
+                                    <span class="gb-staging-title">Assign Ingredients</span>
+                                    <span class="gb-staging-count" id="gbStagingCount">0 / 0</span>
+                                </div>
+                                <div class="gb-staging-items" id="gbStagingItems"></div>
+                                <div class="gb-staging-actions">
+                                    <button class="gb-staging-btn cancel" id="gbStagingCancel">Cancel</button>
+                                    <button class="gb-staging-btn confirm" id="gbStagingSubmit">Submit</button>
+                                </div>
+                                <div id="gbStagingError" class="gb-error-bar gb-modal-error-mt"></div>
+                            </div>
                             <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
                             <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
                             <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
@@ -141,6 +154,25 @@
             <!-- Other players -->
             <div id="gbOthers" class="gb-other-mats" aria-label="Other players"></div>
 
+        </div>
+
+        <!-- ===== ACTION BAR (quick-nav, shows available actions) ===== -->
+        <div class="gb-action-bar hidden" id="gbActionBar" role="navigation" aria-label="Available actions">
+            <button class="gb-action-bar-btn" id="gbActionTake" data-action="take" aria-label="Take ingredients from bar">
+                <span class="gb-action-bar-icon">🍸</span><span class="gb-action-bar-label">Take</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionSell" data-action="sell" aria-label="Sell a cup">
+                <span class="gb-action-bar-icon">💰</span><span class="gb-action-bar-label">Sell</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionDrink" data-action="drink" aria-label="Drink a cup">
+                <span class="gb-action-bar-icon">🍺</span><span class="gb-action-bar-label">Drink</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionWee" data-action="wee" aria-label="Go for a wee">
+                <span class="gb-action-bar-icon">🚽</span><span class="gb-action-bar-label">Wee</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionClaim" data-action="claim" aria-label="Claim a card">
+                <span class="gb-action-bar-icon">🃏</span><span class="gb-action-bar-label">Claim</span>
+            </button>
         </div>
 
         <!-- ===== BOTTOM PANEL (history / replay / undo) ===== -->
@@ -194,140 +226,7 @@
         </div><!-- /.gb-scroll-area -->
     </div><!-- /.gb-page -->
 
-    <!-- ===== TAKE INGREDIENTS MODAL ===== -->
-    <div class="gb-modal-overlay hidden" id="gbTakeModal"
-         role="dialog" aria-modal="true" aria-labelledby="gbTakeModalTitle"
-         tabindex="-1">
-        <div class="gb-modal">
-            <button class="gb-modal-close" onclick="closeTakeModal()"
-                    aria-label="Close take ingredients dialog">&#x2715;</button>
-
-            <!-- Step dots -->
-            <div class="gb-step-dots" id="gbTakeStepDots" aria-hidden="true">
-                <div class="gb-step-dot active" id="gbTakeDot0"></div>
-                <div class="gb-step-dot" id="gbTakeDot1"></div>
-            </div>
-
-            <div class="gb-modal-title" id="gbTakeModalTitle">Take Ingredients</div>
-            <div class="gb-modal-step-label" id="gbTakeStepLabel"></div>
-
-            <!-- Cup reference — always visible -->
-            <div id="gbTakeModalCups" class="gb-take-cup-ref"></div>
-
-            <!-- STEP 0: select ingredients -->
-            <div id="gbTakeStep0">
-                <div class="gb-modal-section">
-                    <div class="gb-modal-section-title">From Open Display</div>
-                    <div class="gb-pick-grid" id="gbPickDisplay" role="group"
-                         aria-label="Select ingredients from open display"></div>
-                </div>
-                <div class="gb-modal-section">
-                    <div class="gb-modal-section-title">
-                        From Bag
-                        <span id="gbBagPickInfo" class="gb-text-info"></span>
-                    </div>
-                    <div class="gb-bag-draw-row">
-                        <label class="gb-bag-draw-label">
-                            Draw
-                            <input type="number" id="gbBagDrawCount" min="1" value="1"
-                                   class="gb-input-number-sm"
-                                   aria-label="Number of ingredients to draw from bag">
-                            from bag
-                        </label>
-                        <button class="gb-modal-btn" id="gbBtnDrawBag"
-                                aria-label="Draw ingredients from bag">
-                            Draw from Bag
-                        </button>
-                        <span id="gbBagDrawStatus" class="gb-text-muted-sm"></span>
-                    </div>
-                    <!-- Drawn ingredients appear here (locked — cannot be removed) -->
-                    <div class="gb-pick-grid gb-mt-xs" id="gbPickBag"
-                         role="group" aria-label="Drawn bag ingredients (locked)"></div>
-                </div>
-                <div class="gb-take-count-text">
-                    Selected: <strong id="gbTakeCount">0</strong> / <strong id="gbTakeLimit">0</strong>
-                </div>
-            </div>
-
-            <!-- STEP 1: assign each selected ingredient -->
-            <div id="gbTakeStep1" class="hidden">
-                <table class="gb-assign-table" aria-label="Assign ingredients to cups or drink">
-                    <thead>
-                        <tr>
-                            <th scope="col">Ingredient</th>
-                            <th scope="col">Assign to</th>
-                        </tr>
-                    </thead>
-                    <tbody id="gbAssignTableBody"></tbody>
-                </table>
-            </div>
-
-            <div class="gb-modal-actions">
-                <button class="gb-modal-btn cancel" onclick="closeTakeModal()">Cancel</button>
-                <button class="gb-modal-btn" id="gbTakeNextBtn" onclick="takeModalNext()">
-                    Next &rarr;
-                </button>
-            </div>
-            <div id="gbTakeModalError" class="gb-error-bar gb-modal-error-mt"></div>
-        </div>
-    </div>
-
-    <!-- ===== SELL CUP MODAL ===== -->
-    <div class="gb-modal-overlay hidden" id="gbSellModal"
-         role="dialog" aria-modal="true" aria-labelledby="gbSellModalTitle"
-         tabindex="-1">
-        <div class="gb-modal">
-            <button class="gb-modal-close" onclick="closeSellModal()"
-                    aria-label="Close sell cup dialog">&#x2715;</button>
-            <div class="gb-modal-title" id="gbSellModalTitle">Sell Cup</div>
-            <div class="gb-modal-step-label" id="gbSellModalDesc"></div>
-
-            <div class="gb-modal-section">
-                <div class="gb-modal-section-title">Cup Contents</div>
-                <div id="gbSellCupContents" class="gb-pick-grid"></div>
-            </div>
-
-            <div class="gb-modal-section" id="gbSellSpecialsSection">
-                <div class="gb-modal-section-title">Declare Special Ingredients</div>
-                <div class="gb-sell-specials-info">
-                    Select specials from your mat to declare for this cocktail:
-                </div>
-                <div id="gbSellSpecialsPicker" class="gb-pick-grid"
-                     role="group" aria-label="Select specials to declare"></div>
-            </div>
-
-            <div class="gb-modal-actions">
-                <button class="gb-modal-btn cancel" onclick="closeSellModal()">Cancel</button>
-                <button class="gb-modal-btn confirm" id="gbSellConfirmBtn"
-                        onclick="confirmSell()">
-                    Sell Cup
-                </button>
-            </div>
-            <div id="gbSellModalError" class="gb-error-bar gb-modal-error-mt"></div>
-        </div>
-    </div>
-
-    <!-- ===== DRINK CUP CONFIRM MODAL ===== -->
-    <div class="gb-modal-overlay hidden" id="gbDrinkModal"
-         role="dialog" aria-modal="true" aria-labelledby="gbDrinkModalTitle"
-         tabindex="-1">
-        <div class="gb-modal gb-modal--narrow">
-            <button class="gb-modal-close" onclick="closeDrinkModal()"
-                    aria-label="Close drink cup dialog">&#x2715;</button>
-            <div class="gb-modal-title" id="gbDrinkModalTitle">Drink Cup</div>
-            <div id="gbDrinkModalDesc" class="gb-drink-desc"></div>
-            <div class="gb-modal-actions">
-                <button class="gb-modal-btn cancel" onclick="closeDrinkModal()">Cancel</button>
-                <button class="gb-modal-btn danger" id="gbDrinkConfirmBtn"
-                        onclick="confirmDrink()">
-                    Drink!
-                </button>
-            </div>
-            <div id="gbDrinkModalError" class="gb-error-bar gb-modal-error-mt"></div>
-        </div>
-    </div>
-
-    <!-- ===== CUP DOUBLER MODAL ===== -->
+    <!-- ===== CUP DOUBLER MODAL (kept — needs cup + spirit selection) ===== -->
     <div class="gb-modal-overlay hidden" id="gbCupDoublerModal"
          role="dialog" aria-modal="true" aria-labelledby="gbCupDoublerModalTitle"
          tabindex="-1" onclick="if(event.target===this)closeCupDoublerModal()">
@@ -357,24 +256,7 @@
         </div>
     </div>
 
-    <!-- ===== USE STORED SPIRIT MODAL ===== -->
-    <div class="gb-modal-overlay hidden" id="gbUseStoredSpiritModal"
-         role="dialog" aria-modal="true" aria-labelledby="gbUseStoredSpiritModalTitle"
-         tabindex="-1" onclick="if(event.target===this)closeUseStoredSpiritModal()">
-        <div class="gb-modal gb-modal--narrow">
-            <button class="gb-modal-close" onclick="closeUseStoredSpiritModal()" aria-label="Cancel">&#x2715;</button>
-            <div class="gb-modal-title" id="gbUseStoredSpiritModalTitle">Add to Cup</div>
-            <div class="gb-modal-step-label" id="gbUseStoredSpiritDesc"></div>
-            <div class="gb-modal-actions">
-                <button class="gb-modal-btn cancel" onclick="closeUseStoredSpiritModal()">Cancel</button>
-                <button class="gb-modal-btn confirm" onclick="confirmUseStoredSpirit(0)" aria-label="Add spirit to Cup 1">Cup 1</button>
-                <button class="gb-modal-btn confirm" onclick="confirmUseStoredSpirit(1)" aria-label="Add spirit to Cup 2">Cup 2</button>
-            </div>
-            <div id="gbUseStoredSpiritModalError" class="gb-error-bar gb-modal-error-mt"></div>
-        </div>
-    </div>
-
-    <!-- ===== COCKTAIL MENU MODAL ===== -->
+    <!-- ===== COCKTAIL MENU MODAL (JS-rendered, grouped by specials) ===== -->
     <div class="gb-modal-overlay hidden" id="gbMenuModal"
          role="dialog" aria-modal="true" aria-labelledby="gbMenuModalTitle"
          tabindex="-1" onclick="if(event.target===this)closeMenu()">
@@ -382,145 +264,8 @@
             <button class="gb-modal-close" onclick="closeMenu()" aria-label="Close cocktail menu">&#x2715;</button>
             <div class="gb-modal-title" id="gbMenuModalTitle">Cocktail Menu &amp; Scoring</div>
             <div class="gb-modal-step-label">First match wins &mdash; reach <strong>40 pts</strong> to win the game.</div>
-
-            <!-- Cocktails section -->
-            <div class="gb-modal-section">
-                <div class="gb-modal-section-title">Cocktails</div>
-                <table class="gb-menu-table" aria-label="Cocktail recipes and points">
-                    <thead>
-                        <tr>
-                            <th scope="col">Drink</th>
-                            <th scope="col">Spirits</th>
-                            <th scope="col">Mixers</th>
-                            <th scope="col">Specials</th>
-                            <th scope="col">Pts</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr class="gb-menu-row gb-menu-highlight">
-                            <td class="gb-menu-name" data-label="Drink">Long Island Iced Tea</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">1×Gin</span> <span class="gb-ingredient spirit">1×Vodka</span> <span class="gb-ingredient spirit">1×Tequila</span> <span class="gb-ingredient spirit">1×Rum</span></td>
-                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Cola</span></td>
-                            <td data-label="Specials"><span class="gb-ingredient special">sugar</span> <span class="gb-ingredient special">lemon</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">15</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Mojito</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">2×Rum</span></td>
-                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Soda Water</span></td>
-                            <td data-label="Specials"><span class="gb-ingredient special">sugar</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Old Fashioned</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">3×Whiskey</span></td>
-                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
-                            <td data-label="Specials"><span class="gb-ingredient special">bitters</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Margarita</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">2×Tequila</span></td>
-                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
-                            <td data-label="Specials"><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Cosmopolitan</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">1×Vodka</span></td>
-                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Cranberry</span></td>
-                            <td data-label="Specials"><span class="gb-ingredient special">cointreau</span> <span class="gb-ingredient special">lemon</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Gin Martini</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">3×Gin</span></td>
-                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
-                            <td data-label="Specials"><span class="gb-ingredient special">vermouth</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Vodka Martini</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">3×Vodka</span></td>
-                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
-                            <td data-label="Specials"><span class="gb-ingredient special">vermouth</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Tom Collins</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">1×Gin</span></td>
-                            <td data-label="Mixers"><span class="gb-ingredient mixer">1×Soda Water</span></td>
-                            <td data-label="Specials"><span class="gb-ingredient special">lemon</span> <span class="gb-ingredient special">sugar</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                        <tr class="gb-menu-row">
-                            <td class="gb-menu-name" data-label="Drink">Manhattan</td>
-                            <td data-label="Spirits"><span class="gb-ingredient spirit">2×Whiskey</span></td>
-                            <td class="gb-menu-none" data-label="Mixers">&mdash;</td>
-                            <td data-label="Specials"><span class="gb-ingredient special">vermouth</span> <span class="gb-ingredient special">bitters</span></td>
-                            <td class="gb-menu-pts" data-label="Pts">10</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Simple drinks section -->
-            <div class="gb-modal-section">
-                <div class="gb-modal-section-title">Simple Drinks</div>
-                <div class="gb-menu-simple-list">
-                    <div class="gb-menu-simple-row">
-                        <span class="gb-menu-simple-name">Tequila Slammer</span>
-                        <span class="gb-menu-simple-desc">Exactly <span class="gb-ingredient spirit">2×Tequila</span>, no mixers, no specials</span>
-                        <span class="gb-menu-pts">3</span>
-                    </div>
-                    <div class="gb-menu-simple-row">
-                        <span class="gb-menu-simple-name">Double Spirit</span>
-                        <span class="gb-menu-simple-desc">2 spirits (same type) + &ge;1 valid mixer</span>
-                        <span class="gb-menu-pts">3</span>
-                    </div>
-                    <div class="gb-menu-simple-row">
-                        <span class="gb-menu-simple-name">Single Spirit</span>
-                        <span class="gb-menu-simple-desc">1 spirit + &ge;1 valid mixer</span>
-                        <span class="gb-menu-pts">1</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Valid pairings section -->
-            <div class="gb-modal-section">
-                <div class="gb-modal-section-title">Valid Spirit &rarr; Mixer Pairings</div>
-                <div class="gb-menu-pairings">
-                    <div class="gb-menu-pairing-row">
-                        <span class="gb-ingredient spirit gb-menu-spirit">Vodka</span>
-                        <span class="gb-menu-arrow">&rarr;</span>
-                        <span class="gb-ingredient mixer">Cola</span>
-                        <span class="gb-ingredient mixer">Soda Water</span>
-                        <span class="gb-ingredient mixer">Tonic Water</span>
-                        <span class="gb-ingredient mixer">Cranberry</span>
-                    </div>
-                    <div class="gb-menu-pairing-row">
-                        <span class="gb-ingredient spirit gb-menu-spirit">Rum</span>
-                        <span class="gb-menu-arrow">&rarr;</span>
-                        <span class="gb-ingredient mixer">Cola</span>
-                    </div>
-                    <div class="gb-menu-pairing-row">
-                        <span class="gb-ingredient spirit gb-menu-spirit">Whiskey</span>
-                        <span class="gb-menu-arrow">&rarr;</span>
-                        <span class="gb-ingredient mixer">Cola</span>
-                        <span class="gb-ingredient mixer">Soda Water</span>
-                    </div>
-                    <div class="gb-menu-pairing-row">
-                        <span class="gb-ingredient spirit gb-menu-spirit">Gin</span>
-                        <span class="gb-menu-arrow">&rarr;</span>
-                        <span class="gb-ingredient mixer">Tonic Water</span>
-                    </div>
-                    <div class="gb-menu-pairing-row">
-                        <span class="gb-ingredient spirit gb-menu-spirit">Tequila</span>
-                        <span class="gb-menu-arrow">&rarr;</span>
-                        <em class="gb-menu-slammer-note">Slammer only (no valid mixer)</em>
-                    </div>
-                </div>
-            </div>
+            <!-- Dynamic content rendered by JS -->
+            <div id="gbMenuContent"></div>
         </div>
     </div>
 

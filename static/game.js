@@ -5,14 +5,10 @@
 
 import { SPIRITS, CARD_COST_TOKEN, CARD_COST_COUNT, MAX_SLOTS } from './constants.js';
 import { ingredientLabel, ingredientIcon, ingredientKind, makeIngredientBadge, makeCostBadge } from './ingredients.js';
-import { h, text, el, closeAllCupOverlays, showError, clearError, showModalError, clearModalError,
+import { h, text, el, showError, clearError, showModalError, clearModalError,
          setButtonBusy, formatTime, flash, switchTab, openModal, closeModal } from './dom.js';
+import { detectBestDrink, getCocktailRecipes, getValidPairings, SPECIAL_TYPES, cocktailsForSpecial } from './drinks.js';
 import S from './state.js';
-
-// Close cup overlays when clicking outside a cup
-document.addEventListener('click', e => {
-    if (!e.target.closest('.gb-cup-interactive')) closeAllCupOverlays();
-});
 
 // ─────────────────────────────────────────────────────────────
 // Initial load + polling
@@ -275,8 +271,11 @@ function renderAll(game, replayState = null) {
     el('gbPlayerStatsBar').classList.remove('hidden');
     el('gbPlayerMats').classList.remove('hidden');
 
-    // Auto-open take modal if mid-taking (handles page refresh and batch continuation)
-    _maybeAutoOpenTakeModal(game, gs, isReplay);
+    // Auto-open staging area if mid-taking (handles page refresh and batch continuation)
+    _maybeAutoOpenStaging(game, gs, isReplay);
+
+    // Render action bar
+    renderActionBar(game, gs, isReplay);
 }
 
 function renderAllStats(game, gs) {
@@ -442,27 +441,80 @@ function schedulePollLobby() {
 function renderBagVisual(bagCount, isMyTurn, myState, gs) {
     const existing = el('gbBagVisual');
     if (existing) existing.remove();
+    // Remove old inline draw selector
+    const oldDraw = el('gbBagDrawInline');
+    if (oldDraw) oldDraw.remove();
 
     const wrap = document.createElement('div');
     wrap.id = 'gbBagVisual';
     wrap.className = 'gb-bag-visual' + (isMyTurn ? ' interactive' : '');
-    if (isMyTurn) {
-        wrap.setAttribute('role', 'button');
-        wrap.setAttribute('tabindex', '0');
-        wrap.title = 'Click to draw from bag';
-        wrap.onclick = () => openTakeModal(myState, gs);
-        wrap.onkeydown = e => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTakeModal(myState, gs); }
-        };
-    }
     const svgTmpl = document.getElementById('tmplBagSvg');
     if (svgTmpl) wrap.appendChild(svgTmpl.content.cloneNode(true));
     wrap.appendChild(h('div', { className: 'gb-bag-count-badge', textContent: String(bagCount) }));
-    if (isMyTurn) wrap.appendChild(h('div', { className: 'gb-bag-hint', textContent: 'draw' }));
 
-    // Insert before gbBagCount
     const bagCountEl = el('gbBagCount');
-    bagCountEl.parentNode.insertBefore(wrap, bagCountEl);
+
+    if (isMyTurn && myState) {
+        const totalLimit = myState.take_count || 3;
+        const alreadyTaken = gs.ingredients_taken_this_turn || 0;
+        const batchLimit = totalLimit - alreadyTaken;
+        const maxDraw = Math.min(batchLimit - S.stagingItems.filter(s => s.source === 'display').length, bagCount);
+
+        // Inline bag draw selector: [bag icon] [-] N [+] [Take]
+        const drawRow = document.createElement('div');
+        drawRow.id = 'gbBagDrawInline';
+        drawRow.className = 'gb-bag-draw-inline';
+
+        const minusBtn = h('button', { className: 'gb-bag-draw-pm', 'aria-label': 'Decrease draw count' }, '\u2212');
+        const countSpan = h('span', { className: 'gb-bag-draw-num', textContent: String(Math.max(1, maxDraw)) });
+        const plusBtn = h('button', { className: 'gb-bag-draw-pm', 'aria-label': 'Increase draw count' }, '+');
+        const takeBtn = h('button', { className: 'gb-bag-draw-take', textContent: 'Take' });
+
+        let drawCount = Math.max(1, maxDraw);
+        const updateCount = () => { countSpan.textContent = drawCount; };
+
+        minusBtn.onclick = e => { e.stopPropagation(); if (drawCount > 1) { drawCount--; updateCount(); } };
+        plusBtn.onclick = e => { e.stopPropagation(); if (drawCount < maxDraw) { drawCount++; updateCount(); } };
+        takeBtn.onclick = async (e) => {
+            e.stopPropagation();
+            takeBtn.disabled = true;
+            takeBtn.textContent = 'Drawing\u2026';
+            try {
+                const resp = await gameAction('draw-from-bag', { count: drawCount });
+                if (!resp.ok) {
+                    const d = await resp.json().catch(() => ({}));
+                    showError(d.error || 'Failed to draw from bag.');
+                    takeBtn.disabled = false;
+                    takeBtn.textContent = 'Take';
+                    return;
+                }
+                const data = await resp.json();
+                const drawn = data.drawn || [];
+                // Add drawn items to staging area
+                drawn.forEach(ing => {
+                    S.stagingItems.push({ ingredient: ing, source: 'pending', disposition: null, cup_index: null });
+                });
+                S.stagingActive = true;
+                renderStagingArea();
+                // Refresh board to update bag count
+                await refreshGame();
+            } catch (e2) {
+                if (e2.message !== 'Unauthorized') showError('Network error drawing from bag.');
+                takeBtn.disabled = false;
+                takeBtn.textContent = 'Take';
+            }
+        };
+
+        if (maxDraw <= 0 || bagCount === 0) {
+            takeBtn.disabled = true;
+        }
+
+        drawRow.append(minusBtn, countSpan, plusBtn, takeBtn);
+        bagCountEl.parentNode.insertBefore(wrap, bagCountEl);
+        bagCountEl.parentNode.insertBefore(drawRow, bagCountEl);
+    } else {
+        bagCountEl.parentNode.insertBefore(wrap, bagCountEl);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -491,9 +543,10 @@ function renderBoard(game, gs, isReplay) {
                 badge.classList.add('gb-display-takeable');
                 badge.setAttribute('tabindex', '0');
                 badge.title = `Take ${ingredientLabel(ing)}`;
-                badge.onclick = () => openTakeModal(myState, gs);
+                // Add to staging area on click (inline flow, no modal)
+                badge.onclick = () => addDisplayToStaging(ing, idx, myState, gs);
                 badge.onkeydown = e => {
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTakeModal(myState, gs); }
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addDisplayToStaging(ing, idx, myState, gs); }
                 };
             }
             dispEl.appendChild(badge);
@@ -849,11 +902,46 @@ function renderBladderWeeRow(myState, isMyTurn, game, gs) {
         tile.className = 'gb-wee-tile';
         tile.setAttribute('role', 'button');
         tile.setAttribute('tabindex', '0');
-        tile.setAttribute('aria-label', 'Go for a wee — empties bladder, sobers up 1 level');
-        tile.append(h('span', { className: 'gb-wee-icon' }, '🚽'), h('span', { className: 'gb-wee-label' }, 'Wee'));
+        tile.setAttribute('aria-label', `Go for a wee \u2014 empties bladder, sobers up 1 level (${toiletTokens} tokens left)`);
+        tile.append(
+            h('span', { className: 'gb-wee-icon' }, '\uD83D\uDEBD'),
+            h('span', { className: 'gb-wee-label' }, 'Wee'),
+            h('span', { className: 'gb-wee-tokens' }, `${toiletTokens}\uD83E\uDEAA`)
+        );
         tile.onclick = () => doWee(tile);
         tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
         container.appendChild(tile);
+    }
+
+    // Claimable cards — show cards the player can afford, right below bladder
+    if (isMyTurn && gs.card_rows) {
+        const claimable = [];
+        for (const row of gs.card_rows) {
+            for (const card of (row.cards || [])) {
+                if (canAffordCard(card, bladder, gs)) {
+                    claimable.push(card);
+                }
+            }
+        }
+        if (claimable.length > 0) {
+            const claimSection = document.createElement('div');
+            claimSection.className = 'gb-claimable-cards';
+            claimSection.appendChild(h('strong', { className: 'gb-stat-label' }, 'Claimable'));
+            const cardList = document.createElement('div');
+            cardList.className = 'gb-claimable-list';
+            claimable.forEach(card => {
+                const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
+                const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42' };
+                const btn = document.createElement('button');
+                btn.className = `gb-claimable-btn ${cardType}`;
+                btn.textContent = `${typeIcons[cardType] || ''} ${card.name || cardType}`;
+                btn.title = _cardCostDesc(card);
+                btn.onclick = () => doClaimCard(card, btn);
+                cardList.appendChild(btn);
+            });
+            claimSection.appendChild(cardList);
+            container.appendChild(claimSection);
+        }
     }
 }
 
@@ -902,10 +990,24 @@ function renderClaimedCards(myState, isMyTurn, isReplay) {
                 });
                 div.appendChild(stored);
 
-                // Store card actions (free actions, available on player's turn)
+                // Store card actions — inline Cup 1/Cup 2/Drink buttons (no modal)
                 if (isMyTurn && !isReplay && cardType === 'store') {
                     const actions = document.createElement('div');
                     actions.className = 'gb-store-card-actions';
+
+                    const cup1Btn = document.createElement('button');
+                    cup1Btn.className = 'gb-store-action-btn use';
+                    cup1Btn.textContent = '\u2192 Cup 1';
+                    cup1Btn.setAttribute('aria-label', `Add stored ${ingredientLabel(c.spirit_type)} to Cup 1`);
+                    cup1Btn.onclick = (e) => { e.stopPropagation(); doUseStoredSpirit(cardIndex, 0, cup1Btn); };
+                    actions.appendChild(cup1Btn);
+
+                    const cup2Btn = document.createElement('button');
+                    cup2Btn.className = 'gb-store-action-btn use';
+                    cup2Btn.textContent = '\u2192 Cup 2';
+                    cup2Btn.setAttribute('aria-label', `Add stored ${ingredientLabel(c.spirit_type)} to Cup 2`);
+                    cup2Btn.onclick = (e) => { e.stopPropagation(); doUseStoredSpirit(cardIndex, 1, cup2Btn); };
+                    actions.appendChild(cup2Btn);
 
                     const drinkBtn = document.createElement('button');
                     drinkBtn.className = 'gb-store-action-btn drink';
@@ -913,13 +1015,6 @@ function renderClaimedCards(myState, isMyTurn, isReplay) {
                     drinkBtn.setAttribute('aria-label', `Drink a stored ${ingredientLabel(c.spirit_type)} spirit`);
                     drinkBtn.onclick = (e) => { e.stopPropagation(); doDrinkStoredSpirit(cardIndex, c); };
                     actions.appendChild(drinkBtn);
-
-                    const useBtn = document.createElement('button');
-                    useBtn.className = 'gb-store-action-btn use';
-                    useBtn.textContent = 'Add to Cup';
-                    useBtn.setAttribute('aria-label', `Add a stored ${ingredientLabel(c.spirit_type)} spirit to a cup`);
-                    useBtn.onclick = (e) => { e.stopPropagation(); openUseStoredSpiritModal(cardIndex, c); };
-                    actions.appendChild(useBtn);
 
                     div.appendChild(actions);
                 }
@@ -978,7 +1073,7 @@ function renderMyCups(myState, isMyTurn, game, gs) {
     const cupsEl = el('gbMyCups');
     cupsEl.replaceChildren();
 
-
+    const specials = myState.special_ingredients || [];
     const cupData = [
         { index: 0, contents: (myState.cups?.[0]?.ingredients) || [], hasDoubler: !!(myState.cups?.[0]?.has_cup_doubler) },
         { index: 1, contents: (myState.cups?.[1]?.ingredients) || [], hasDoubler: !!(myState.cups?.[1]?.has_cup_doubler) },
@@ -992,9 +1087,9 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 
         const title = document.createElement('div');
         title.className = 'gb-cup-title';
-        title.append('🥂 ', h('span', null, `Cup ${index + 1}`));
+        title.append('\uD83E\uDD42 ', h('span', null, `Cup ${index + 1}`));
         if (hasDoubler) {
-            title.appendChild(h('span', { className: 'gb-cup-doubler-badge', title: 'Cup Doubler active — non-cocktail drinks score ×2', textContent: '×2' }));
+            title.appendChild(h('span', { className: 'gb-cup-doubler-badge', title: 'Cup Doubler active \u2014 non-cocktail drinks score \xD72', textContent: '\xD72' }));
         }
         cupEl.appendChild(title);
 
@@ -1015,51 +1110,38 @@ function renderMyCups(myState, isMyTurn, game, gs) {
         }
         cupEl.appendChild(ingArea);
 
-        if (isMyTurn && contents.length > 0) {
-            cupEl.classList.add('gb-cup-interactive');
-            cupEl.setAttribute('role', 'button');
-            cupEl.setAttribute('tabindex', '0');
-            cupEl.title = 'Click to sell or drink';
+        // Inline action buttons below cup (no overlay/modal)
+        if (isMyTurn) {
+            const actions = document.createElement('div');
+            actions.className = 'gb-cup-inline-actions';
 
-            const overlay = document.createElement('div');
-            overlay.className = 'gb-cup-action-overlay hidden';
-            overlay.setAttribute('aria-label', `Actions for cup ${index + 1}`);
+            // Auto-detect best drink for this cup
+            const drink = detectBestDrink(contents, specials, hasDoubler);
 
-            const sellTile = document.createElement('div');
-            sellTile.className = 'gb-cup-action-tile sell';
-            sellTile.setAttribute('role', 'button');
-            sellTile.setAttribute('tabindex', '0');
-            sellTile.setAttribute('aria-label', `Sell cup ${index + 1}`);
-            sellTile.append(h('span', { className: 'gb-cup-action-icon' }, '💰'), h('span', { className: 'gb-cup-action-label' }, 'Sell'));
-            sellTile.onclick = e => { e.stopPropagation(); closeAllCupOverlays(); openSellModal(index, contents, myState); };
-            sellTile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); closeAllCupOverlays(); openSellModal(index, contents, myState); } };
-            overlay.appendChild(sellTile);
+            if (drink) {
+                const sellBtn = document.createElement('button');
+                sellBtn.className = 'gb-cup-action-btn sell';
+                sellBtn.innerHTML = `\uD83D\uDCB0 Sell \u2014 ${drink.name} (${drink.points}pts)`;
+                sellBtn.setAttribute('aria-label', `Sell cup ${index + 1} as ${drink.name} for ${drink.points} points`);
+                sellBtn.onclick = () => doSellCup(index, drink.declaredSpecials, sellBtn);
+                actions.appendChild(sellBtn);
+            }
 
-            const drinkTile = document.createElement('div');
-            drinkTile.className = 'gb-cup-action-tile drink';
-            drinkTile.setAttribute('role', 'button');
-            drinkTile.setAttribute('tabindex', '0');
-            drinkTile.setAttribute('aria-label', `Drink cup ${index + 1}`);
-            drinkTile.append(h('span', { className: 'gb-cup-action-icon' }, '🍺'), h('span', { className: 'gb-cup-action-label' }, 'Drink'));
-            drinkTile.onclick = e => { e.stopPropagation(); closeAllCupOverlays(); openDrinkModal(index, contents); };
-            drinkTile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); closeAllCupOverlays(); openDrinkModal(index, contents); } };
-            overlay.appendChild(drinkTile);
-
-            cupEl.appendChild(overlay);
-
-            cupEl.onclick = e => {
-                const wasOpen = !overlay.classList.contains('hidden');
-                closeAllCupOverlays();
-                if (!wasOpen) overlay.classList.remove('hidden');
-            };
-            cupEl.onkeydown = e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    const wasOpen = !overlay.classList.contains('hidden');
-                    closeAllCupOverlays();
-                    if (!wasOpen) overlay.classList.remove('hidden');
+            if (contents.length > 0) {
+                const drinkBtn = document.createElement('button');
+                drinkBtn.className = 'gb-cup-action-btn drink';
+                const spiritCount = contents.filter(i => ingredientKind(i) === 'spirit').length;
+                if (spiritCount > 0) {
+                    drinkBtn.innerHTML = `\uD83C\uDF7A Drink <span class="gb-cup-warning">+${spiritCount} drunk</span>`;
+                } else {
+                    drinkBtn.textContent = '\uD83C\uDF7A Drink (sobers)';
                 }
-            };
+                drinkBtn.setAttribute('aria-label', `Drink cup ${index + 1}`);
+                drinkBtn.onclick = () => doDrinkCup(index, drinkBtn);
+                actions.appendChild(drinkBtn);
+            }
+
+            cupEl.appendChild(actions);
         }
 
         cupsEl.appendChild(cupEl);
@@ -1929,374 +2011,170 @@ async function doDrinkStoredSpirit(cardIndex, card) {
     }
 }
 
-function openUseStoredSpiritModal(cardIndex, card) {
-    S.useStoredSpiritCardIndex = cardIndex;
-    const spiritLabel = ingredientLabel(card.spirit_type);
-    document.getElementById('gbUseStoredSpiritDesc').textContent = `Add a ${spiritLabel} from your store card to a cup.`;
-    document.getElementById('gbUseStoredSpiritModalError').textContent = '';
-    openModal('gbUseStoredSpiritModal');
-}
-
-function closeUseStoredSpiritModal() {
-    closeModal('gbUseStoredSpiritModal');
-}
-
-async function confirmUseStoredSpirit(cupIndex) {
-    const cardIndex = S.useStoredSpiritCardIndex;
-    const errEl = document.getElementById('gbUseStoredSpiritModalError');
-    errEl.textContent = '';
-    try {
-        const resp = await gameAction('use-stored-spirit', { store_card_index: cardIndex, cup_index: cupIndex });
-        if (!resp.ok) {
-            const d = await resp.json().catch(() => ({}));
-            errEl.textContent = d.detail || d.error || 'Cannot use stored spirit right now.';
-        } else {
-            closeUseStoredSpiritModal();
-            await refreshGame();
-            await refreshHistory();
-        }
-    } catch (e) {
-        if (e.message !== 'Unauthorized') errEl.textContent = 'Network error. Please try again.';
-    }
-}
+// openUseStoredSpiritModal / confirmUseStoredSpirit removed — now inline via doUseStoredSpirit
 
 // ─────────────────────────────────────────────────────────────
 // Take Ingredients modal
 // ─────────────────────────────────────────────────────────────
 
-function _maybeAutoOpenTakeModal(game, gs, isReplay) {
+// ─────────────────────────────────────────────────────────────
+// Inline Take Ingredients (staging area replaces modal)
+// ─────────────────────────────────────────────────────────────
+
+function _maybeAutoOpenStaging(game, gs, isReplay) {
     if (isReplay || !S.me || game.status !== 'STARTED') return;
     if (gs.player_turn !== S.me.id) return;
-    // Don't re-open if already visible
-    const modal = el('gbTakeModal');
-    if (modal && !modal.classList.contains('hidden')) return;
     const myState = gs.player_states?.[S.me.id];
     if (!myState) return;
     const totalLimit = myState.take_count || 3;
     const alreadyTaken = gs.ingredients_taken_this_turn || 0;
     const bagDrawPending = (gs.bag_draw_pending || []).length > 0;
-    if ((alreadyTaken > 0 && alreadyTaken < totalLimit) || bagDrawPending) {
-        openTakeModal(myState, gs);
+    if (bagDrawPending) {
+        // Re-hydrate pending bag draws into staging
+        const serverPending = gs.bag_draw_pending || [];
+        S.stagingItems = serverPending.map(ing => ({ ingredient: ing, source: 'pending', disposition: null, cup_index: null }));
+        S.stagingActive = true;
+        S.stagingTakeCount = totalLimit;
+        S.stagingAlreadyTaken = alreadyTaken;
+        renderStagingArea();
+    } else if (alreadyTaken > 0 && alreadyTaken < totalLimit && S.stagingItems.length > 0) {
+        S.stagingActive = true;
+        renderStagingArea();
     }
 }
 
-function openTakeModal(myState, gs) {
-    S.takeStep = 0;
-    S.takeDisplaySelected = [];
-    S.takeBagPending = [];
-    clearModalError('gbTakeModalError');
-
+/** Add a display ingredient to the staging area */
+function addDisplayToStaging(ing, idx, myState, gs) {
     const totalLimit = myState.take_count || 3;
     const alreadyTaken = gs.ingredients_taken_this_turn || 0;
     const batchLimit = totalLimit - alreadyTaken;
 
-    // If the server already has pending bag draws (e.g. modal reopened mid-turn),
-    // skip straight to assignment.
-    const serverPending = gs.bag_draw_pending || [];
-    if (serverPending.length > 0) {
-        S.takeBagPending = serverPending.map(ing => ({ ingredient: ing, source: 'pending' }));
-        _openAssignStep(myState);
-        openModal('gbTakeModal');
+    // Check if already selected
+    if (S.stagingItems.some(s => s.source === 'display' && s.idx === idx)) {
+        showError('Already selected that ingredient.');
         return;
     }
 
-    // ── Step 0: select ──────────────────────────────────────────
-    el('gbTakeLimit').textContent = alreadyTaken > 0
-        ? `${batchLimit} (${alreadyTaken}/${totalLimit} already taken this turn)`
-        : batchLimit;
-    el('gbTakeCount').textContent = 0;
-    el('gbTakeStep0').classList.remove('hidden');
-    el('gbTakeStep1').classList.add('hidden');
-    el('gbTakeNextBtn').textContent = 'Next →';
-    el('gbTakeNextBtn').disabled = false;
-    updateStepDots(0);
-    renderTakeModalCups(myState);
-
-    // Display picks
-    const pickDisplayEl = el('gbPickDisplay');
-    pickDisplayEl.replaceChildren();
-    const display = gs.open_display || [];
-    if (display.length === 0) {
-        const em = document.createElement('em');
-        em.className = 'gb-empty-hint';
-        em.textContent = 'Display is empty';
-        pickDisplayEl.appendChild(em);
-    } else {
-        display.forEach((ing, idx) => {
-            pickDisplayEl.appendChild(_buildDisplayPickItem(ing, idx, batchLimit));
-        });
-    }
-
-    // Bag draw controls
-    const bagCount = (gs.bag_contents || []).length;
-    el('gbBagPickInfo').textContent = `(${bagCount} in bag)`;
-    el('gbPickBag').replaceChildren();
-    el('gbBagDrawStatus').textContent = '';
-
-    const drawCountEl = el('gbBagDrawCount');
-    drawCountEl.max = batchLimit;
-    drawCountEl.min = 1;
-    drawCountEl.value = Math.min(batchLimit, bagCount) || 1;
-    drawCountEl.disabled = false;
-
-    el('gbBtnDrawBag').disabled = bagCount === 0 || batchLimit === 0;
-    el('gbBtnDrawBag').onclick = () => _doDrawFromBag(myState, batchLimit);
-
-    _updateTakeCount();
-    el('gbTakeStepLabel').textContent =
-        `Step 1: Pick from the display and/or draw from the bag (up to ${batchLimit} total)`;
-    openModal('gbTakeModal');
-}
-
-function _buildDisplayPickItem(ing, idx, batchLimit) {
-    const item = document.createElement('button');
-    item.className = `gb-pick-item ${ingredientKind(ing)}`;
-    item.setAttribute('type', 'button');
-    item.setAttribute('role', 'checkbox');
-    item.setAttribute('aria-checked', 'false');
-    item.setAttribute('aria-label', `${ingredientLabel(ing)} from display`);
-    item.dataset.idx = idx;
-    const badge = makeIngredientBadge(ing);
-    badge.classList.add('gb-no-pointer');
-    item.appendChild(badge);
-    item.onclick = () => {
-        const isSelected = item.classList.contains('selected');
-        const total = S.takeDisplaySelected.length + S.takeBagPending.length;
-        if (!isSelected && total >= batchLimit) {
-            showModalError('gbTakeModalError', `You can only take ${batchLimit} ingredients total.`);
-            return;
-        }
-        clearModalError('gbTakeModalError');
-        if (isSelected) {
-            const pos = S.takeDisplaySelected.findIndex(s => s.idx === idx);
-            if (pos !== -1) S.takeDisplaySelected.splice(pos, 1);
-            item.classList.remove('selected');
-            item.setAttribute('aria-checked', 'false');
-        } else {
-            S.takeDisplaySelected.push({ ingredient: ing, source: 'display', idx });
-            item.classList.add('selected');
-            item.setAttribute('aria-checked', 'true');
-        }
-        _updateTakeCount();
-    };
-    return item;
-}
-
-async function _doDrawFromBag(myState, batchLimit) {
-    const count = parseInt(el('gbBagDrawCount').value) || 0;
-    const alreadySelected = S.takeDisplaySelected.length + S.takeBagPending.length;
-    const remaining = batchLimit - alreadySelected;
-
-    if (count < 1 || count > remaining) {
-        showModalError('gbTakeModalError',
-            `Enter a number between 1 and ${remaining} (you have ${alreadySelected} already selected).`);
+    if (S.stagingItems.length >= batchLimit) {
+        showError(`You can only take ${batchLimit} ingredients this batch.`);
         return;
     }
 
-    clearModalError('gbTakeModalError');
-    el('gbBtnDrawBag').disabled = true;
-    el('gbBagDrawCount').disabled = true;
-    el('gbBagDrawStatus').textContent = 'Drawing…';
+    clearError();
+    S.stagingItems.push({ ingredient: ing, source: 'display', idx, disposition: null, cup_index: null });
+    S.stagingActive = true;
+    S.stagingTakeCount = totalLimit;
+    S.stagingAlreadyTaken = alreadyTaken;
+    renderStagingArea();
+}
 
-    try {
-        const resp = await gameAction('draw-from-bag', { count });
-        if (!resp.ok) {
-            const d = await resp.json().catch(() => ({}));
-            showModalError('gbTakeModalError', d.error || 'Failed to draw from bag.');
-            el('gbBtnDrawBag').disabled = false;
-            el('gbBagDrawCount').disabled = false;
-            el('gbBagDrawStatus').textContent = '';
-            return;
-        }
-        const data = await resp.json();
-        const drawn = data.drawn || [];
+/** Render the inline staging area */
+function renderStagingArea() {
+    const area = el('gbStagingArea');
+    if (!area) return;
 
-        // Store as pending (server-confirmed, cannot be removed)
-        S.takeBagPending = drawn.map(ing => ({ ingredient: ing, source: 'pending' }));
-
-        // Show drawn ingredients as locked badges
-        const pickBagEl = el('gbPickBag');
-        pickBagEl.replaceChildren();
-        drawn.forEach(ing => {
-            const wrap = document.createElement('div');
-            wrap.className = 'gb-bag-drawn-wrap';
-            const badge = makeIngredientBadge(ing);
-            badge.title = `${ingredientLabel(ing)} (drawn from bag — locked)`;
-            wrap.appendChild(badge);
-            const lock = document.createElement('span');
-            lock.textContent = '🔒';
-            lock.className = 'gb-bag-drawn-lock';
-            wrap.appendChild(lock);
-            pickBagEl.appendChild(wrap);
-        });
-
-        el('gbBagDrawStatus').textContent = `Drew ${drawn.length} ingredient${drawn.length !== 1 ? 's' : ''} — now assign them.`;
-        _updateTakeCount();
-
-    } catch (e) {
-        if (e.message !== 'Unauthorized') showModalError('gbTakeModalError', 'Network error drawing from bag.');
-        el('gbBtnDrawBag').disabled = false;
-        el('gbBagDrawCount').disabled = false;
-        el('gbBagDrawStatus').textContent = '';
+    if (!S.stagingActive || S.stagingItems.length === 0) {
+        area.classList.add('hidden');
+        return;
     }
-}
+    area.classList.remove('hidden');
 
-function _updateTakeCount() {
-    el('gbTakeCount').textContent = S.takeDisplaySelected.length + S.takeBagPending.length;
-}
+    const batchLimit = S.stagingTakeCount - S.stagingAlreadyTaken;
+    el('gbStagingCount').textContent = `${S.stagingItems.length} / ${batchLimit}`;
 
-function renderTakeModalCups(myState) {
-    const cupsEl = el('gbTakeModalCups');
-    if (!cupsEl) return;
-    cupsEl.replaceChildren();
+    const itemsEl = el('gbStagingItems');
+    itemsEl.replaceChildren();
 
-    const label = document.createElement('div');
-    label.className = 'gb-take-cups-label';
-    label.textContent = 'Your cups:';
-    cupsEl.appendChild(label);
-
-    const row = document.createElement('div');
-    row.className = 'gb-take-cups-row';
-
-    [{ index: 0, label: 'Cup 1' }, { index: 1, label: 'Cup 2' }].forEach(({ index, label: cupLabel }) => {
-        const cup = (myState.cups?.[index]?.ingredients) || [];
-        const div = document.createElement('div');
-        div.className = 'gb-take-cup-item';
-        const lbl = document.createElement('span');
-        lbl.className = 'gb-take-cup-lbl';
-        lbl.textContent = `${cupLabel} (${cup.length}/5): `;
-        div.appendChild(lbl);
-        if (cup.length === 0) {
-            const em = document.createElement('em');
-            em.className = 'gb-empty-hint';
-            em.textContent = 'empty';
-            div.appendChild(em);
-        } else {
-            cup.forEach(ing => {
-                const b = makeIngredientBadge(ing);
-                b.classList.add('gb-badge-sm');
-                div.appendChild(b);
-            });
-        }
-        row.appendChild(div);
-    });
-    cupsEl.appendChild(row);
-}
-
-function updateStepDots(step) {
-    [0, 1].forEach(i => {
-        const dot = el(`gbTakeDot${i}`);
-        if (!dot) return;
-        dot.className = 'gb-step-dot' + (i < step ? ' done' : i === step ? ' active' : '');
-    });
-}
-
-function takeModalNext() {
-    if (S.takeStep === 0) {
-        const total = S.takeDisplaySelected.length + S.takeBagPending.length;
-        if (total === 0) {
-            showModalError('gbTakeModalError', 'Select at least one ingredient before continuing.');
-            return;
-        }
-        clearModalError('gbTakeModalError');
-        const myState = S.me && S.game && S.game.game_state
-            ? S.game.game_state.player_states[S.me.id]
-            : null;
-        _openAssignStep(myState);
-    } else {
-        submitTakeIngredients();
-    }
-}
-
-function _openAssignStep(myState) {
-    S.takeStep = 1;
-    el('gbTakeStep0').classList.add('hidden');
-    el('gbTakeStep1').classList.remove('hidden');
-    el('gbTakeNextBtn').textContent = 'Submit';
-    updateStepDots(1);
-    el('gbTakeStepLabel').textContent = 'Step 2: Decide what to do with each ingredient.';
-    _buildAssignTable(myState);
-}
-
-function _buildAssignTable(myState) {
-    const tbody = el('gbAssignTableBody');
-    tbody.replaceChildren();
-
+    const myState = S.me && S.game && S.game.game_state
+        ? S.game.game_state.player_states[S.me.id]
+        : null;
     const cup1Count = myState ? ((myState.cups?.[0]?.ingredients) || []).length : 0;
     const cup2Count = myState ? ((myState.cups?.[1]?.ingredients) || []).length : 0;
-    const CUP_MAX = 5;
 
-    const allItems = [...S.takeDisplaySelected, ...S.takeBagPending];
+    S.stagingItems.forEach((item, i) => {
+        const row = document.createElement('div');
+        row.className = 'gb-staging-item';
 
-    allItems.forEach((sel, i) => {
-        const tr = document.createElement('tr');
+        // Ingredient badge
+        const badge = makeIngredientBadge(item.ingredient);
+        row.appendChild(badge);
 
-        const tdIng = document.createElement('td');
-        tdIng.appendChild(makeIngredientBadge(sel.ingredient));
-        const srcLabel = document.createElement('span');
-        srcLabel.className = 'gb-assign-src';
-        srcLabel.textContent = sel.source === 'pending' ? '(bag)' : '(display)';
-        tdIng.appendChild(srcLabel);
-        tr.appendChild(tdIng);
+        const src = document.createElement('span');
+        src.className = 'gb-staging-src';
+        src.textContent = item.source === 'pending' ? '(bag)' : '(display)';
+        row.appendChild(src);
 
-        const tdAssign = document.createElement('td');
-        const kind = ingredientKind(sel.ingredient);
+        const kind = ingredientKind(item.ingredient);
 
         if (kind === 'special') {
             const note = document.createElement('em');
-            note.className = 'gb-assign-note';
-            note.textContent = 'Auto-placed on mat (server rolls)';
-            tdAssign.appendChild(note);
-            sel.disposition = 'drink';
-            sel.cup_index = null;
+            note.className = 'gb-staging-note';
+            note.textContent = 'Special \u2014 auto-placed on mat';
+            row.appendChild(note);
+            item.disposition = 'drink'; // Server handles special resolution
+            item.cup_index = null;
         } else {
-            const select = document.createElement('select');
-            select.setAttribute('aria-label', `Assign ${ingredientLabel(sel.ingredient)}`);
-            select.id = `gbAssign_${i}`;
+            // Assignment buttons: Cup 1, Cup 2, Drink
+            const btns = document.createElement('div');
+            btns.className = 'gb-staging-assign-btns';
 
-            const opts = [];
-            if (cup1Count < CUP_MAX) opts.push({ val: 'cup:0', label: `Cup 1 (${cup1Count}/5)` });
-            if (cup2Count < CUP_MAX) opts.push({ val: 'cup:1', label: `Cup 2 (${cup2Count}/5)` });
-            opts.push({ val: 'drink', label: 'Drink it' });
-
-            opts.forEach(o => {
-                const opt = document.createElement('option');
-                opt.value = o.val;
-                opt.textContent = o.label;
-                select.appendChild(opt);
+            if (cup1Count < 5) {
+                const c1 = h('button', {
+                    className: 'gb-staging-assign-btn' + (item.disposition === 'cup' && item.cup_index === 0 ? ' active' : ''),
+                    textContent: 'Cup 1',
+                });
+                c1.onclick = () => { item.disposition = 'cup'; item.cup_index = 0; renderStagingArea(); };
+                btns.appendChild(c1);
+            }
+            if (cup2Count < 5) {
+                const c2 = h('button', {
+                    className: 'gb-staging-assign-btn' + (item.disposition === 'cup' && item.cup_index === 1 ? ' active' : ''),
+                    textContent: 'Cup 2',
+                });
+                c2.onclick = () => { item.disposition = 'cup'; item.cup_index = 1; renderStagingArea(); };
+                btns.appendChild(c2);
+            }
+            const dk = h('button', {
+                className: 'gb-staging-assign-btn drink' + (item.disposition === 'drink' ? ' active' : ''),
+                textContent: 'Drink',
             });
+            dk.onclick = () => { item.disposition = 'drink'; item.cup_index = null; renderStagingArea(); };
+            btns.appendChild(dk);
 
-            if (opts.length > 0) {
-                sel.disposition = opts[0].val.startsWith('cup') ? 'cup' : 'drink';
-                sel.cup_index   = opts[0].val.startsWith('cup') ? parseInt(opts[0].val.split(':')[1]) : null;
+            // Remove button (only for display items, not bag-drawn)
+            if (item.source === 'display') {
+                const rm = h('button', { className: 'gb-staging-remove', 'aria-label': 'Remove', textContent: '\u2715' });
+                rm.onclick = () => {
+                    S.stagingItems.splice(i, 1);
+                    if (S.stagingItems.length === 0) S.stagingActive = false;
+                    renderStagingArea();
+                };
+                btns.appendChild(rm);
             }
 
-            select.onchange = () => {
-                const v = select.value;
-                if (v.startsWith('cup:')) {
-                    sel.disposition = 'cup';
-                    sel.cup_index   = parseInt(v.split(':')[1]);
-                } else {
-                    sel.disposition = 'drink';
-                    sel.cup_index   = null;
-                }
-            };
-
-            tdAssign.appendChild(select);
+            row.appendChild(btns);
         }
 
-        tr.appendChild(tdAssign);
-        tbody.appendChild(tr);
+        itemsEl.appendChild(row);
     });
+
+    // Wire up submit/cancel
+    const submitBtn = el('gbStagingSubmit');
+    const cancelBtn = el('gbStagingCancel');
+
+    // Can submit only if all items have an assignment
+    const allAssigned = S.stagingItems.every(item => item.disposition !== null);
+    submitBtn.disabled = !allAssigned;
+    submitBtn.onclick = submitStagingItems;
+    cancelBtn.onclick = cancelStaging;
 }
 
-async function submitTakeIngredients() {
-    clearModalError('gbTakeModalError');
-    const btn = el('gbTakeNextBtn');
-    setButtonBusy(btn, true, 'Submitting…');
+async function submitStagingItems() {
+    const btn = el('gbStagingSubmit');
+    setButtonBusy(btn, true, 'Submitting\u2026');
+    clearError();
 
-    const allItems = [...S.takeDisplaySelected, ...S.takeBagPending];
-    const assignments = allItems.map(sel => {
+    const assignments = S.stagingItems.map(sel => {
         const a = {
             ingredient: sel.ingredient,
             source: sel.source,
@@ -2310,31 +2188,194 @@ async function submitTakeIngredients() {
         const resp = await gameAction('take-ingredients', { assignments });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
-            showModalError('gbTakeModalError', d.error || 'Failed to take ingredients.');
+            showError(d.error || 'Failed to take ingredients.');
         } else {
-            closeTakeModal();
+            closeStaging();
             await refreshGame();
             await refreshHistory();
         }
     } catch (e) {
-        if (e.message !== 'Unauthorized') showModalError('gbTakeModalError', 'Network error. Please try again.');
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
         setButtonBusy(btn, false);
     }
 }
 
-function closeTakeModal() {
-    closeModal('gbTakeModal');
-    S.takeDisplaySelected = [];
-    S.takeBagPending = [];
-    S.takeStep = 0;
+function cancelStaging() {
+    // Can only cancel display-selected items; bag-drawn items must be assigned
+    const hasBag = S.stagingItems.some(s => s.source === 'pending');
+    if (hasBag) {
+        showError('You must assign bag-drawn ingredients before cancelling.');
+        return;
+    }
+    closeStaging();
+}
+
+function closeStaging() {
+    S.stagingItems = [];
+    S.stagingActive = false;
+    const area = el('gbStagingArea');
+    if (area) area.classList.add('hidden');
 }
 
 // ─────────────────────────────────────────────────────────────
-// Cocktail Menu modal
+// Cocktail Menu modal (JS-rendered, grouped by specials)
 // ─────────────────────────────────────────────────────────────
-function openMenu() { openModal('gbMenuModal'); }
+function openMenu() {
+    renderMenuContent();
+    openModal('gbMenuModal');
+}
 function closeMenu() { closeModal('gbMenuModal'); }
+
+function renderMenuContent() {
+    const container = el('gbMenuContent');
+    if (!container) return;
+    container.replaceChildren();
+
+    const myState = (S.me && S.game && S.game.game_state)
+        ? S.game.game_state.player_states?.[S.me.id]
+        : null;
+    const playerSpecials = myState ? (myState.special_ingredients || []) : [];
+    const playerCups = myState ? (myState.cups || []) : [];
+    const playerBladder = myState ? (myState.bladder || []) : [];
+
+    // Count all ingredients the player has (cups + bladder + stored)
+    const allIngredients = [];
+    playerCups.forEach(cup => allIngredients.push(...(cup.ingredients || [])));
+    allIngredients.push(...playerBladder);
+    if (myState) {
+        (myState.cards || []).forEach(c => {
+            if (c.stored_spirits) allIngredients.push(...c.stored_spirits);
+        });
+    }
+    const ingCounts = {};
+    allIngredients.forEach(i => { const u = i.toUpperCase(); ingCounts[u] = (ingCounts[u] || 0) + 1; });
+    const specialCounts = {};
+    playerSpecials.forEach(s => { const l = s.toLowerCase(); specialCounts[l] = (specialCounts[l] || 0) + 1; });
+
+    // Section 1: Specials & Cocktails grouped by special type
+    const specialsSection = document.createElement('div');
+    specialsSection.className = 'gb-modal-section';
+    specialsSection.appendChild(h('div', { className: 'gb-modal-section-title' }, 'Specials & Cocktails'));
+
+    const specialLabels = { bitters: 'Bitters', cointreau: 'Cointreau', lemon: 'Lemon', sugar: 'Sugar', vermouth: 'Vermouth' };
+    const specialIcons = { bitters: '\u2728', cointreau: '\uD83C\uDF4A', lemon: '\uD83C\uDF4B', sugar: '\uD83C\uDF6C', vermouth: '\uD83C\uDF39' };
+
+    SPECIAL_TYPES.forEach(spType => {
+        const group = document.createElement('div');
+        group.className = 'gb-menu-special-group';
+
+        // Special header with slots
+        const header = document.createElement('div');
+        header.className = 'gb-menu-special-header';
+        const owned = specialCounts[spType] || 0;
+
+        header.appendChild(h('span', { className: 'gb-ingredient special gb-menu-special-name' },
+            `${specialIcons[spType] || ''} ${specialLabels[spType]}`));
+
+        // Slots showing how many player has
+        const slots = document.createElement('span');
+        slots.className = 'gb-menu-special-slots';
+        for (let i = 0; i < 3; i++) {
+            const slot = document.createElement('span');
+            slot.className = 'gb-menu-special-slot' + (i < owned ? ' filled' : '');
+            slot.textContent = i < owned ? '\u25CF' : '\u25CB';
+            slots.appendChild(slot);
+        }
+        header.appendChild(slots);
+        group.appendChild(header);
+
+        // Cocktails using this special
+        const cocktails = cocktailsForSpecial(spType);
+        cocktails.forEach(recipe => {
+            const row = document.createElement('div');
+            row.className = 'gb-menu-cocktail-row';
+
+            const name = h('span', { className: 'gb-menu-cocktail-name' }, recipe.name);
+            const pts = h('span', { className: 'gb-menu-pts' }, `${recipe.points}pts`);
+
+            const ingredients = document.createElement('span');
+            ingredients.className = 'gb-menu-cocktail-ings';
+
+            // Spirits
+            for (const [spirit, count] of Object.entries(recipe.spirits)) {
+                for (let i = 0; i < count; i++) {
+                    const badge = makeIngredientBadge(spirit);
+                    if (ingCounts[spirit] && ingCounts[spirit] > 0) badge.classList.add('gb-menu-has');
+                    ingredients.appendChild(badge);
+                }
+            }
+            // Mixers
+            for (const [mixer, count] of Object.entries(recipe.mixers)) {
+                for (let i = 0; i < count; i++) {
+                    const badge = makeIngredientBadge(mixer);
+                    if (ingCounts[mixer] && ingCounts[mixer] > 0) badge.classList.add('gb-menu-has');
+                    ingredients.appendChild(badge);
+                }
+            }
+            // Specials
+            recipe.specials.forEach(sp => {
+                const badge = makeIngredientBadge(sp);
+                if (specialCounts[sp.toLowerCase()] && specialCounts[sp.toLowerCase()] > 0) badge.classList.add('gb-menu-has');
+                ingredients.appendChild(badge);
+            });
+
+            row.append(name, ingredients, pts);
+            group.appendChild(row);
+        });
+
+        specialsSection.appendChild(group);
+    });
+    container.appendChild(specialsSection);
+
+    // Section 2: Simple drinks
+    const simpleSection = document.createElement('div');
+    simpleSection.className = 'gb-modal-section';
+    simpleSection.appendChild(h('div', { className: 'gb-modal-section-title' }, 'Simple Drinks'));
+    const simpleList = document.createElement('div');
+    simpleList.className = 'gb-menu-simple-list';
+    [
+        { name: 'Tequila Slammer', desc: 'Exactly 2\xD7Tequila, no mixers, no specials', pts: '3' },
+        { name: 'Double Spirit', desc: '2 spirits (same type) + \u22651 valid mixer', pts: '3' },
+        { name: 'Single Spirit', desc: '1 spirit + \u22651 valid mixer', pts: '1' },
+    ].forEach(d => {
+        const row = document.createElement('div');
+        row.className = 'gb-menu-simple-row';
+        row.append(
+            h('span', { className: 'gb-menu-simple-name' }, d.name),
+            h('span', { className: 'gb-menu-simple-desc' }, d.desc),
+            h('span', { className: 'gb-menu-pts' }, d.pts)
+        );
+        simpleList.appendChild(row);
+    });
+    simpleSection.appendChild(simpleList);
+    container.appendChild(simpleSection);
+
+    // Section 3: Valid pairings
+    const pairSection = document.createElement('div');
+    pairSection.className = 'gb-modal-section';
+    pairSection.appendChild(h('div', { className: 'gb-modal-section-title' }, 'Valid Spirit \u2192 Mixer Pairings'));
+    const pairings = document.createElement('div');
+    pairings.className = 'gb-menu-pairings';
+    const pairingData = getValidPairings();
+    for (const spirit of ['VODKA', 'RUM', 'WHISKEY', 'GIN', 'TEQUILA']) {
+        const row = document.createElement('div');
+        row.className = 'gb-menu-pairing-row';
+        row.appendChild(h('span', { className: 'gb-ingredient spirit gb-menu-spirit' }, ingredientLabel(spirit)));
+        row.appendChild(h('span', { className: 'gb-menu-arrow' }, '\u2192'));
+        const mixers = pairingData[spirit];
+        if (mixers && mixers.size > 0) {
+            for (const m of mixers) {
+                row.appendChild(h('span', { className: 'gb-ingredient mixer' }, ingredientLabel(m)));
+            }
+        } else {
+            row.appendChild(h('em', { className: 'gb-menu-slammer-note' }, 'Slammer only (no valid mixer)'));
+        }
+        pairings.appendChild(row);
+    }
+    pairSection.appendChild(pairings);
+    container.appendChild(pairSection);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Rules modal
@@ -2343,137 +2384,74 @@ function openRules() { openModal('gbRulesModal'); }
 function closeRules() { closeModal('gbRulesModal'); }
 
 // ─────────────────────────────────────────────────────────────
-// Sell Cup modal
+// Inline Sell Cup (no modal — auto-detects drink, single click)
 // ─────────────────────────────────────────────────────────────
-function openSellModal(cupIndex, contents, myState) {
-    S.sellCupIndex = cupIndex;
-    clearModalError('gbSellModalError');
-
-    el('gbSellModalDesc').textContent = `Selling Cup ${cupIndex + 1}`;
-
-    // Cup contents display
-    const contentsEl = el('gbSellCupContents');
-    contentsEl.replaceChildren();
-    contents.forEach(ing => contentsEl.appendChild(makeIngredientBadge(ing)));
-
-    // Specials picker
-    const specials = myState.special_ingredients || [];
-    const pickerEl = el('gbSellSpecialsPicker');
-    pickerEl.replaceChildren();
-    const section = el('gbSellSpecialsSection');
-
-    if (specials.length === 0) {
-        section.classList.add('hidden');
-    } else {
-        section.classList.remove('hidden');
-        specials.forEach((s, i) => {
-            const item = document.createElement('button');
-            item.className = `gb-pick-item special`;
-            item.setAttribute('type', 'button');
-            item.setAttribute('role', 'checkbox');
-            item.setAttribute('aria-checked', 'false');
-            item.setAttribute('aria-label', `Declare ${ingredientLabel(s)}`);
-            item.dataset.special = s;
-            item.appendChild(makeIngredientBadge(s));
-            item.onclick = () => {
-                const sel = item.classList.toggle('selected');
-                item.setAttribute('aria-checked', String(sel));
-            };
-            pickerEl.appendChild(item);
-        });
-    }
-
-    openModal('gbSellModal');
-    el('gbSellConfirmBtn').disabled = false;
-}
-
-async function confirmSell() {
-    clearModalError('gbSellModalError');
-    const btn = el('gbSellConfirmBtn');
-    setButtonBusy(btn, true, 'Selling…');
-
-    const declaredSpecials = [];
-    el('gbSellSpecialsPicker').querySelectorAll('.selected').forEach(item => {
-        declaredSpecials.push(item.dataset.special);
-    });
+async function doSellCup(cupIndex, declaredSpecials, btn) {
+    if (btn) setButtonBusy(btn, true, 'Selling\u2026');
+    clearError();
 
     try {
         const resp = await gameAction('sell-cup', {
-            cup_index: S.sellCupIndex,
+            cup_index: cupIndex,
             declared_specials: declaredSpecials,
         });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
-            showModalError('gbSellModalError', d.detail || d.error || 'Cannot sell that cup.');
+            showError(d.detail || d.error || 'Cannot sell that cup.');
         } else {
-            closeSellModal();
             await refreshGame();
             await refreshHistory();
         }
     } catch (e) {
-        if (e.message !== 'Unauthorized') showModalError('gbSellModalError', 'Network error. Please try again.');
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
-        setButtonBusy(btn, false);
+        if (btn) setButtonBusy(btn, false);
     }
 }
 
-function closeSellModal() {
-    closeModal('gbSellModal');
-    S.sellCupIndex = null;
-}
-
 // ─────────────────────────────────────────────────────────────
-// Drink Cup modal
+// Inline Drink Cup (no modal — single click)
 // ─────────────────────────────────────────────────────────────
-function openDrinkModal(cupIndex, contents) {
-    S.drinkCupIndex = cupIndex;
-    clearModalError('gbDrinkModalError');
-
-    el('gbDrinkModalTitle').textContent = `Drink Cup ${cupIndex + 1}`;
-    const ingNames = contents.map(ingredientLabel).join(', ');
-    const spiritCount = contents.filter(i => ingredientKind(i) === 'spirit').length;
-
-    const descEl = el('gbDrinkModalDesc');
-    const warning = spiritCount > 0
-        ? h('span', { className: 'gb-text-warning' }, `Warning: contains ${spiritCount} spirit${spiritCount > 1 ? 's' : ''} — your drunk level will increase by ${spiritCount}!`)
-        : h('span', { className: 'gb-text-safe' }, 'Mixers only — will sober you up.');
-    descEl.replaceChildren(
-        text(`Are you sure you want to drink Cup ${cupIndex + 1}?`),
-        document.createElement('br'),
-        h('strong', null, 'Contents:'), text(` ${ingNames || 'empty'}`),
-        document.createElement('br'),
-        warning
-    );
-
-    openModal('gbDrinkModal');
-    el('gbDrinkConfirmBtn').disabled = false;
-}
-
-async function confirmDrink() {
-    clearModalError('gbDrinkModalError');
-    const btn = el('gbDrinkConfirmBtn');
-    setButtonBusy(btn, true, 'Drinking…');
+async function doDrinkCup(cupIndex, btn) {
+    if (btn) setButtonBusy(btn, true, 'Drinking\u2026');
+    clearError();
 
     try {
-        const resp = await gameAction('drink-cup', { cup_index: S.drinkCupIndex });
+        const resp = await gameAction('drink-cup', { cup_index: cupIndex });
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
-            showModalError('gbDrinkModalError', d.detail || d.error || 'Cannot drink that cup.');
+            showError(d.detail || d.error || 'Cannot drink that cup.');
         } else {
-            closeDrinkModal();
             await refreshGame();
             await refreshHistory();
         }
     } catch (e) {
-        if (e.message !== 'Unauthorized') showModalError('gbDrinkModalError', 'Network error. Please try again.');
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
-        setButtonBusy(btn, false);
+        if (btn) setButtonBusy(btn, false);
     }
 }
 
-function closeDrinkModal() {
-    closeModal('gbDrinkModal');
-    S.drinkCupIndex = null;
+// ─────────────────────────────────────────────────────────────
+// Inline Use Stored Spirit (no modal — direct action)
+// ─────────────────────────────────────────────────────────────
+async function doUseStoredSpirit(cardIndex, cupIndex, btn) {
+    if (btn) setButtonBusy(btn, true, '\u2026');
+    clearError();
+    try {
+        const resp = await gameAction('use-stored-spirit', { store_card_index: cardIndex, cup_index: cupIndex });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.detail || d.error || 'Cannot use stored spirit right now.');
+        } else {
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
+    } finally {
+        if (btn) setButtonBusy(btn, false);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2540,16 +2518,83 @@ async function voteUndo(vote, agreeBtn, disagreeBtn) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Action bar (quick-nav + availability indicators)
+// ─────────────────────────────────────────────────────────────
+function renderActionBar(game, gs, isReplay) {
+    const bar = el('gbActionBar');
+    if (!bar) return;
+    const isMyTurn = !isReplay && S.me && gs.player_turn === S.me.id && game.status === 'STARTED';
+    if (!isMyTurn) {
+        bar.classList.add('hidden');
+        return;
+    }
+    bar.classList.remove('hidden');
+
+    const myState = gs.player_states?.[S.me.id];
+    if (!myState) return;
+
+    const bladder = myState.bladder || [];
+    const specials = myState.special_ingredients || [];
+    const bagCount = (gs.bag_contents || []).length;
+    const displayCount = (gs.open_display || []).length;
+    const totalAvail = bagCount + displayCount;
+    const takeCount = myState.take_count || 3;
+
+    // Take: available if enough ingredients
+    const takeBtn = el('gbActionTake');
+    takeBtn.disabled = totalAvail < takeCount;
+    takeBtn.onclick = () => {
+        document.querySelector('.gb-bar-inline')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    // Sell: available if either cup has a valid drink
+    const sellBtn = el('gbActionSell');
+    const cup0 = (myState.cups?.[0]?.ingredients) || [];
+    const cup1 = (myState.cups?.[1]?.ingredients) || [];
+    const hasDoubler0 = !!(myState.cups?.[0]?.has_cup_doubler);
+    const hasDoubler1 = !!(myState.cups?.[1]?.has_cup_doubler);
+    const canSell = detectBestDrink(cup0, specials, hasDoubler0) || detectBestDrink(cup1, specials, hasDoubler1);
+    sellBtn.disabled = !canSell;
+    sellBtn.onclick = () => {
+        el('gbMyCups')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    // Drink: available if either cup is non-empty
+    const drinkBtn = el('gbActionDrink');
+    drinkBtn.disabled = cup0.length === 0 && cup1.length === 0;
+    drinkBtn.onclick = () => {
+        el('gbMyCups')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    // Wee: always available on your turn
+    const weeBtn = el('gbActionWee');
+    weeBtn.disabled = false;
+    weeBtn.onclick = () => {
+        el('gbBladderWeeRow')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    // Claim: available if any card is affordable
+    const claimBtn = el('gbActionClaim');
+    let canClaim = false;
+    for (const row of (gs.card_rows || [])) {
+        for (const card of (row.cards || [])) {
+            if (canAffordCard(card, bladder, gs)) { canClaim = true; break; }
+        }
+        if (canClaim) break;
+    }
+    claimBtn.disabled = !canClaim;
+    claimBtn.onclick = () => {
+        el('gbCardRows')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Window exports for HTML onclick handlers
 // ─────────────────────────────────────────────────────────────
 Object.assign(window, {
     openMenu, closeMenu, openRules, closeRules,
     switchTab, replayGo, exitReplay,
-    closeTakeModal, takeModalNext,
-    closeSellModal, confirmSell,
-    closeDrinkModal, confirmDrink,
     closeCupDoublerModal, confirmCupDoubler,
-    closeUseStoredSpiritModal, confirmUseStoredSpirit,
     showGameError: showError, clearGameError: clearError,
 });
 

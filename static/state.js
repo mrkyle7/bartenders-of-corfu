@@ -16,15 +16,16 @@ const state = {
     pendingUndo:   null,   // current pending undo request object
     lastKnownTurn: null,   // player_turn UUID from last render (for notification detection)
 
-    // Modal state
-    takeStep:           0,   // 0 = pick, 1 = assign
-    takeDisplaySelected: [], // [{ingredient, source:'display', idx}]
-    takeBagPending:      [], // [{ingredient, source:'pending'}]
-    sellCupIndex:        null,
-    drinkCupIndex:       null,
+    // Modal state (cup doubler still uses modal)
     cupDoublerCard:      null,
     cupDoublerCardEl:    null,
-    currentGs:           null,  // latest rendered game state (for modal use)
+    currentGs:           null,  // latest rendered game state
+
+    // Staging area state (inline take ingredients flow)
+    stagingItems:        [],    // [{ingredient, source:'display'|'pending', idx?, disposition?, cup_index?}]
+    stagingActive:       false, // true when staging area is visible
+    stagingTakeCount:    0,     // total items to take this turn
+    stagingAlreadyTaken: 0,     // items already taken in previous batches
 };
 
 export default state;
