@@ -2073,11 +2073,14 @@ function renderStagingArea() {
     const area = el('gbStagingArea');
     if (!area) return;
 
+    const mat = el('gbMySheet');
     if (!S.stagingActive || S.stagingItems.length === 0) {
         area.classList.add('hidden');
+        if (mat) mat.classList.remove('gb-staging-active');
         return;
     }
     area.classList.remove('hidden');
+    if (mat) mat.classList.add('gb-staging-active');
 
     const batchLimit = S.stagingTakeCount - S.stagingAlreadyTaken;
     el('gbStagingCount').textContent = `${S.stagingItems.length} / ${batchLimit}`;
@@ -2216,6 +2219,8 @@ function closeStaging() {
     S.stagingActive = false;
     const area = el('gbStagingArea');
     if (area) area.classList.add('hidden');
+    const mat = el('gbMySheet');
+    if (mat) mat.classList.remove('gb-staging-active');
 }
 
 // ─────────────────────────────────────────────────────────────

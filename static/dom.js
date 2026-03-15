@@ -38,10 +38,6 @@ export function el(id) {
     return document.getElementById(id);
 }
 
-/** Close all cup action overlays */
-export function closeAllCupOverlays() {
-    document.querySelectorAll('.gb-cup-action-overlay').forEach(o => o.classList.add('hidden'));
-}
 
 export function showError(msg) {
     const bar = el('gbErrorBar');
