@@ -106,5 +106,5 @@ class PlayerState:
             "special_ingredients": self.special_ingredients,
             "karaoke_cards_claimed": self.karaoke_cards_claimed,
             "status": self.status,
-            "cards": self.cards,
+            "cards": [dict(c) for c in self.cards],
         }

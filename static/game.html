@@ -43,6 +43,25 @@
         <!-- ===== PLAYER STATS BAR ===== -->
         <div id="gbPlayerStatsBar" class="gb-player-stats-bar hidden" aria-label="All player stats" aria-live="polite"></div>
 
+        <!-- ===== ACTION BAR (quick-nav, shows available actions) ===== -->
+        <div class="gb-action-bar hidden" id="gbActionBar" role="navigation" aria-label="Available actions">
+            <button class="gb-action-bar-btn" id="gbActionTake" data-action="take" aria-label="Take ingredients from bar">
+                <span class="gb-action-bar-icon">🍸</span><span class="gb-action-bar-label">Take</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionSell" data-action="sell" aria-label="Sell a cup">
+                <span class="gb-action-bar-icon">💰</span><span class="gb-action-bar-label">Sell</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionDrink" data-action="drink" aria-label="Drink a cup">
+                <span class="gb-action-bar-icon">🍺</span><span class="gb-action-bar-label">Drink</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionWee" data-action="wee" aria-label="Go for a wee">
+                <span class="gb-action-bar-icon">🚽</span><span class="gb-action-bar-label">Wee</span>
+            </button>
+            <button class="gb-action-bar-btn" id="gbActionClaim" data-action="claim" aria-label="Claim a card">
+                <span class="gb-action-bar-icon">🃏</span><span class="gb-action-bar-label">Claim</span>
+            </button>
+        </div>
+
         <!-- ===== SCROLLABLE AREA (everything below sticky stats bar) ===== -->
         <div class="gb-scroll-area">
 
@@ -102,6 +121,20 @@
                     <div class="gb-open-display" id="gbOpenDisplay" aria-label="Open ingredient display" role="list"></div>
                 </div>
 
+                <!-- Staging area for ingredient assignment -->
+                <div class="gb-staging-area hidden" id="gbStagingArea" role="region" aria-label="Assign ingredients">
+                    <div class="gb-staging-header">
+                        <span class="gb-staging-title">Assign Ingredients</span>
+                        <span class="gb-staging-count" id="gbStagingCount">0 / 0</span>
+                    </div>
+                    <div class="gb-staging-items" id="gbStagingItems"></div>
+                    <div class="gb-staging-actions">
+                        <button class="gb-staging-btn cancel" id="gbStagingCancel">Cancel</button>
+                        <button class="gb-staging-btn confirm" id="gbStagingSubmit">Submit</button>
+                    </div>
+                    <div id="gbStagingError" class="gb-error-bar gb-modal-error-mt"></div>
+                </div>
+
             </div>
         </section>
 
@@ -126,19 +159,6 @@
                             <div class="gb-bladder-wee-row" id="gbBladderWeeRow" role="group" aria-label="Bladder and wee">
                                 <!-- Bladder slots + wee button rendered by JS -->
                             </div>
-                            <!-- Staging area for ingredient assignment (inline, replaces Take modal) -->
-                            <div class="gb-staging-area hidden" id="gbStagingArea" role="region" aria-label="Assign ingredients">
-                                <div class="gb-staging-header">
-                                    <span class="gb-staging-title">Assign Ingredients</span>
-                                    <span class="gb-staging-count" id="gbStagingCount">0 / 0</span>
-                                </div>
-                                <div class="gb-staging-items" id="gbStagingItems"></div>
-                                <div class="gb-staging-actions">
-                                    <button class="gb-staging-btn cancel" id="gbStagingCancel">Cancel</button>
-                                    <button class="gb-staging-btn confirm" id="gbStagingSubmit">Submit</button>
-                                </div>
-                                <div id="gbStagingError" class="gb-error-bar gb-modal-error-mt"></div>
-                            </div>
                             <div class="gb-cups" id="gbMyCups" role="group" aria-label="My cups"></div>
                             <div class="gb-specials" id="gbMySpecials" aria-label="Special ingredients"></div>
                             <div class="gb-claimed-cards" id="gbMyClaimedCards" aria-label="Claimed cards"></div>
@@ -154,25 +174,6 @@
             <!-- Other players -->
             <div id="gbOthers" class="gb-other-mats" aria-label="Other players"></div>
 
-        </div>
-
-        <!-- ===== ACTION BAR (quick-nav, shows available actions) ===== -->
-        <div class="gb-action-bar hidden" id="gbActionBar" role="navigation" aria-label="Available actions">
-            <button class="gb-action-bar-btn" id="gbActionTake" data-action="take" aria-label="Take ingredients from bar">
-                <span class="gb-action-bar-icon">🍸</span><span class="gb-action-bar-label">Take</span>
-            </button>
-            <button class="gb-action-bar-btn" id="gbActionSell" data-action="sell" aria-label="Sell a cup">
-                <span class="gb-action-bar-icon">💰</span><span class="gb-action-bar-label">Sell</span>
-            </button>
-            <button class="gb-action-bar-btn" id="gbActionDrink" data-action="drink" aria-label="Drink a cup">
-                <span class="gb-action-bar-icon">🍺</span><span class="gb-action-bar-label">Drink</span>
-            </button>
-            <button class="gb-action-bar-btn" id="gbActionWee" data-action="wee" aria-label="Go for a wee">
-                <span class="gb-action-bar-icon">🚽</span><span class="gb-action-bar-label">Wee</span>
-            </button>
-            <button class="gb-action-bar-btn" id="gbActionClaim" data-action="claim" aria-label="Claim a card">
-                <span class="gb-action-bar-icon">🃏</span><span class="gb-action-bar-label">Claim</span>
-            </button>
         </div>
 
         <!-- ===== BOTTOM PANEL (history / replay / undo) ===== -->

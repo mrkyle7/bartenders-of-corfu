@@ -238,13 +238,13 @@ Feature: Game turn actions
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
 
-  Scenario: Karaoke card claim can use stored spirits toward the cost
+  Scenario: Karaoke card claim cannot use stored spirits toward the cost
     Given it is player 1's turn
     And player 1 holds a VODKA store card with 1 stored spirit
     And player 1 has 2 spirits in their bladder
     And a karaoke card is available in row 1
     When player 1 claims that card
-    Then player 1 should have 2 cards
+    Then the action should be rejected with a 400 error
 
   Scenario: CupDoubler doubles points for a non-cocktail sell
     Given it is player 1's turn
@@ -309,14 +309,6 @@ Feature: Game turn actions
     When player 1 goes for a wee
     Then player 1's bladder should be empty
     And player 1's store card should have 2 stored spirits
-
-  Scenario: Stored spirits count toward karaoke cost but are not consumed on claim
-    Given it is player 1's turn
-    And player 1 holds a VODKA store card with 1 stored spirit
-    And player 1 has 2 spirits in their bladder
-    And a karaoke card is available in row 1
-    When player 1 claims that card
-    Then player 1's store card should have 1 stored spirit
 
   # ── Priority 4: Tequila Slammer scoring ──────────────────────────────────────
 

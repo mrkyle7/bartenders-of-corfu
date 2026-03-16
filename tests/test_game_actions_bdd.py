@@ -963,6 +963,14 @@ def player_bladder_empty(ctx, n):
     assert ps["bladder"] == [], f"Expected empty bladder, got {ps['bladder']}"
 
 
+@then(parsers.parse("player {n:d} has {count:d} {kind} in their bladder"))
+def player_bladder_has(ctx, n, count, kind):
+    ps = _player_state(ctx, n)
+    assert len(ps["bladder"]) == count, (
+        f"Expected {count} items in bladder, got {len(ps['bladder'])}"
+    )
+
+
 @then(parsers.parse("player {n:d}'s drunk level should be {level:d}"))
 def player_drunk_level_check(ctx, n, level):
     ps = _player_state(ctx, n)
@@ -1009,6 +1017,18 @@ def row_has_card_count(ctx, row, count):
             assert len(r["cards"]) == count, (
                 f"Row {row}: expected {count} card(s), got {len(r['cards'])}"
             )
+            return
+    pytest.fail(f"Row {row} not found")
+
+
+@then(parsers.parse("a store card is available in row {row:d}"))
+def then_store_card_in_row(ctx, row):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    rows = game["game_state"]["card_rows"]
+    for r in rows:
+        if r["position"] == row:
+            store_cards = [c for c in r["cards"] if c.get("card_type") == "store"]
+            assert len(store_cards) > 0, f"Row {row}: expected a store card, found none"
             return
     pytest.fail(f"Row {row} not found")
 

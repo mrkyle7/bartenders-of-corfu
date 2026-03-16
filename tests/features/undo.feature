@@ -58,3 +58,18 @@ Feature: Undo turn
     And player 1 has proposed to undo the last turn
     When player 2 votes agree on the undo
     Then the undo request should be approved
+  
+  Scenario: Undoing a turn restores the previous game state when claiming a store card
+    Given player 2 has completed a turn
+    And it is player 1's turn
+    And a store card is available in row 2
+    And player 1 has 3 spirits in their bladder
+    When player 1 claims that card
+    Then player 1 should have 1 card
+    And player 1's store card should have 3 stored spirits
+    And player 1's bladder should be empty
+    Given player 1 has proposed to undo the last turn
+    When player 2 votes agree on the undo
+    Then player 1 should have 0 cards
+    And player 1 has 3 spirits in their bladder
+    And a store card is available in row 2

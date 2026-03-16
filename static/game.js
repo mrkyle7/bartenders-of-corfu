@@ -257,7 +257,20 @@ function renderAll(game, replayState = null) {
     // Winner
     const winnerBanner = el('gbWinnerBanner');
     if (gs.winner) {
-        winnerBanner.textContent = `🏆 ${playerName(gs.winner)} wins! Congratulations!`;
+        const ws = gs.player_states ? gs.player_states[gs.winner] : null;
+        let reason = '';
+        if (ws) {
+            if ((ws.points || 0) >= 40) reason = ' (40+ points)';
+            else if ((ws.karaoke_cards_claimed || 0) >= 3) reason = ' (3 karaoke cards)';
+            else {
+                // Last player standing — check if all others are eliminated
+                const others = Object.entries(gs.player_states || {}).filter(([id]) => id !== gs.winner);
+                if (others.length > 0 && others.every(([, ps]) => ps.status === 'hospitalised' || ps.status === 'wet')) {
+                    reason = ' (last one standing)';
+                }
+            }
+        }
+        winnerBanner.textContent = `\uD83C\uDFC6 ${playerName(gs.winner)} wins${reason}! Congratulations!`;
         winnerBanner.classList.add('visible');
     } else {
         winnerBanner.classList.remove('visible');
@@ -288,17 +301,31 @@ function renderAllStats(game, gs) {
         const isMe = S.me && pid === S.me.id;
         const isActive = !gameEnded && gs.player_turn === pid;
 
+        const isEliminated = pState && (pState.status === 'hospitalised' || pState.status === 'wet');
+
         const strip = document.createElement('div');
         strip.className = 'gb-stats-strip' +
             (isActive ? ' active-turn' : '') +
-            (isMe ? ' is-me' : '');
+            (isMe ? ' is-me' : '') +
+            (isEliminated ? ' eliminated' : '');
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'gb-stats-strip-name';
         nameSpan.textContent = playerName(pid);
         strip.appendChild(nameSpan);
 
-        if (isActive) {
+        if (isEliminated) {
+            const tag = document.createElement('span');
+            tag.className = 'gb-stats-strip-elim-tag';
+            if (pState.status === 'hospitalised') {
+                tag.textContent = '\uD83C\uDFE5 HOSPITALISED';
+                tag.title = 'Drunk level exceeded 5 — eliminated!';
+            } else {
+                tag.textContent = '\uD83D\uDCA6 WET';
+                tag.title = 'Bladder overflowed — eliminated!';
+            }
+            strip.appendChild(tag);
+        } else if (isActive) {
             const tag = document.createElement('span');
             tag.className = 'gb-stats-strip-turn-tag';
             tag.textContent = isMe ? 'YOUR TURN' : 'THEIR TURN';
@@ -905,8 +932,7 @@ function renderBladderWeeRow(myState, isMyTurn, game, gs) {
         tile.setAttribute('aria-label', `Go for a wee \u2014 empties bladder, sobers up 1 level (${toiletTokens} tokens left)`);
         tile.append(
             h('span', { className: 'gb-wee-icon' }, '\uD83D\uDEBD'),
-            h('span', { className: 'gb-wee-label' }, 'Wee'),
-            h('span', { className: 'gb-wee-tokens' }, `${toiletTokens}\uD83E\uDEAA`)
+            h('span', { className: 'gb-wee-label' }, 'Wee')
         );
         tile.onclick = () => doWee(tile);
         tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
@@ -969,7 +995,7 @@ function renderClaimedCards(myState, isMyTurn, isReplay) {
             div.appendChild(headerSpan);
 
             // Show required ingredient type as a token badge
-            if (c.spirit_type) {
+            if (c.spirit_type && cardType !== 'store') {
                 div.appendChild(document.createTextNode(' '));
                 div.appendChild(makeIngredientBadge(c.spirit_type));
             } else if (c.mixer_type) {
@@ -977,7 +1003,7 @@ function renderClaimedCards(myState, isMyTurn, isReplay) {
                 div.appendChild(makeIngredientBadge(c.mixer_type));
             }
 
-            // Store card: show stored ingredients as tokens
+            // Store card: show stored ingredients as clickable tokens
             if (c.stored_spirits && c.stored_spirits.length > 0) {
                 const stored = document.createElement('div');
                 stored.className = 'gb-card-stored';
@@ -985,39 +1011,24 @@ function renderClaimedCards(myState, isMyTurn, isReplay) {
                 storedLabel.className = 'gb-card-stored-label';
                 storedLabel.textContent = 'Stored: ';
                 stored.appendChild(storedLabel);
+
+                const canInteract = isMyTurn && !isReplay && cardType === 'store';
+
                 c.stored_spirits.forEach(s => {
-                    stored.appendChild(makeIngredientBadge(s));
+                    const badge = makeIngredientBadge(s);
+                    if (canInteract) {
+                        badge.classList.add('gb-stored-clickable');
+                        badge.setAttribute('role', 'button');
+                        badge.setAttribute('tabindex', '0');
+                        badge.setAttribute('aria-label', `Use stored ${ingredientLabel(s)} — click for options`);
+                        badge.onclick = (e) => {
+                            e.stopPropagation();
+                            toggleStoredActions(div, cardIndex, c);
+                        };
+                    }
+                    stored.appendChild(badge);
                 });
                 div.appendChild(stored);
-
-                // Store card actions — inline Cup 1/Cup 2/Drink buttons (no modal)
-                if (isMyTurn && !isReplay && cardType === 'store') {
-                    const actions = document.createElement('div');
-                    actions.className = 'gb-store-card-actions';
-
-                    const cup1Btn = document.createElement('button');
-                    cup1Btn.className = 'gb-store-action-btn use';
-                    cup1Btn.textContent = '\u2192 Cup 1';
-                    cup1Btn.setAttribute('aria-label', `Add stored ${ingredientLabel(c.spirit_type)} to Cup 1`);
-                    cup1Btn.onclick = (e) => { e.stopPropagation(); doUseStoredSpirit(cardIndex, 0, cup1Btn); };
-                    actions.appendChild(cup1Btn);
-
-                    const cup2Btn = document.createElement('button');
-                    cup2Btn.className = 'gb-store-action-btn use';
-                    cup2Btn.textContent = '\u2192 Cup 2';
-                    cup2Btn.setAttribute('aria-label', `Add stored ${ingredientLabel(c.spirit_type)} to Cup 2`);
-                    cup2Btn.onclick = (e) => { e.stopPropagation(); doUseStoredSpirit(cardIndex, 1, cup2Btn); };
-                    actions.appendChild(cup2Btn);
-
-                    const drinkBtn = document.createElement('button');
-                    drinkBtn.className = 'gb-store-action-btn drink';
-                    drinkBtn.textContent = 'Drink';
-                    drinkBtn.setAttribute('aria-label', `Drink a stored ${ingredientLabel(c.spirit_type)} spirit`);
-                    drinkBtn.onclick = (e) => { e.stopPropagation(); doDrinkStoredSpirit(cardIndex, c); };
-                    actions.appendChild(drinkBtn);
-
-                    div.appendChild(actions);
-                }
             }
             claimedEl.appendChild(div);
         });
@@ -1130,14 +1141,39 @@ function renderMyCups(myState, isMyTurn, game, gs) {
             if (contents.length > 0) {
                 const drinkBtn = document.createElement('button');
                 drinkBtn.className = 'gb-cup-action-btn drink';
-                const spiritCount = contents.filter(i => ingredientKind(i) === 'spirit').length;
-                if (spiritCount > 0) {
-                    drinkBtn.innerHTML = `\uD83C\uDF7A Drink <span class="gb-cup-warning">+${spiritCount} drunk</span>`;
+                const spirits = contents.filter(i => ingredientKind(i) === 'spirit');
+                const mixers = contents.filter(i => ingredientKind(i) === 'mixer');
+                // Refresher cards make their mixer type always -1, even with spirits
+                const refresherMixerTypes = new Set(
+                    (myState.cards || [])
+                        .filter(c => c.card_type === 'refresher' && c.mixer_type)
+                        .map(c => c.mixer_type.toUpperCase())
+                );
+                const hotMixers = mixers.filter(m => refresherMixerTypes.has(m.toUpperCase()));
+                const plainMixers = mixers.filter(m => !refresherMixerTypes.has(m.toUpperCase()));
+                // delta = spirits - hotMixers; plainMixers only subtract when no spirits
+                let delta = spirits.length - hotMixers.length;
+                if (spirits.length === 0) delta -= plainMixers.length;
+                if (delta > 0) {
+                    drinkBtn.innerHTML = `\uD83C\uDF7A Drink <span class="gb-cup-warning">+${delta} drunk</span>`;
+                } else if (delta < 0) {
+                    drinkBtn.textContent = `\uD83C\uDF7A Drink (${delta} drunk)`;
                 } else {
-                    drinkBtn.textContent = '\uD83C\uDF7A Drink (sobers)';
+                    drinkBtn.textContent = '\uD83C\uDF7A Drink (0 drunk)';
+                }
+                // Check if drinking would overflow bladder (wet elimination)
+                const newBladderSize = (myState.bladder || []).length + contents.length;
+                const bladderCap = myState.bladder_capacity || 8;
+                if (newBladderSize > bladderCap) {
+                    drinkBtn.innerHTML += ' <span class="gb-cup-warning">\u26A0 WET!</span>';
                 }
                 drinkBtn.setAttribute('aria-label', `Drink cup ${index + 1}`);
-                drinkBtn.onclick = () => doDrinkCup(index, drinkBtn);
+                drinkBtn.onclick = () => {
+                    if (newBladderSize > bladderCap) {
+                        if (!confirm(`Drinking this cup will overflow your bladder (${newBladderSize}/${bladderCap}) and eliminate you! Are you sure?`)) return;
+                    }
+                    doDrinkCup(index, drinkBtn);
+                };
                 actions.appendChild(drinkBtn);
             }
 
@@ -1531,7 +1567,7 @@ function formatAction(move) {
         case 'sell_cup':         return `Sold cup ${(a.cup_index ?? '') + 1}`;
         case 'drink_cup':        return `Drank cup ${(a.cup_index ?? '') + 1}`;
         case 'go_for_a_wee':    return 'Went for a wee';
-        case 'claim_card':       return 'Claimed a card';
+        case 'claim_card':       return `Claimed ${a.card_name || 'a card'}`;
         case 'refresh_card_row': return `Refreshed row ${a.row_position ?? ''}`;
         case 'undo':             return `Undo (turn ${(a.target_turn_number ?? 0) + 1})`;
         case 'draw_from_bag':    return 'Drew from bag';
@@ -1633,14 +1669,17 @@ function _detailGoForAWee(a) {
 }
 
 function _detailClaimCard(a) {
+    const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42' };
+    const typeLabels = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' };
+    const icon = typeIcons[a.card_type] || '';
+    const typeLabel = typeLabels[a.card_type] || a.card_type || '';
+    const cardName = a.card_name || 'Unknown';
     const row = a.row_position ?? '?';
-    const content = document.createDocumentFragment();
-    content.appendChild(text(String(row)));
-    if (a.is_karaoke) {
-        content.appendChild(text(' '));
-        content.appendChild(h('span', { className: 'gb-karaoke-badge' }, '\uD83C\uDFA4 Karaoke'));
-    }
-    return _frag(_detailRow('Row:', content));
+    return _frag(
+        _detailRow('Card:', text(`${icon} ${cardName}`)),
+        _detailRow('Type:', text(typeLabel)),
+        _detailRow('Row:', text(String(row)))
+    );
 }
 
 function _detailRefreshCardRow(a) {
@@ -1983,6 +2022,43 @@ async function doRefreshRow(rowPosition, btn) {
     }
 }
 
+function toggleStoredActions(cardDiv, cardIndex, card) {
+    // If actions already shown, toggle off
+    const existing = cardDiv.querySelector('.gb-store-card-actions');
+    if (existing) {
+        existing.remove();
+        return;
+    }
+    // Close any other open store actions
+    document.querySelectorAll('.gb-store-card-actions').forEach(el => el.remove());
+
+    const actions = document.createElement('div');
+    actions.className = 'gb-store-card-actions';
+
+    const cup1Btn = document.createElement('button');
+    cup1Btn.className = 'gb-store-action-btn use';
+    cup1Btn.textContent = '\u2192 Cup 1';
+    cup1Btn.setAttribute('aria-label', `Add stored ${ingredientLabel(card.spirit_type)} to Cup 1`);
+    cup1Btn.onclick = (e) => { e.stopPropagation(); doUseStoredSpirit(cardIndex, 0, cup1Btn); };
+    actions.appendChild(cup1Btn);
+
+    const cup2Btn = document.createElement('button');
+    cup2Btn.className = 'gb-store-action-btn use';
+    cup2Btn.textContent = '\u2192 Cup 2';
+    cup2Btn.setAttribute('aria-label', `Add stored ${ingredientLabel(card.spirit_type)} to Cup 2`);
+    cup2Btn.onclick = (e) => { e.stopPropagation(); doUseStoredSpirit(cardIndex, 1, cup2Btn); };
+    actions.appendChild(cup2Btn);
+
+    const drinkBtn = document.createElement('button');
+    drinkBtn.className = 'gb-store-action-btn drink';
+    drinkBtn.textContent = 'Drink';
+    drinkBtn.setAttribute('aria-label', `Drink a stored ${ingredientLabel(card.spirit_type)} spirit`);
+    drinkBtn.onclick = (e) => { e.stopPropagation(); doDrinkStoredSpirit(cardIndex, card); };
+    actions.appendChild(drinkBtn);
+
+    cardDiv.appendChild(actions);
+}
+
 async function doDrinkStoredSpirit(cardIndex, card) {
     const spiritLabel = ingredientLabel(card.spirit_type);
     const storedCount = (card.stored_spirits || []).length;
@@ -2164,6 +2240,11 @@ function renderStagingArea() {
     // Wire up submit/cancel
     const submitBtn = el('gbStagingSubmit');
     const cancelBtn = el('gbStagingCancel');
+
+    // Hide cancel when all items are bag-drawn (can't cancel those)
+    const hasBag = S.stagingItems.some(s => s.source === 'pending');
+    const hasDisplay = S.stagingItems.some(s => s.source === 'display');
+    cancelBtn.classList.toggle('hidden', hasBag && !hasDisplay);
 
     // Can submit only if all items have an assignment
     const allAssigned = S.stagingItems.every(item => item.disposition !== null);

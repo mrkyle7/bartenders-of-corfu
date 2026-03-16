@@ -38,7 +38,7 @@ variant StoreCard : Card {
     -- cost: 1 bladder spirit of this card's spirit_type
     -- worth 1 point when claimed
     -- on claim: player can choose any number of spirits of spirit_type from bladder and move to this card
-    -- stored spirits may be spent when selling a cup or may be drunk at any time (would increade drunk level as normal)
+    -- stored spirits may be moved to a cup or drunk at any time. Drinking would increase drunk level as normal
     -- stored spirits are consumed when spent (not reusable)
     -- stored spirits are unaffected by GoForAWee
 }
@@ -193,7 +193,6 @@ rule ClaimCard {
         available_of(player, card.spirit_type) >= 3
     requires card.kind = Store:
         player.bladder where spirit_type = card.spirit_type has count >= 1
-        -- must use bladder only; cannot spend from a same-type StoreCard to claim this
     requires card.kind = Refresher:
         player.bladder where mixer_type = card.mixer_type has count >= 2
     requires card.kind = CupDoubler:
@@ -205,7 +204,7 @@ rule ClaimCard {
         ensures: player.points = player.points + config.karaoke_card_points
         ensures: player.karaoke_cards_claimed = player.karaoke_cards_claimed + 1
     if card.kind = Store:
-        -- Transfer ALL matching spirits from bladder to stored_spirits (the card effect, not cost)
+        -- The player chooses any number of matching spirits from bladder to stored_spirits (the card effect, not cost). Must transfer at least 1.
         let transferred = player.bladder where spirit_type = card.spirit_type
         ensures: player.bladder = player.bladder - transferred
         ensures: card.stored_spirits = transferred

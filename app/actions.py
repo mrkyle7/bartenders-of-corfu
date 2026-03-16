@@ -64,15 +64,9 @@ def _mixer_ingredient(mixer_type: str) -> Ingredient:
 
 
 def _available_spirits(ps: "PlayerState", spirit_type: str) -> int:
-    """Count spirits available from bladder + matching store cards."""
+    """Count spirits available from bladder."""
     spirit_ing = _spirit_ingredient(spirit_type)
     count = sum(1 for i in ps.bladder if i == spirit_ing)
-    for card_dict in ps.cards:
-        if (
-            card_dict.get("card_type") == "store"
-            and card_dict.get("spirit_type") == spirit_type.upper()
-        ):
-            count += len(card_dict.get("stored_spirits", []))
     return count
 
 
@@ -108,7 +102,10 @@ def _consume_spirits(ps: "PlayerState", spirit_type: str, count: int) -> None:
 
 def _deep_copy_state(gs: GameState) -> GameState:
     """Return a deep copy of the game state so actions are free of side effects."""
-    return GameState.from_dict(gs.to_dict())
+    import copy
+
+    d = copy.deepcopy(gs.to_dict())
+    return GameState.from_dict(d)
 
 
 def _require_turn(gs: GameState, player_id: UUID):
@@ -736,6 +733,7 @@ def claim_card(
 
     payload = {
         "card_id": card_id,
+        "card_name": target_card.name,
         "card_type": card_type,
         "is_karaoke": target_card.is_karaoke,
         "row_position": target_row.position,
