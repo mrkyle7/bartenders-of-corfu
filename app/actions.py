@@ -589,6 +589,9 @@ def go_for_a_wee(
     _require_active(ps)
     _require_no_take_in_progress(gs)
 
+    if not ps.bladder:
+        raise GameException("Cannot go for a wee with an empty bladder", status_code=409)
+
     excreted = list(ps.bladder)
     # Return bladder contents to the bag
     gs.bag_contents.extend(excreted)

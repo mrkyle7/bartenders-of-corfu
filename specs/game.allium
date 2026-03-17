@@ -290,6 +290,7 @@ rule GoForAWee {
     when: GoForAWee(player)
     requires: player.status = active
     requires: it is player's turn
+    requires: player.bladder is not empty
     -- Bladder ingredients (including those from DrinkCup) are returned to the bag.
     let excreted = player.bladder
     ensures: player.bladder = []
@@ -302,7 +303,6 @@ rule GoForAWee {
     if player.toilet_tokens > 0:
         ensures: player.toilet_tokens = player.toilet_tokens - 1
         ensures: player.bladder_capacity = player.bladder_capacity - 1
-    -- Permitted even when bladder is empty.
 }
 
 rule ClaimCard {
@@ -551,6 +551,7 @@ surface PlayerTurn {
         GoForAWee(player)
             when state.status = active
             and board.player_turn = player.id
+            and state.bladder is not empty
         ClaimCard(player, card)
             when state.status = active
             and board.player_turn = player.id

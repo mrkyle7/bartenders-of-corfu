@@ -340,16 +340,15 @@ Feature: Game turn actions
   Scenario: bladder_capacity does not go below the minimum of 4
     Given it is player 1's turn
     And player 1 has used all toilet tokens
+    And player 1 has 1 ingredients in their bladder
     When player 1 goes for a wee
     Then player 1's bladder capacity should be 4
 
-  Scenario: GoForAWee is permitted with an empty bladder
+  Scenario: GoForAWee is rejected with an empty bladder
     Given it is player 1's turn
     And player 1 has a drunk level of 2
     When player 1 goes for a wee
-    Then player 1's bladder should be empty
-    And player 1's drunk level should be 1
-    And player 1's toilet tokens should decrease by 1
+    Then the action should be rejected with a 409 error
 
   Scenario: TakeIngredients is rejected when bag and display have fewer than take_count ingredients
     Given it is player 1's turn
