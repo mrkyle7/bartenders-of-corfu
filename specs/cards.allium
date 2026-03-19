@@ -6,13 +6,14 @@
 --   RefreshCardRow    — row 1 cannot be refreshed; removed cards go to discard
 --   ReplaceCard       — superseded by ReplaceCardSlot (deck → discard fallback)
 --   ApplyDrunkModifier — Refresher cards modify drunk calculation
---   SellCup           — CupDoubler cards modify points calculation
+--   SellCup           — CupDoubler and Specialist cards modify points calculation
 --
--- Deck composition (16 cards total):
---   5 × KaraokeCard   (one per spirit type)
---   5 × StoreCard     (one per spirit type)
---   4 × RefresherCard (one per mixer type)
---   2 × CupDoublerCard (Bendy Straw, Cocktail Umbrella)
+-- Deck composition (21 cards total):
+--   5 × KaraokeCard     (one per spirit type)
+--   5 × StoreCard       (one per spirit type)
+--   4 × RefresherCard   (one per mixer type)
+--   2 × CupDoublerCard  (Bendy Straw, Cocktail Umbrella)
+--   5 × SpecialistCard  (one per spirit type)
 
 use "./game.allium" as game
 
@@ -21,7 +22,7 @@ use "./game.allium" as game
 
 entity Card {
     id: String
-    kind: Karaoke | Store | Refresher | CupDoubler
+    kind: Karaoke | Store | Refresher | CupDoubler | Specialist
 }
 
 variant KaraokeCard : Card {
@@ -60,6 +61,17 @@ variant CupDoublerCard : Card {
     --           double points for all non-cocktail drinks for the rest of the game
 }
 
+variant SpecialistCard : Card {
+    spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
+    name: String
+    -- cost: 2 bladder spirits of this card's spirit_type
+    -- worth 2 points when claimed
+    -- ongoing: all non-cocktail drinks containing this spirit_type score +2 bonus points
+    -- the specialist bonus is applied after cup doubler doubling:
+    --   final = (base * cup_doubler_multiplier) + specialist_bonus
+    -- cocktails are exempt from the specialist bonus (same exclusion as cup doubler)
+}
+
 -- ─── Ingredient requirements ─────────────────────────────────────────────────
 -- Extends game/IngredientRequirement.
 -- spirit_type / mixer_type are set when a specific subtype is required;
@@ -94,6 +106,12 @@ default RefresherCard cranberry_refresher = { mixer_type: CRANBERRY, name: "Cran
 default CupDoublerCard bendy_straw       = { name: "Bendy Straw" }
 default CupDoublerCard cocktail_umbrella = { name: "Cocktail Umbrella" }
 
+default SpecialistCard rum_specialist     = { spirit_type: RUM,     name: "Rum Specialist" }
+default SpecialistCard gin_specialist     = { spirit_type: GIN,     name: "Gin Specialist" }
+default SpecialistCard tequila_specialist = { spirit_type: TEQUILA, name: "Tequila Specialist" }
+default SpecialistCard vodka_specialist   = { spirit_type: VODKA,   name: "Vodka Specialist" }
+default SpecialistCard whisky_specialist  = { spirit_type: WHISKEY, name: "Whisky Specialist" }
+
 -- ─── Config ───────────────────────────────────────────────────────────────────
 
 config {
@@ -101,6 +119,8 @@ config {
     store_card_points:      Integer = 1
     refresher_card_points:  Integer = 1
     cup_doubler_card_points: Integer = 2
+    specialist_card_points:  Integer = 2
+    specialist_sell_bonus:   Integer = 2    -- added to non-cocktail drink score per matching specialist
 }
 
 -- ─── Cup amendment ────────────────────────────────────────────────────────────
@@ -114,6 +134,7 @@ amendment game/Cup {
 
 rule SellCup {
     -- Supersedes game/SellCup for the points calculation only.
+    -- Points calculation order: base → cup doubler doubling → specialist bonus.
     when: SellCup(player, cup, declared_specials)
     requires: player.status = active
     requires: it is player's turn
@@ -122,7 +143,14 @@ rule SellCup {
     requires: (cup, declared_specials) is a valid sellable drink
     let base_points = drink_points(cup, declared_specials)
     let is_cocktail = (cup, declared_specials) matches a named cocktail recipe
-    let points = base_points * 2 when cup.has_cup_doubler and not is_cocktail, else base_points
+    let doubled_points = base_points * 2 when cup.has_cup_doubler and not is_cocktail, else base_points
+    -- Specialist bonus: for each spirit type in the cup, if the player holds a SpecialistCard
+    -- for that spirit type, add config.specialist_sell_bonus. Cocktails are exempt.
+    let specialist_spirit_types = { card.spirit_type for card in player.cards where kind = Specialist }
+    let cup_spirit_types = { s.spirit_type for s in cup.spirits }
+    let matching_specialist_count = (specialist_spirit_types ∩ cup_spirit_types).count
+    let specialist_bonus = matching_specialist_count * config.specialist_sell_bonus when not is_cocktail, else 0
+    let points = doubled_points + specialist_bonus
     ensures: player.points = player.points + points
     ensures: player.special_ingredients = player.special_ingredients - declared_specials
     let sold_ingredients = cup.ingredients (before sale)
@@ -130,6 +158,7 @@ rule SellCup {
     ensures: board.bag_contents = board.bag_contents + sold_ingredients + declared_specials
     ensures: CheckVictory(player)
     -- has_cup_doubler is NOT cleared after sale; the effect is permanent.
+    -- specialist bonus is NOT cleared after sale; the effect is permanent.
 }
 
 -- ─── Discard pile ─────────────────────────────────────────────────────────────
@@ -141,20 +170,20 @@ entity DiscardPile {
 
 -- ─── Setup ────────────────────────────────────────────────────────────────────
 -- 3 random karaoke cards are placed in row 1 (the top row).
--- The remaining 13 cards (2 karaoke + 11 non-karaoke) are shuffled together;
--- 3 are dealt to row 2, 3 to row 3, and the remaining 7 form the draw deck.
+-- The remaining 18 cards (2 karaoke + 16 non-karaoke) are shuffled together;
+-- 3 are dealt to row 2, 3 to row 3, and the remaining 12 form the draw deck.
 
 rule SetupCardRows {
     when: GameStarted()
     let all_karaoke  = deck where kind = Karaoke          -- exactly 5 cards
     let karaoke_row_cards = random 3 from all_karaoke
-    let remaining_13 = shuffle(deck - karaoke_row_cards)  -- 2 karaoke + 11 others
-    let row2_cards   = first 3 from remaining_13
-    let row3_cards   = next 3 from remaining_13 (after row2_cards)
+    let remaining_18 = shuffle(deck - karaoke_row_cards)  -- 2 karaoke + 16 others
+    let row2_cards   = first 3 from remaining_18
+    let row3_cards   = next 3 from remaining_18 (after row2_cards)
     ensures: game/CardRow.created(position: 1, cards: karaoke_row_cards)
     ensures: game/CardRow.created(position: 2, cards: row2_cards)
     ensures: game/CardRow.created(position: 3, cards: row3_cards)
-    ensures: deck = remaining_13 - row2_cards - row3_cards   -- 7 cards remain
+    ensures: deck = remaining_18 - row2_cards - row3_cards   -- 12 cards remain
     ensures: DiscardPile.created(board: board, cards: [])
 }
 
@@ -198,6 +227,8 @@ rule ClaimCard {
     requires card.kind = CupDoubler:
         player.bladder has 3 or more spirits all of the same spirit_type
         -- player declares spent_type at claim time
+    requires card.kind = Specialist:
+        player.bladder where spirit_type = card.spirit_type has count >= 2
     -- Costs are threshold checks only; no bladder ingredients are consumed on claim.
     -- Apply per-type effects.
     if card.kind = Karaoke:
@@ -215,6 +246,8 @@ rule ClaimCard {
         -- cup is an additional parameter declared alongside the ClaimCard action
         ensures: cup.has_cup_doubler = true
         ensures: player.points = player.points + config.cup_doubler_card_points
+    if card.kind = Specialist:
+        ensures: player.points = player.points + config.specialist_card_points
     ensures: player.cards = player.cards + [card]
     ensures: card removed from its CardRow
     ensures: ReplaceCardSlot(board, card's row)
@@ -278,3 +311,7 @@ guarantee: all cards removed from rows 2 or 3 (any kind) go to the discard pile
 guarantee: stored spirits on a StoreCard are unaffected by GoForAWee
 guarantee: stored spirits are consumed (removed from the card) when spent on an action
 guarantee: ReplaceCardSlot is called exactly once per vacated slot
+guarantee: the Specialist sell bonus applies only to non-cocktail scoring categories (3–5 in game.allium)
+guarantee: the Specialist sell bonus is applied after cup doubler doubling: final = doubled_points + specialist_bonus
+guarantee: multiple specialist cards stack: a cup with 2 matching spirit types adds the bonus for each
+guarantee: specialist card effect is permanent; it is never cleared after claiming

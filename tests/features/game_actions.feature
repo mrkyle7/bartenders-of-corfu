@@ -156,6 +156,7 @@ Feature: Game turn actions
 
   Scenario: Last player standing wins when opponent is hospitalised
     Given it is player 1's turn
+    And player 1 has 1 ingredients in their bladder
     And player 2 has a drunk level of 5
     And player 2's cup 0 contains 1 WHISKEY and 1 COLA
     When player 1 goes for a wee
@@ -165,6 +166,7 @@ Feature: Game turn actions
 
   Scenario: Last player standing wins when opponent's bladder overflows
     Given it is player 1's turn
+    And player 1 has 1 ingredients in their bladder
     And player 2 has 8 ingredients in their bladder
     And player 2's cup 0 contains 1 COLA and 1 SODA
     When player 1 goes for a wee
@@ -373,6 +375,7 @@ Feature: Game turn actions
 
   Scenario: Player 2 is eliminated when drunk and bladder limits are both exceeded simultaneously
     Given it is player 1's turn
+    And player 1 has 1 ingredients in their bladder
     And player 2 has a drunk level of 5
     And player 2 has 8 ingredients in their bladder
     And player 2's cup 0 contains 1 WHISKEY and 1 COLA

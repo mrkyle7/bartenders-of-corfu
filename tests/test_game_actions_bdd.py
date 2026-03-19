@@ -148,13 +148,14 @@ def started_game_no_moves():
 
 @given(parsers.parse("player {n:d} has completed a turn"), target_fixture="ctx")
 def player_completed_turn(ctx, n):
-    """Player n goes for a wee as a simple completed turn."""
+    """Player n takes ingredients from the bag as a simple completed turn."""
     token, _ = _player(ctx, n)
-    resp = _client.post(
-        f"/v1/games/{ctx['game_id']}/actions/go-for-a-wee",
-        cookies=_auth(token),
-    )
-    assert resp.status_code == 200, resp.text
+    game = _get_game(token, ctx["game_id"])
+    _, pid = _player(ctx, n)
+    take_count = game["game_state"]["player_states"][pid]["take_count"]
+    draw_resp, take_resp = _draw_and_assign(token, ctx["game_id"], take_count, "drink")
+    assert draw_resp.status_code == 200, draw_resp.text
+    assert take_resp.status_code == 200, take_resp.text
     return ctx
 
 
@@ -1110,20 +1111,20 @@ def state_unchanged(ctx):
     )
 
 
-@then("the history should contain 1 move")
-def history_has_1_move(ctx):
+@then("the history should contain 2 moves")
+def history_has_2_moves(ctx):
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     moves = ctx["last_resp"].json()["moves"]
-    assert len(moves) == 1, f"Expected 1 move, got {len(moves)}"
+    assert len(moves) == 2, f"Expected 2 moves, got {len(moves)}"
 
 
-@then("the move should record the action type and player")
-def move_has_action_and_player(ctx):
+@then("the moves should record the action type and player")
+def moves_have_action_and_player(ctx):
     moves = ctx["last_resp"].json()["moves"]
-    move = moves[0]
-    assert "action" in move
-    assert "type" in move["action"]
-    assert "player_id" in move
+    for move in moves:
+        assert "action" in move
+        assert "type" in move["action"]
+        assert "player_id" in move
 
 
 @then("the returned state should be the initial game state")

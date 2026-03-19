@@ -52,13 +52,19 @@ def _take_full_turn(base_url, game_id, jwt, cup_index=0):
     )
 
 
-def _active_jwt(base_url, game_id, new_user, other_user_and_jwt):
-    """Return the JWT of whichever player currently holds the turn."""
+def _active_and_other_jwt(base_url, game_id, new_user, other_user_and_jwt):
+    """Return (active_jwt, other_jwt) based on whose turn it is."""
     game = _api_get(base_url, f"/v1/games/{game_id}", new_user["jwt"])
     turn_id = game["game_state"]["player_turn"]
     if turn_id == new_user["user"]["id"]:
-        return new_user["jwt"]
-    return other_user_and_jwt["jwt"]
+        return new_user["jwt"], other_user_and_jwt["jwt"]
+    return other_user_and_jwt["jwt"], new_user["jwt"]
+
+
+def _active_jwt(base_url, game_id, new_user, other_user_and_jwt):
+    """Return the JWT of whichever player currently holds the turn."""
+    active, _ = _active_and_other_jwt(base_url, game_id, new_user, other_user_and_jwt)
+    return active
 
 
 def _wait_for_history_entry(page, timeout=8000):
@@ -162,9 +168,33 @@ def test_wee_detail_shows_flushed_label(
     """Expanding a go_for_a_wee entry shows 'Flushed:' or empty-bladder text."""
     _start_game(base_url, new_user["jwt"], other_user_and_jwt["jwt"], new_game)
 
-    # Use whichever player is active so the action is guaranteed to succeed.
-    jwt = _active_jwt(base_url, new_game, new_user, other_user_and_jwt)
-    _api_post(base_url, f"/v1/games/{new_game}/actions/go-for-a-wee", jwt)
+    # GoForAWee requires a non-empty bladder.  Fill it by taking ingredients
+    # with disposition "drink" (puts them straight in the bladder), let the
+    # other player take a turn, then wee.
+    active, other = _active_and_other_jwt(
+        base_url, new_game, new_user, other_user_and_jwt
+    )
+    # Active player drinks ingredients → bladder fills, turn ends
+    _api_post(
+        base_url,
+        f"/v1/games/{new_game}/actions/draw-from-bag",
+        active,
+        {"count": 3},
+    )
+    _api_post(
+        base_url,
+        f"/v1/games/{new_game}/actions/take-ingredients",
+        active,
+        {
+            "assignments": [
+                {"source": "pending", "disposition": "drink"} for _ in range(3)
+            ]
+        },
+    )
+    # Other player takes a turn → back to active player
+    _take_full_turn(base_url, new_game, other)
+    # Now active player can go for a wee
+    _api_post(base_url, f"/v1/games/{new_game}/actions/go-for-a-wee", active)
 
     page.goto(_game_url(base_url, new_game))
     _wait_for_history_entry(page)

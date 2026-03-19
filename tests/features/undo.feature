@@ -41,8 +41,8 @@ Feature: Undo turn
 
   Scenario: Move history is available after actions
     When player 1 fetches the move history
-    Then the history should contain 1 move
-    And the move should record the action type and player
+    Then the history should contain 2 moves
+    And the moves should record the action type and player
 
   Scenario: Game state can be replayed to any turn
     When player 1 requests the state at turn 0

@@ -138,7 +138,7 @@ The more you wee, the quicker you will need to wee next time: you broke the seal
 
 Note: the smallest size your bladder can be is four. Once all four toilet tokens have been placed your bladder size stays at four, but you may still go for a wee as many times as you like.
 
-Note 2: You are allowed to "go for a wee" if you have nothing in your bladder... Just some time by yourself in the toilet to clear your head a bit!
+Note 2: you can only go for a wee if you have ingredients in your bladder
 
 ### Claim a card
 
