@@ -24,7 +24,7 @@ class IngredientRequirement:
 @dataclass
 class Card:
     id: str  # UUID as string
-    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler"
+    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler" | "specialist"
     name: str = ""
     spirit_type: str | None = None  # "WHISKEY" | "RUM" | "VODKA" | "GIN" | "TEQUILA"
     mixer_type: str | None = None  # "COLA" | "SODA" | "TONIC" | "CRANBERRY"
@@ -45,6 +45,8 @@ class Card:
             return [IngredientRequirement(kind="mixer", count=2)]
         elif self.card_type == "cup_doubler":
             return [IngredientRequirement(kind="spirit", count=3)]
+        elif self.card_type == "specialist":
+            return [IngredientRequirement(kind="spirit", count=2)]
         return []
 
     def to_dict(self) -> dict:
@@ -93,10 +95,11 @@ class CardRow:
 
 
 def build_deck() -> list[Card]:
-    """Build the 16-card deck per cards.allium spec (unshuffled).
+    """Build the 21-card deck per cards.allium spec (unshuffled).
 
     5 KaraokeCards (one per spirit), 5 StoreCards (one per spirit),
-    4 RefresherCards (one per mixer), 2 CupDoublerCards.
+    4 RefresherCards (one per mixer), 2 CupDoublerCards,
+    5 SpecialistCards (one per spirit).
     """
     cards: list[Card] = []
 
@@ -141,6 +144,18 @@ def build_deck() -> list[Card]:
         Card(id=str(uuid4()), card_type="cup_doubler", name="Cocktail Umbrella")
     )
 
+    # 5 SpecialistCards — one per spirit type
+    for name, spirit in [
+        ("Rum Specialist", "RUM"),
+        ("Gin Specialist", "GIN"),
+        ("Tequila Specialist", "TEQUILA"),
+        ("Vodka Specialist", "VODKA"),
+        ("Whisky Specialist", "WHISKEY"),
+    ]:
+        cards.append(
+            Card(id=str(uuid4()), card_type="specialist", name=name, spirit_type=spirit)
+        )
+
     return cards
 
 
@@ -157,13 +172,13 @@ def deal_initial_rows(deck: list[Card]) -> tuple[list[CardRow], list[Card]]:
     row1_cards = random.sample(karaoke_cards, 3)
     remaining_karaoke = [c for c in karaoke_cards if c not in row1_cards]
 
-    # Shuffle remaining 13 (2 karaoke + 11 others)
-    remaining_13 = remaining_karaoke + non_karaoke
-    random.shuffle(remaining_13)
+    # Shuffle remaining (2 karaoke + non-karaoke others)
+    remaining_all = remaining_karaoke + non_karaoke
+    random.shuffle(remaining_all)
 
-    row2_cards = remaining_13[:3]
-    row3_cards = remaining_13[3:6]
-    remaining_deck = remaining_13[6:]  # 7 cards
+    row2_cards = remaining_all[:3]
+    row3_cards = remaining_all[3:6]
+    remaining_deck = remaining_all[6:]
 
     rows = [
         CardRow(position=1, cards=row1_cards),

@@ -513,8 +513,22 @@ def sell_cup(
         )
 
     # CupDoubler doubling: non-cocktail drinks from a bendy-straw cup score double
-    if cup.has_cup_doubler and not is_cocktail(cup.ingredients, declared_specials):
+    cocktail = is_cocktail(cup.ingredients, declared_specials)
+    if cup.has_cup_doubler and not cocktail:
         pts *= 2
+
+    # Specialist bonus: +2 per matching spirit type, non-cocktails only, after doubling
+    if not cocktail:
+        specialist_spirit_types = {
+            cd.get("spirit_type")
+            for cd in ps.cards
+            if cd.get("card_type") == "specialist" and cd.get("spirit_type")
+        }
+        cup_spirit_types = {
+            i.name for i in cup.ingredients if i in _SPIRITS
+        }
+        matching = specialist_spirit_types & cup_spirit_types
+        pts += len(matching) * 2
 
     sold_ingredients = list(cup.ingredients)
     # Return sold ingredients + declared specials to the bag
@@ -698,6 +712,18 @@ def claim_card(
                 status_code=400,
             )
 
+    elif card_type == "specialist":
+        if target_card.spirit_type is None:
+            raise GameException("Specialist card has no spirit type", status_code=500)
+        # Spec: bladder only, threshold check, requires 2 matching spirits
+        spirit_ing = _spirit_ingredient(target_card.spirit_type)
+        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
+        if bladder_count < 2:
+            raise GameException(
+                f"Need 2 {target_card.spirit_type} spirits in bladder; have {bladder_count}",
+                status_code=400,
+            )
+
     # Remove card from row
     target_row.cards.remove(target_card)
 
@@ -724,6 +750,10 @@ def claim_card(
     elif card_type == "cup_doubler":
         cup = ps.cups[cup_index]
         cup.has_cup_doubler = True
+        ps.cards.append(target_card.to_dict())
+        ps.points += 2
+
+    elif card_type == "specialist":
         ps.cards.append(target_card.to_dict())
         ps.points += 2
 

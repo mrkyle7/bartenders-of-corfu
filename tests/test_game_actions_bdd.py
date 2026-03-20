@@ -1166,11 +1166,11 @@ def row1_all_karaoke(ctx):
     )
 
 
-@then("the deck should have 7 cards remaining")
-def deck_has_7_cards(ctx):
+@then("the deck should have 12 cards remaining")
+def deck_has_12_cards(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
     deck_size = game["game_state"]["deck_size"]
-    assert deck_size == 7, f"Expected deck_size 7, got {deck_size}"
+    assert deck_size == 12, f"Expected deck_size 12, got {deck_size}"
 
 
 @then(parsers.parse("player {n:d}'s bladder capacity should be {capacity:d}"))
@@ -1297,3 +1297,72 @@ def still_players_turn(ctx, n):
 @then("the action should succeed")
 def action_should_succeed(ctx):
     assert ctx["last_status"] == 200, f"Expected 200 but got {ctx['last_status']}"
+
+
+# ── Specialist Card steps ────────────────────────────────────────────────
+
+
+@given(
+    parsers.parse("a specialist card for {spirit_type} is available in row {row:d}"),
+    target_fixture="available_card_id",
+)
+def specialist_card_in_row(ctx, spirit_type, row):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    new_card_id = str(_uuid.uuid4())
+
+    def patch(gs):
+        for r in gs.card_rows:
+            if r.position == row:
+                new_card = _Card(
+                    id=new_card_id,
+                    card_type="specialist",
+                    name=f"{spirit_type} Specialist",
+                    spirit_type=spirit_type.upper(),
+                )
+                if r.cards:
+                    r.cards[0] = new_card
+                else:
+                    r.cards.append(new_card)
+                break
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+    ctx["target_card_id"] = new_card_id
+    return new_card_id
+
+
+@given(parsers.parse("player {n:d}'s bladder has {count:d} {spirit_type} spirits"))
+@given(parsers.parse("player {n:d}'s bladder has {count:d} {spirit_type} spirit"))
+def player_has_specific_spirits(ctx, n, count, spirit_type):
+    _, pid = _player(ctx, n)
+    ing = Ingredient[spirit_type.upper()]
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.bladder = [ing] * count
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given(parsers.parse("player {n:d} holds a {spirit_type} specialist card"))
+def player_holds_specialist_card(ctx, n, spirit_type):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    _, pid = _player(ctx, n)
+    card = _Card(
+        id=str(_uuid.uuid4()),
+        card_type="specialist",
+        name=f"{spirit_type} Specialist",
+        spirit_type=spirit_type.upper(),
+    )
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.cards.append(card.to_dict())
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
