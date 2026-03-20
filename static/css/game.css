@@ -3511,3 +3511,255 @@
         font-size: 0.75rem;
     }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   DRINK COMBINATIONS QUICK-REFERENCE (collapsible panel)
+   ══════════════════════════════════════════════════════════════ */
+
+.gb-drink-combos {
+    margin-top: 8px;
+}
+
+/* Toggle header */
+.gb-combos-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid rgba(212, 160, 23, 0.3);
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(74, 44, 14, 0.15), rgba(106, 58, 15, 0.1));
+    color: var(--color-brown-medium, #6b3a0f);
+    font-family: Georgia, serif;
+    font-size: 0.82em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    text-align: left;
+}
+
+.gb-combos-toggle:hover {
+    background: linear-gradient(135deg, rgba(74, 44, 14, 0.25), rgba(106, 58, 15, 0.18));
+    border-color: rgba(212, 160, 23, 0.5);
+}
+
+.gb-combos-toggle:focus {
+    outline: 2px solid var(--color-gold, #d4a017);
+    outline-offset: 2px;
+}
+
+.gb-combos-icon {
+    font-size: 1.1em;
+}
+
+.gb-combos-arrow {
+    margin-left: auto;
+    font-size: 0.9em;
+    color: var(--color-gold-dark, #b8860b);
+    transition: transform 0.2s;
+}
+
+/* Collapsible body */
+.gb-combos-body {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid rgba(212, 160, 23, 0.2);
+    border-radius: 8px;
+    background: rgba(247, 231, 206, 0.35);
+    animation: combosSlideIn 0.15s ease-out;
+}
+
+@keyframes combosSlideIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Pairing matrix ───────────────────────────────────────── */
+.gb-combos-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.76em;
+    margin-bottom: 4px;
+}
+
+.gb-combos-matrix th,
+.gb-combos-matrix td {
+    padding: 3px 4px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.gb-combos-corner {
+    width: 72px;
+}
+
+.gb-combos-mixer-hdr {
+    font-weight: 600;
+    font-size: 0.88em;
+    color: var(--color-brown-medium, #6b3a0f);
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.gb-combos-spirit-hdr {
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-brown-dark, #4a2c0e);
+    white-space: nowrap;
+    padding-right: 8px;
+}
+
+.gb-combos-pts-hdr {
+    font-weight: 600;
+    font-size: 0.82em;
+    color: var(--color-brown-light, #8a5c2e);
+    white-space: nowrap;
+}
+
+.gb-combos-pts-cell {
+    font-size: 0.82em;
+    color: var(--color-brown-light, #8a5c2e);
+    white-space: nowrap;
+}
+
+.gb-combos-cell {
+    min-width: 28px;
+}
+
+.gb-combos-valid .gb-combos-dot {
+    color: var(--color-gold, #d4a017);
+    font-size: 1.2em;
+    text-shadow: 0 0 4px rgba(212, 160, 23, 0.5);
+}
+
+.gb-combos-slammer {
+    font-size: 0.82em;
+    color: var(--color-brown-medium, #6b3a0f);
+    font-style: italic;
+    text-align: center;
+    padding: 3px 6px;
+    border-left: 2px dashed rgba(212, 160, 23, 0.3);
+}
+
+/* Points legend */
+.gb-combos-legend {
+    font-size: 0.72em;
+    color: var(--color-brown-light, #8a5c2e);
+    text-align: center;
+    padding: 2px 0 6px;
+    border-bottom: 1px solid rgba(212, 160, 23, 0.15);
+    margin-bottom: 6px;
+}
+
+/* ── Cocktail section ──────────────────────────────────────── */
+.gb-combos-section-title {
+    font-size: 0.76em;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-brown-medium, #6b3a0f);
+    margin-bottom: 4px;
+}
+
+.gb-combos-cocktails {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.gb-combos-cocktail-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(212, 160, 23, 0.08);
+    flex-wrap: wrap;
+}
+
+.gb-combos-cocktail-row:last-child {
+    border-bottom: none;
+}
+
+.gb-combos-cocktail-name {
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--color-brown-dark, #4a2c0e);
+    min-width: 100px;
+    flex-shrink: 0;
+}
+
+.gb-combos-cocktail-pts {
+    font-size: 0.72em;
+    font-weight: 900;
+    color: var(--color-gold-dark, #b8860b);
+    min-width: 36px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.gb-combos-cocktail-ings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    flex: 1;
+}
+
+.gb-combos-ing {
+    font-size: 0.85em;
+    line-height: 1;
+}
+
+.gb-combos-ing.spirit {
+    filter: none;
+}
+
+.gb-combos-ing.mixer {
+    opacity: 0.85;
+}
+
+.gb-combos-ing.special {
+    opacity: 0.75;
+}
+
+/* ── Mobile adjustments ────────────────────────────────────── */
+@media (max-width: 480px) {
+    .gb-combos-toggle {
+        font-size: 0.76em;
+        padding: 5px 8px;
+    }
+
+    .gb-combos-body {
+        padding: 6px 6px;
+    }
+
+    .gb-combos-matrix {
+        font-size: 0.68em;
+    }
+
+    .gb-combos-mixer-hdr {
+        font-size: 0.8em;
+    }
+
+    .gb-combos-corner {
+        width: 56px;
+    }
+
+    .gb-combos-cocktail-name {
+        min-width: 80px;
+        font-size: 0.72em;
+    }
+
+    .gb-combos-cocktail-pts {
+        font-size: 0.66em;
+        min-width: 30px;
+    }
+
+    .gb-combos-cocktail-ings {
+        gap: 1px;
+    }
+
+    .gb-combos-ing {
+        font-size: 0.78em;
+    }
+}

@@ -819,6 +819,9 @@ function renderMySheet(game, gs, myState, isReplay) {
     // Cups
     renderMyCups(myState, isMyTurn && !isReplay, game, gs);
 
+    // Drink combinations quick-reference (rendered once, then toggled)
+    renderDrinkCombinations();
+
     // Special ingredients — only show section if non-empty
     const specialsEl = el('gbMySpecials');
     specialsEl.replaceChildren();
@@ -1182,6 +1185,157 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 
         cupsEl.appendChild(cupEl);
     });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Drink Combinations quick-reference (collapsible)
+// ─────────────────────────────────────────────────────────────
+let _drinkCombosExpanded = false;
+let _drinkCombosRendered = false;
+
+function renderDrinkCombinations() {
+    const root = el('gbDrinkCombos');
+    if (!root) return;
+
+    // Only build once — toggle visibility thereafter
+    if (_drinkCombosRendered) return;
+    _drinkCombosRendered = true;
+
+    root.replaceChildren();
+
+    const pairings = getValidPairings();
+    const recipes = getCocktailRecipes();
+
+    const spiritOrder = ['VODKA', 'WHISKEY', 'RUM', 'GIN', 'TEQUILA'];
+    const mixerOrder = ['COLA', 'SODA', 'TONIC', 'CRANBERRY'];
+    const spiritLabels = { VODKA: 'Vodka', WHISKEY: 'Whiskey', RUM: 'Rum', GIN: 'Gin', TEQUILA: 'Tequila' };
+    const mixerLabels = { COLA: 'Cola', SODA: 'Soda', TONIC: 'Tonic', CRANBERRY: 'Cran' };
+
+    // --- Header (toggle) ---
+    const header = h('button', {
+        className: 'gb-combos-toggle',
+        'aria-expanded': 'false',
+        'aria-controls': 'gbCombosBody',
+    });
+    const arrow = h('span', { className: 'gb-combos-arrow', 'aria-hidden': 'true', textContent: '\u25B8' });
+    header.append(
+        h('span', { className: 'gb-combos-icon', 'aria-hidden': 'true', textContent: '\uD83C\uDF79' }),
+        h('span', { textContent: ' Drink Guide ' }),
+        arrow
+    );
+
+    // --- Body (hidden by default) ---
+    const body = h('div', { className: 'gb-combos-body', id: 'gbCombosBody' });
+    body.hidden = true;
+
+    header.onclick = () => {
+        _drinkCombosExpanded = !_drinkCombosExpanded;
+        body.hidden = !_drinkCombosExpanded;
+        arrow.textContent = _drinkCombosExpanded ? '\u25BE' : '\u25B8';
+        header.setAttribute('aria-expanded', String(_drinkCombosExpanded));
+    };
+
+    // --- Pairing matrix ---
+    const table = h('table', { className: 'gb-combos-matrix', 'aria-label': 'Spirit and mixer pairings' });
+
+    // Header row
+    const thead = h('thead');
+    const headRow = h('tr');
+    headRow.appendChild(h('th', { className: 'gb-combos-corner' })); // empty corner
+    mixerOrder.forEach(m => {
+        const icon = ingredientIcon(m);
+        headRow.appendChild(h('th', {
+            className: 'gb-combos-mixer-hdr',
+            'aria-label': mixerLabels[m],
+        }, h('span', { 'aria-hidden': 'true', textContent: icon }), h('br'), mixerLabels[m]));
+    });
+    // Points column
+    headRow.appendChild(h('th', { className: 'gb-combos-pts-hdr', textContent: 'Pts' }));
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    // Spirit rows
+    const tbody = h('tbody');
+    spiritOrder.forEach(sp => {
+        const tr = h('tr');
+        const icon = ingredientIcon(sp);
+        tr.appendChild(h('th', {
+            className: 'gb-combos-spirit-hdr',
+            'aria-label': spiritLabels[sp],
+        }, h('span', { 'aria-hidden': 'true', textContent: icon }), ' ', spiritLabels[sp]));
+
+        if (sp === 'TEQUILA') {
+            // Tequila gets a special merged cell
+            const td = h('td', {
+                className: 'gb-combos-slammer',
+                colSpan: String(mixerOrder.length),
+                'aria-label': 'Tequila Slammer: 2 Tequila for 3 points',
+            }, 'Slammer: 2\u00D7', h('span', { 'aria-hidden': 'true', textContent: '\uD83C\uDF35' }), ' = 3pts');
+            tr.appendChild(td);
+            tr.appendChild(h('td', { className: 'gb-combos-pts-cell', textContent: '1/3' }));
+        } else {
+            const validSet = pairings[sp] || new Set();
+            mixerOrder.forEach(mx => {
+                const valid = validSet.has(mx);
+                const td = h('td', {
+                    className: valid ? 'gb-combos-cell gb-combos-valid' : 'gb-combos-cell',
+                    'aria-label': valid ? `${spiritLabels[sp]} pairs with ${mixerLabels[mx]}` : `No pairing`,
+                });
+                if (valid) {
+                    td.appendChild(h('span', { className: 'gb-combos-dot', 'aria-hidden': 'true', textContent: '\u25CF' }));
+                }
+                tr.appendChild(td);
+            });
+            tr.appendChild(h('td', { className: 'gb-combos-pts-cell', textContent: '1/3' }));
+        }
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    body.appendChild(table);
+
+    // Points legend
+    body.appendChild(h('div', { className: 'gb-combos-legend' },
+        'Single = 1pt, Double (2\u00D7 same spirit) = 3pts'
+    ));
+
+    // --- Cocktail recipes ---
+    const cocktailTitle = h('div', { className: 'gb-combos-section-title', textContent: 'Cocktails' });
+    body.appendChild(cocktailTitle);
+
+    const cocktailList = h('div', { className: 'gb-combos-cocktails' });
+    recipes.forEach(r => {
+        const row = h('div', { className: 'gb-combos-cocktail-row' });
+
+        // Name + points
+        const nameSpan = h('span', { className: 'gb-combos-cocktail-name' },
+            r.name);
+        const ptsSpan = h('span', { className: 'gb-combos-cocktail-pts', textContent: `${r.points}pts` });
+        row.appendChild(nameSpan);
+        row.appendChild(ptsSpan);
+
+        // Ingredients
+        const ings = h('span', { className: 'gb-combos-cocktail-ings' });
+        // Spirits
+        for (const [sp, count] of Object.entries(r.spirits)) {
+            const label = count > 1 ? `${count}\u00D7` : '';
+            ings.appendChild(h('span', { className: 'gb-combos-ing spirit', textContent: `${label}${ingredientIcon(sp)}` }));
+        }
+        // Mixers
+        for (const [mx, count] of Object.entries(r.mixers)) {
+            const label = count > 1 ? `${count}\u00D7` : '';
+            ings.appendChild(h('span', { className: 'gb-combos-ing mixer', textContent: `${label}${ingredientIcon(mx)}` }));
+        }
+        // Specials
+        r.specials.forEach(sp => {
+            ings.appendChild(h('span', { className: 'gb-combos-ing special', textContent: ingredientIcon(sp) }));
+        });
+        row.appendChild(ings);
+        cocktailList.appendChild(row);
+    });
+    body.appendChild(cocktailList);
+
+    root.appendChild(header);
+    root.appendChild(body);
 }
 
 function renderActionButtons(isMyTurn, myState, game, gs) {
