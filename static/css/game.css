@@ -3340,6 +3340,46 @@
     background: rgba(233, 30, 99, 0.2);
 }
 
+.gb-claimable-btn.store {
+    border-color: rgba(22, 163, 74, 0.4);
+    color: #16a34a;
+    background: rgba(22, 163, 74, 0.08);
+}
+
+.gb-claimable-btn.store:hover {
+    background: rgba(22, 163, 74, 0.2);
+}
+
+.gb-claimable-btn.refresher {
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.gb-claimable-btn.refresher:hover {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.gb-claimable-btn.cup_doubler {
+    border-color: rgba(217, 119, 6, 0.4);
+    color: #d97706;
+    background: rgba(217, 119, 6, 0.08);
+}
+
+.gb-claimable-btn.cup_doubler:hover {
+    background: rgba(217, 119, 6, 0.2);
+}
+
+.gb-claimable-btn.specialist {
+    border-color: rgba(220, 38, 38, 0.4);
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.gb-claimable-btn.specialist:hover {
+    background: rgba(220, 38, 38, 0.2);
+}
+
 /* ══════════════════════════════════════════════════════════════
    WEE TOKENS INDICATOR
    ══════════════════════════════════════════════════════════════ */

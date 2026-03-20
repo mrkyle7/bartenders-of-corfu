@@ -967,7 +967,7 @@ function renderBladderWeeRow(myState, isMyTurn, game, gs) {
             cardList.className = 'gb-claimable-list';
             claimable.forEach(card => {
                 const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
-                const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42' };
+                const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42', specialist: '\u2B50' };
                 const btn = document.createElement('button');
                 btn.className = `gb-claimable-btn ${cardType}`;
                 btn.textContent = `${typeIcons[cardType] || ''} ${card.name || cardType}`;
