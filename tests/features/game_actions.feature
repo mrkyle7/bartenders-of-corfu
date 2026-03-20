@@ -300,7 +300,7 @@ Feature: Game turn actions
     And all cards in row 1 should be karaoke type
     And row 2 should have 3 cards
     And row 3 should have 3 cards
-    And the deck should have 7 cards remaining
+    And the deck should have 12 cards remaining
 
   # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────
 
@@ -460,3 +460,117 @@ Feature: Game turn actions
     When player 1 uses a stored spirit from card 0 into cup 0
     Then player 1's cup 0 should contain 3 ingredients
     And it should still be player 1's turn
+
+  # ── Specialist Card: Claiming ──────────────────────────────────────────────
+
+  Scenario: Claiming a specialist card awards 2 points
+    Given it is player 1's turn
+    And a specialist card for VODKA is available in row 2
+    And player 1's bladder has 2 VODKA spirits
+    When player 1 claims that card
+    Then player 1 should have 2 points
+    And player 1 should have 1 card
+    And a move record should be created for the game
+
+  Scenario: Claiming a specialist card does not consume bladder spirits
+    Given it is player 1's turn
+    And a specialist card for VODKA is available in row 2
+    And player 1's bladder has 2 VODKA spirits
+    When player 1 claims that card
+    Then player 1's bladder should contain 2 ingredients
+
+  Scenario: Cannot claim specialist card with fewer than 2 matching bladder spirits
+    Given it is player 1's turn
+    And a specialist card for VODKA is available in row 2
+    And player 1's bladder has 1 VODKA spirit
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  Scenario: Cannot claim specialist card with 0 matching bladder spirits
+    Given it is player 1's turn
+    And a specialist card for VODKA is available in row 2
+    And player 1 has 0 spirits in their bladder
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  Scenario: Cannot claim specialist card using stored spirits from a store card
+    Given it is player 1's turn
+    And player 1 holds a VODKA store card with 3 stored spirits
+    And a specialist card for VODKA is available in row 2
+    And player 1 has 0 spirits in their bladder
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  Scenario: Cannot claim specialist card with wrong spirit type in bladder
+    Given it is player 1's turn
+    And a specialist card for VODKA is available in row 2
+    And player 1's bladder has 3 GIN spirits
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  # ── Specialist Card: Sell Bonus ────────────────────────────────────────────
+
+  Scenario: Specialist bonus adds 2 points to non-cocktail sell with matching spirit
+    Given it is player 1's turn
+    And player 1 holds a VODKA specialist card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 3 points
+
+  Scenario: Specialist bonus does not apply to cocktail sells
+    Given it is player 1's turn
+    And player 1 holds a RUM specialist card
+    And player 1's cup 0 contains 2 RUM and 1 SODA
+    And player 1 has "sugar" on their player mat
+    When player 1 sells cup 0 declaring specials "sugar"
+    Then player 1 should have 10 points
+
+  Scenario: Specialist bonus does not apply when spirit type does not match
+    Given it is player 1's turn
+    And player 1 holds a GIN specialist card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 1 point
+
+  Scenario: Specialist bonus on double-spirit drink with matching specialist
+    Given it is player 1's turn
+    And player 1 holds a WHISKEY specialist card
+    And player 1's cup 0 contains 2 WHISKEY and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 5 points
+
+  Scenario: Specialist bonus applies after cup doubler doubling
+    Given it is player 1's turn
+    And player 1 holds a VODKA specialist card
+    And player 1's cup 0 has the cup doubler effect
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 4 points
+
+  Scenario: Specialist bonus is zero for cocktail even with cup doubler
+    Given it is player 1's turn
+    And player 1 holds a RUM specialist card
+    And player 1's cup 0 has the cup doubler effect
+    And player 1's cup 0 contains 2 RUM and 1 SODA
+    And player 1 has "sugar" on their player mat
+    When player 1 sells cup 0 declaring specials "sugar"
+    Then player 1 should have 10 points
+
+  Scenario: Specialist bonus on Tequila Slammer
+    Given it is player 1's turn
+    And player 1 holds a TEQUILA specialist card
+    And player 1's cup 0 contains 2 TEQUILA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 5 points
+
+  Scenario: Specialist card effect is permanent across multiple sells
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a VODKA specialist card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    And player 1's cup 1 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 3 points
+    When player 2 takes 3 ingredients from the bag
+    And player 1 sells cup 1 with no declared specials
+    Then player 1 should have 6 points
