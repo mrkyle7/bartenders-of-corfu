@@ -663,7 +663,7 @@ function buildCardElement(card, bladder, canClaim, gs) {
     const cardEl = document.createElement('div');
     cardEl.className = `gb-card ${cardType}` + (affordable ? ' claimable' : '');
     cardEl.setAttribute('role', affordable ? 'button' : 'article');
-    const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
+    const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' }[cardType] || cardType;
     const costDesc = _cardCostDesc(card);
     cardEl.setAttribute('aria-label', `${card.name || typeLabel}. ${costDesc}`);
     if (affordable) {
@@ -678,7 +678,7 @@ function buildCardElement(card, bladder, canClaim, gs) {
 
     const ptsEl = document.createElement('span');
     ptsEl.className = 'gb-card-pts';
-    const cardPts = { karaoke: 5, store: 1, refresher: 1, cup_doubler: 2 }[cardType] ?? 0;
+    const cardPts = { karaoke: 5, store: 1, refresher: 1, cup_doubler: 2, specialist: 2 }[cardType] ?? 0;
     ptsEl.textContent = `${cardPts} pt${cardPts !== 1 ? 's' : ''}`;
     header.appendChild(ptsEl);
 
@@ -716,6 +716,7 @@ function buildCardElement(card, bladder, canClaim, gs) {
         store: 'Stores spirits for later use',
         refresher: 'Mixer always sobers, even with spirits',
         cup_doubler: 'Doubles non-cocktail cup points',
+        specialist: '+2 pts on non-cocktail sells with this spirit',
     };
     descEl.textContent = descTexts[cardType] || '';
     cardEl.appendChild(descEl);
@@ -731,6 +732,7 @@ function _cardCostDesc(card) {
     if (cardType === 'store') return `Cost: 1 ${spirit}`;
     if (cardType === 'refresher') return `Cost: 2 ${mixer}`;
     if (cardType === 'cup_doubler') return 'Cost: 3 of same spirit';
+    if (cardType === 'specialist') return `Cost: 2 ${spirit}`;
     return '';
 }
 
@@ -766,6 +768,11 @@ function canAffordCard(card, bladder, gs) {
             if (bladderCountOf(spirit) >= 3) return true;
         }
         return false;
+    }
+    if (cardType === 'specialist') {
+        // Spec: bladder only, 2 matching spirits
+        if (!card.spirit_type) return false;
+        return bladderCountOf(card.spirit_type) >= 2;
     }
     return false;
 }
@@ -986,14 +993,14 @@ function renderClaimedCards(myState, isMyTurn, isReplay) {
         claimedEl.appendChild(claimedTitle);
         cards.forEach((c, cardIndex) => {
             const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
-            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
+            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' }[cardType] || cardType;
             const div = document.createElement('div');
             div.className = `gb-claimed-card ${cardType}`;
 
             // Card type icon + name (no ID)
             const headerSpan = document.createElement('span');
             headerSpan.className = 'gb-claimed-card-header';
-            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂' };
+            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂', specialist: '⭐' };
             headerSpan.textContent = `${typeIcons[cardType] || ''} ${typeLabel}: ${c.name || typeLabel}`;
             div.appendChild(headerSpan);
 
@@ -1516,8 +1523,8 @@ function buildOtherSheet(pid, pState, gs) {
         body.appendChild(claimedTitle);
         cards.forEach(c => {
             const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
-            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' }[cardType] || cardType;
-            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂' };
+            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' }[cardType] || cardType;
+            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂', specialist: '⭐' };
             const cardEl = document.createElement('div');
             cardEl.className = `gb-claimed-card ${cardType}`;
 
@@ -1823,8 +1830,8 @@ function _detailGoForAWee(a) {
 }
 
 function _detailClaimCard(a) {
-    const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42' };
-    const typeLabels = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler' };
+    const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42', specialist: '\u2B50' };
+    const typeLabels = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' };
     const icon = typeIcons[a.card_type] || '';
     const typeLabel = typeLabels[a.card_type] || a.card_type || '';
     const cardName = a.card_name || 'Unknown';
