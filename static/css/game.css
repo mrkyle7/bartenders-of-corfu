@@ -575,6 +575,12 @@
     box-shadow: 0 3px 6px rgba(150,110,0,0.22), 0 1px 2px rgba(150,110,0,0.15), inset 0 1px 0 rgba(255,255,255,0.7);
 }
 
+.gb-card.specialist {
+    border-color: rgba(220,38,38,0.55);
+    background: linear-gradient(160deg, #fff8f6, #ffe8e0);
+    box-shadow: 0 3px 6px rgba(180,40,30,0.18), 0 1px 2px rgba(180,40,30,0.12), inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
 /* Type badge — top-right pill showing card kind */
 .gb-card-type-badge {
     position: absolute;
@@ -595,6 +601,7 @@
 .gb-card.store     .gb-card-type-badge { background: linear-gradient(135deg, #16a34a, #15803d); box-shadow: 0 1px 3px rgba(20,100,40,0.4); }
 .gb-card.refresher .gb-card-type-badge { background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 1px 3px rgba(30,70,200,0.4); }
 .gb-card.cup_doubler .gb-card-type-badge { background: linear-gradient(135deg, #d97706, #b45309); box-shadow: 0 1px 3px rgba(150,90,0,0.4); }
+.gb-card.specialist .gb-card-type-badge { background: linear-gradient(135deg, #dc2626, #b91c1c); box-shadow: 0 1px 3px rgba(180,30,30,0.4); }
 
 /* Spirit/mixer sub-label under the card name */
 .gb-card-sub {
@@ -984,6 +991,12 @@
     border-color: var(--color-purple);
     background: #fdf4ff;
     color: #6b21a8;
+}
+
+.gb-claimed-card.specialist {
+    border-color: #dc2626;
+    background: #fff5f3;
+    color: #991b1b;
 }
 
 .gb-store-card-actions {
@@ -2289,12 +2302,14 @@
 .gb-card.store      .gb-card-art { color: #15803d; }
 .gb-card.refresher  .gb-card-art { color: #1d4ed8; }
 .gb-card.cup_doubler .gb-card-art { color: #b45309; }
+.gb-card.specialist  .gb-card-art { color: #b91c1c; }
 
 /* Coloured left accent border per type (playing card feel) */
 .gb-card.karaoke    { border-left: 3px solid var(--color-purple); }
 .gb-card.store      { border-left: 3px solid #16a34a; }
 .gb-card.refresher  { border-left: 3px solid #3b82f6; }
 .gb-card.cup_doubler { border-left: 3px solid #d97706; }
+.gb-card.specialist  { border-left: 3px solid #dc2626; }
 
 /* ============================================================
    BAR INLINE LAYOUT — bag to left of open display
@@ -3323,6 +3338,46 @@
 
 .gb-claimable-btn.karaoke:hover {
     background: rgba(233, 30, 99, 0.2);
+}
+
+.gb-claimable-btn.store {
+    border-color: rgba(22, 163, 74, 0.4);
+    color: #16a34a;
+    background: rgba(22, 163, 74, 0.08);
+}
+
+.gb-claimable-btn.store:hover {
+    background: rgba(22, 163, 74, 0.2);
+}
+
+.gb-claimable-btn.refresher {
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.gb-claimable-btn.refresher:hover {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.gb-claimable-btn.cup_doubler {
+    border-color: rgba(217, 119, 6, 0.4);
+    color: #d97706;
+    background: rgba(217, 119, 6, 0.08);
+}
+
+.gb-claimable-btn.cup_doubler:hover {
+    background: rgba(217, 119, 6, 0.2);
+}
+
+.gb-claimable-btn.specialist {
+    border-color: rgba(220, 38, 38, 0.4);
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.gb-claimable-btn.specialist:hover {
+    background: rgba(220, 38, 38, 0.2);
 }
 
 /* ══════════════════════════════════════════════════════════════
