@@ -1095,6 +1095,9 @@ function renderMyCups(myState, isMyTurn, game, gs) {
     cupsEl.replaceChildren();
 
     const specials = myState.special_ingredients || [];
+    const specialistSpiritTypes = (myState.cards || [])
+        .filter(c => c.card_type === 'specialist' && c.spirit_type)
+        .map(c => c.spirit_type);
     const cupData = [
         { index: 0, contents: (myState.cups?.[0]?.ingredients) || [], hasDoubler: !!(myState.cups?.[0]?.has_cup_doubler) },
         { index: 1, contents: (myState.cups?.[1]?.ingredients) || [], hasDoubler: !!(myState.cups?.[1]?.has_cup_doubler) },
@@ -1137,7 +1140,7 @@ function renderMyCups(myState, isMyTurn, game, gs) {
             actions.className = 'gb-cup-inline-actions';
 
             // Auto-detect best drink for this cup
-            const drink = detectBestDrink(contents, specials, hasDoubler);
+            const drink = detectBestDrink(contents, specials, hasDoubler, specialistSpiritTypes);
 
             if (drink) {
                 const sellBtn = document.createElement('button');
@@ -2800,7 +2803,10 @@ function renderActionBar(game, gs, isReplay) {
     const cup1 = (myState.cups?.[1]?.ingredients) || [];
     const hasDoubler0 = !!(myState.cups?.[0]?.has_cup_doubler);
     const hasDoubler1 = !!(myState.cups?.[1]?.has_cup_doubler);
-    const canSell = detectBestDrink(cup0, specials, hasDoubler0) || detectBestDrink(cup1, specials, hasDoubler1);
+    const specSpiritTypes = (myState.cards || [])
+        .filter(c => c.card_type === 'specialist' && c.spirit_type)
+        .map(c => c.spirit_type);
+    const canSell = detectBestDrink(cup0, specials, hasDoubler0, specSpiritTypes) || detectBestDrink(cup1, specials, hasDoubler1, specSpiritTypes);
     sellBtn.disabled = !canSell;
     sellBtn.onclick = () => {
         el('gbMyCups')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
