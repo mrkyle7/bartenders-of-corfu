@@ -105,9 +105,10 @@ function countsEqual(a, b) {
  * @param {string[]} cupIngredients - ingredients in the cup
  * @param {string[]} availableSpecials - specials on player mat
  * @param {boolean} hasCupDoubler - whether this cup has a doubler
+ * @param {string[]} specialistSpiritTypes - spirit types from claimed specialist cards
  * @returns {{ name: string, points: number, declaredSpecials: string[] } | null}
  */
-export function detectBestDrink(cupIngredients, availableSpecials, hasCupDoubler = false) {
+export function detectBestDrink(cupIngredients, availableSpecials, hasCupDoubler = false, specialistSpiritTypes = []) {
     if (!cupIngredients || cupIngredients.length === 0) return null;
 
     const cupSpirits = cupIngredients.filter(i => SPIRITS_SET.has(i.toUpperCase())).map(i => i.toUpperCase());
@@ -115,6 +116,14 @@ export function detectBestDrink(cupIngredients, availableSpecials, hasCupDoubler
     const spiritCounts = countItems(cupSpirits);
     const mixerCounts = countItems(cupMixers);
     const specialCounts = countItems(availableSpecials || []);
+
+    // Specialist bonus: +2 per matching spirit type (non-cocktails only, after doubling)
+    const specSet = new Set((specialistSpiritTypes || []).map(s => s.toUpperCase()));
+    const cupSpiritTypes = new Set(cupSpirits);
+    let specialistBonus = 0;
+    for (const st of cupSpiritTypes) {
+        if (specSet.has(st)) specialistBonus += 2;
+    }
 
     // 1. Check cocktails (best points first — Long Island first, then 10-pointers)
     for (const recipe of COCKTAIL_RECIPES) {
@@ -144,9 +153,10 @@ export function detectBestDrink(cupIngredients, availableSpecials, hasCupDoubler
     if (cupSpirits.length === 2 && cupMixers.length === 0 &&
         spiritCounts['TEQUILA'] === 2 && Object.keys(spiritCounts).length === 1) {
         const base = 3;
+        const pts = (hasCupDoubler ? base * 2 : base) + specialistBonus;
         return {
             name: 'Tequila Slammer',
-            points: hasCupDoubler ? base * 2 : base,
+            points: pts,
             declaredSpecials: [],
         };
     }
@@ -160,9 +170,10 @@ export function detectBestDrink(cupIngredients, availableSpecials, hasCupDoubler
         const validMixers = VALID_PAIRINGS[spiritType] || new Set();
         if (cupMixers.length >= 1 && cupMixers.every(m => validMixers.has(m))) {
             const base = 3;
+            const pts = (hasCupDoubler ? base * 2 : base) + specialistBonus;
             return {
                 name: `Double ${spiritType.charAt(0) + spiritType.slice(1).toLowerCase()}`,
-                points: hasCupDoubler ? base * 2 : base,
+                points: pts,
                 declaredSpecials: [],
             };
         }
@@ -174,9 +185,10 @@ export function detectBestDrink(cupIngredients, availableSpecials, hasCupDoubler
         const validMixers = VALID_PAIRINGS[spiritType] || new Set();
         if (cupMixers.length >= 1 && cupMixers.every(m => validMixers.has(m))) {
             const base = 1;
+            const pts = (hasCupDoubler ? base * 2 : base) + specialistBonus;
             return {
                 name: `${spiritType.charAt(0) + spiritType.slice(1).toLowerCase()} & ${cupMixers.map(m => m.charAt(0) + m.slice(1).toLowerCase()).join('/')}`,
-                points: hasCupDoubler ? base * 2 : base,
+                points: pts,
                 declaredSpecials: [],
             };
         }
