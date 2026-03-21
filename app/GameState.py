@@ -15,10 +15,10 @@ INITIAL_BAG: list[Ingredient] = (
     + [Ingredient.RUM] * 5
     + [Ingredient.TEQUILA] * 5
     + [Ingredient.VODKA] * 5
-    + [Ingredient.COLA] * 4
-    + [Ingredient.SODA] * 4
-    + [Ingredient.TONIC] * 4
-    + [Ingredient.CRANBERRY] * 4
+    + [Ingredient.COLA] * 5
+    + [Ingredient.SODA] * 5
+    + [Ingredient.TONIC] * 5
+    + [Ingredient.CRANBERRY] * 5
     + [Ingredient.SPECIAL] * 4
 )
 

@@ -286,7 +286,7 @@ class TestStartGame(GameManagerTestCase):
         )
         state = game_resp.json()["game_state"]
         self.assertEqual(len(state["open_display"]), 5)
-        self.assertEqual(len(state["bag_contents"]), 40)  # 45 - 5 open
+        self.assertEqual(len(state["bag_contents"]), 44)  # 49 - 5 open
         self.assertIn(host_id, state["player_states"])
         self.assertIn(player_id, state["player_states"])
         self.assertIsNotNone(state["player_turn"])
