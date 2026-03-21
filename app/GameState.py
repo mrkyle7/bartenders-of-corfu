@@ -19,7 +19,7 @@ INITIAL_BAG: list[Ingredient] = (
     + [Ingredient.SODA] * 5
     + [Ingredient.TONIC] * 5
     + [Ingredient.CRANBERRY] * 5
-    + [Ingredient.SPECIAL] * 4
+    + [Ingredient.SPECIAL] * 5
 )
 
 
