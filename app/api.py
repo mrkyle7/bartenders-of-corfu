@@ -221,14 +221,17 @@ async def list_games(
     status: Optional[str] = Query(default=None),
     player_id: Optional[str] = Query(default=None),
 ):
-    status_upper = status.upper() if status else None
-    if status_upper and status_upper not in _VALID_STATUSES:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": f"Invalid status. Must be one of: {', '.join(sorted(_VALID_STATUSES))}"
-            },
-        )
+    status_list: Optional[List[str]] = None
+    if status:
+        status_list = [s.strip().upper() for s in status.split(",") if s.strip()]
+        invalid = [s for s in status_list if s not in _VALID_STATUSES]
+        if invalid:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": f"Invalid status. Must be one of: {', '.join(sorted(_VALID_STATUSES))}"
+                },
+            )
     player_uuid: Optional[UUID] = None
     if player_id:
         try:
@@ -237,7 +240,7 @@ async def list_games(
             return JSONResponse(status_code=400, content={"error": "Invalid player_id"})
 
     games, total = gameManager.list_games(
-        page=page, page_size=page_size, status=status_upper, player_id=player_uuid
+        page=page, page_size=page_size, status=status_list, player_id=player_uuid
     )
 
     # Resolve usernames in a single batch query

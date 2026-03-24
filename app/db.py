@@ -261,7 +261,7 @@ class Db:
         self,
         page: int = 1,
         page_size: int = 20,
-        status: str | None = None,
+        status: list[str] | str | None = None,
         player_id: UUID | None = None,
     ) -> tuple[list[Game], int]:
         """Get paginated games with optional filters. Returns (games, total_count)."""
@@ -275,7 +275,10 @@ class Db:
             .order("created_at", desc=True)
         )
         if status:
-            query = query.eq("status", status)
+            if isinstance(status, list):
+                query = query.in_("status", status)
+            else:
+                query = query.eq("status", status)
         if player_id:
             query = query.contains("players", [str(player_id)])
         response = query.range(offset, offset + page_size - 1).execute()
