@@ -91,7 +91,7 @@ class GameManager:
         self,
         page: int = 1,
         page_size: int = 20,
-        status: str | None = None,
+        status: list[str] | str | None = None,
         player_id: UUID | None = None,
     ) -> tuple[list[Game], int]:
         """Returns (games, total_count) with optional pagination and filters."""

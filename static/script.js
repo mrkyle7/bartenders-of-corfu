@@ -2,7 +2,7 @@ let user;
 let listGamesInProgress = false;
 let initialLoadDone = false;
 let myTurnCount = 0;
-let myGamesStatusFilter = 'STARTED';
+let myGamesStatusFilter = 'NEW,STARTED';
 
 const PAGE_SIZE = 20;
 let myGamesPage = 1;
@@ -306,10 +306,10 @@ async function createNewGame() {
         goBtn.textContent = 'Go to Game';
         goBtn.onclick = () => window.location.href = `/game?id=${data.id}`;
         action.appendChild(goBtn);
-        // Switch filter to "All" so the newly created NEW game is visible
-        myGamesStatusFilter = '';
+        // Ensure the Active filter (NEW,STARTED) is selected so the new game is visible
+        myGamesStatusFilter = 'NEW,STARTED';
         document.querySelectorAll('.status-filter .filter-tab').forEach(btn => {
-            const isActive = btn.dataset.status === '';
+            const isActive = btn.dataset.status === 'NEW,STARTED';
             btn.classList.toggle('active', isActive);
             btn.setAttribute('aria-selected', isActive);
         });
