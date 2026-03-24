@@ -306,6 +306,13 @@ async function createNewGame() {
         goBtn.textContent = 'Go to Game';
         goBtn.onclick = () => window.location.href = `/game?id=${data.id}`;
         action.appendChild(goBtn);
+        // Switch filter to "All" so the newly created NEW game is visible
+        myGamesStatusFilter = '';
+        document.querySelectorAll('.status-filter .filter-tab').forEach(btn => {
+            const isActive = btn.dataset.status === '';
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive);
+        });
         listGames();
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Start Mixing Cocktails'; }
