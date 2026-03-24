@@ -196,6 +196,19 @@ async def admin_page():
     )
 
 
+@app.get("/profile")
+async def profile_page():
+    profile_path = os.path.join("static", "profile.html")
+    return FileResponse(
+        profile_path,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
 @app.get("/health")
 async def health():
     return JSONResponse(content={"isAvailable": True})
@@ -500,6 +513,28 @@ async def change_password(body: ChangePasswordRequest, request: Request):
         logger.exception("Error changing password for %s", token_user.username)
         return JSONResponse(
             status_code=500, content={"error": "Failed to change password"}
+        )
+
+
+class ChangeEmailRequest(BaseModel):
+    new_email: str
+
+
+@app.patch("/v1/users/me/email")
+async def change_email(body: ChangeEmailRequest, request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    try:
+        userManager.change_email(token_user.id, body.new_email)
+        logger.info("Email changed for user %s", token_user.username)
+        return JSONResponse(content={"message": "Email updated successfully"})
+    except UserValidationError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error changing email for %s", token_user.username)
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to update email"}
         )
 
 

@@ -170,6 +170,15 @@ class Db:
         )
         return len(response.data) == 1
 
+    def update_email(self, user_id: UUID, new_email: str) -> bool:
+        response = (
+            self.supabase.table("users")
+            .update({"email": new_email})
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
     def update_password(self, user_id: UUID, new_hash: bytes) -> bool:
         response = (
             self.supabase.table("users")
