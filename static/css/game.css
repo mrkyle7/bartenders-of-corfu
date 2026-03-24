@@ -33,6 +33,19 @@
     flex-shrink: 0;
 }
 
+.gb-header-home {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.gb-header-home:hover .gb-header-title {
+    text-decoration: underline;
+}
+
 .gb-header-title {
     font-size: 1em;
     font-weight: bold;
