@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - Bartenders of Corfu</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4a2c0e">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <style>
+        .profile-section {
+            max-width: 400px;
+            margin: 0 auto 24px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+        .profile-section h2 {
+            margin: 0 0 16px;
+            font-size: 1.2em;
+            color: var(--color-brown-medium);
+        }
+        .profile-section form {
+            margin: 0;
+            padding: 0;
+            background: none;
+            box-shadow: none;
+            border-radius: 0;
+        }
+        .profile-section button {
+            margin: 10px 0 0;
+        }
+        .profile-msg {
+            margin-top: 10px;
+            font-size: 0.95em;
+            font-weight: bold;
+            min-height: 1.2em;
+        }
+        .profile-msg.success { color: var(--color-green); }
+        .profile-msg.error { color: var(--color-red); }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 10px;
+            font-size: 1em;
+            color: var(--color-brown-medium);
+        }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+
+<body>
+    <main>
+        <a href="/" class="back-link">&larr; Back to Home</a>
+        <img src="/static/bartenders.png" alt="Bartenders of Corfu logo" class="bartender-image"
+            role="img">
+        <h1 id="profileTitle">Your Profile</h1>
+
+        <div class="profile-section">
+            <h2>Change Email</h2>
+            <form id="emailForm">
+                <label for="currentEmail">Current Email</label>
+                <input type="email" id="currentEmail" disabled>
+                <label for="newEmail">New Email</label>
+                <input type="email" id="newEmail" name="new_email" required>
+                <button type="submit">Update Email</button>
+            </form>
+            <div class="profile-msg" id="emailMsg"></div>
+        </div>
+
+        <div class="profile-section">
+            <h2>Change Password</h2>
+            <form id="passwordForm">
+                <label for="oldPassword">Current Password</label>
+                <input type="password" id="oldPassword" name="old_password" required>
+                <label for="newPassword">New Password</label>
+                <input type="password" id="newPassword" name="new_password" required>
+                <button type="submit">Update Password</button>
+            </form>
+            <div class="profile-msg" id="passwordMsg"></div>
+        </div>
+    </main>
+    <footer>
+        <p>
+            <a href="/docs" target="_blank">API</a> |
+            <a href="https://github.com/mrkyle7/bartenders-of-corfu" target="_blank">Source</a> |
+            <a href="https://github.com/mrkyle7/bartenders-of-corfu/issues" target="_blank">Support</a>
+        </p>
+    </footer>
+    <script>
+        async function loadProfile() {
+            try {
+                const res = await fetch('/userDetails');
+                if (!res.ok) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const user = await res.json();
+                document.getElementById('profileTitle').textContent = `${user.username}'s Profile`;
+                document.getElementById('currentEmail').value = user.email || '';
+            } catch {
+                window.location.href = '/login';
+            }
+        }
+
+        function showMsg(id, text, type) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = 'profile-msg ' + type;
+        }
+
+        document.getElementById('emailForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newEmail = document.getElementById('newEmail').value;
+            try {
+                const res = await fetch('/v1/users/me/email', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_email: newEmail })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showMsg('emailMsg', 'Email updated successfully', 'success');
+                    document.getElementById('currentEmail').value = newEmail;
+                    document.getElementById('newEmail').value = '';
+                } else {
+                    showMsg('emailMsg', data.error || 'Failed to update email', 'error');
+                }
+            } catch {
+                showMsg('emailMsg', 'An error occurred', 'error');
+            }
+        });
+
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const oldPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            try {
+                const res = await fetch('/v1/users/me/password', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showMsg('passwordMsg', 'Password updated successfully', 'success');
+                    document.getElementById('oldPassword').value = '';
+                    document.getElementById('newPassword').value = '';
+                } else {
+                    showMsg('passwordMsg', data.error || 'Failed to update password', 'error');
+                }
+            } catch {
+                showMsg('passwordMsg', 'An error occurred', 'error');
+            }
+        });
+
+        loadProfile();
+    </script>
+</body>
+
+</html>

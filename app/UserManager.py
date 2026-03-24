@@ -56,6 +56,15 @@ class UserManager:
         """Record the logout time so the issued token is server-side invalidated."""
         db.logout_user(user_id)
 
+    def change_email(self, user_id: UUID, new_email: str) -> None:
+        """Change a user's email. Raises UserValidationError on invalid input."""
+        user = db.get_user_by_id(user_id)
+        if not user or user.status != "active":
+            raise UserValidationError("User not found or account is not active")
+        # Validate email format using User's validator
+        validated = user._validate_email(new_email)
+        db.update_email(user_id, validated)
+
     def change_password(
         self, user_id: UUID, old_password: str, new_password: str
     ) -> None:

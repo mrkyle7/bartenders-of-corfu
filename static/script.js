@@ -26,6 +26,8 @@ function showLogin() {
     document.getElementById('helloUser').classList.add('hidden');
     const adminLink = document.getElementById('adminLink');
     if (adminLink) adminLink.classList.add('hidden');
+    const profileLink = document.getElementById('profileLink');
+    if (profileLink) profileLink.classList.add('hidden');
 }
 
 function setUser(u) {
@@ -34,6 +36,8 @@ function setUser(u) {
     helloUser.classList.remove("hidden");
     helloUser.innerText = `Hello ${u.username} | `;
     document.getElementById('logoutLink').classList.remove('hidden');
+    const profileLink = document.getElementById('profileLink');
+    if (profileLink) profileLink.classList.remove('hidden');
     const adminLink = document.getElementById('adminLink');
     if (adminLink) {
         if (u.is_admin) {

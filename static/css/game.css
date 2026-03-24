@@ -1708,6 +1708,7 @@
     flex-shrink: 0;
     box-shadow: 0 1px 4px rgba(74,44,14,0.25);
     transition: opacity 0.15s;
+    text-decoration: none;
 }
 .gb-header-btn:hover { opacity: 0.88; transform: none; }
 
