@@ -1,31 +1,38 @@
 #!/bin/bash
-set -e
+# Run all test groups and report which ones fail
+FAILED=""
 
-echo "=== Running unit tests ==="
-uv run pytest tests/test_user.py tests/test_utils.py -v --tb=long
+run_group() {
+    local name="$1"
+    shift
+    echo ""
+    echo "========================================"
+    echo "=== $name ==="
+    echo "========================================"
+    if uv run pytest "$@" -v --tb=long; then
+        echo "=== PASSED: $name ==="
+    else
+        echo "=== FAILED: $name ==="
+        FAILED="$FAILED  - $name\n"
+    fi
+}
 
-echo "=== Running API tests ==="
-uv run pytest tests/test_api.py -v --tb=long
+run_group "Unit tests"          tests/test_user.py tests/test_utils.py tests/test_game.py
+run_group "API tests"           tests/test_api.py
+run_group "User management"     tests/test_user_management.py
+run_group "JWT tests"           tests/test_jwt_handler.py
+run_group "Game manager"        tests/test_game_manager.py
+run_group "Game actions BDD"    tests/test_game_actions_bdd.py
+run_group "Theme BDD"           tests/test_theme_bdd.py
+run_group "UI tests"            tests/ui/
 
-echo "=== Running user management tests ==="
-uv run pytest tests/test_user_management.py -v --tb=long
-
-echo "=== Running JWT tests ==="
-uv run pytest tests/test_jwt_handler.py -v --tb=long
-
-echo "=== Running game manager tests ==="
-uv run pytest tests/test_game_manager.py -v --tb=long
-
-echo "=== Running game action BDD tests ==="
-uv run pytest tests/test_game_actions_bdd.py -v --tb=long
-
-echo "=== Running theme BDD tests ==="
-uv run pytest tests/test_theme_bdd.py -v --tb=long
-
-echo "=== Running game tests ==="
-uv run pytest tests/test_game.py -v --tb=long
-
-echo "=== Running UI tests ==="
-uv run pytest tests/ui/ -v --tb=long
-
-echo "=== All tests passed ==="
+echo ""
+echo "========================================"
+if [ -n "$FAILED" ]; then
+    echo "FAILED GROUPS:"
+    echo -e "$FAILED"
+    exit 1
+else
+    echo "ALL GROUPS PASSED"
+    exit 0
+fi
