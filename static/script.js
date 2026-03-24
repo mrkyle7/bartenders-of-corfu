@@ -2,6 +2,7 @@ let user;
 let listGamesInProgress = false;
 let initialLoadDone = false;
 let myTurnCount = 0;
+let myGamesStatusFilter = 'STARTED';
 
 const PAGE_SIZE = 20;
 let myGamesPage = 1;
@@ -177,12 +178,25 @@ function _loadMoreItem(onClick) {
     return li;
 }
 
+function setMyGamesFilter(status) {
+    myGamesStatusFilter = status;
+    document.querySelectorAll('.status-filter .filter-tab').forEach(btn => {
+        const isActive = btn.dataset.status === status;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive);
+    });
+    myGamesPage = 1;
+    loadMyGames(1, false);
+}
+
 async function loadMyGames(page, append = false) {
     if (!user) return;
     const list = document.getElementById('myGameList');
-    const resp = await fetch(
-        `/v1/games?player_id=${encodeURIComponent(user.id)}&page=${page}&page_size=${PAGE_SIZE}`
-    );
+    let url = `/v1/games?player_id=${encodeURIComponent(user.id)}&page=${page}&page_size=${PAGE_SIZE}`;
+    if (myGamesStatusFilter) {
+        url += `&status=${encodeURIComponent(myGamesStatusFilter)}`;
+    }
+    const resp = await fetch(url);
     if (!resp.ok) {
         showGameListError('Failed to load your games. Please refresh.');
         return;

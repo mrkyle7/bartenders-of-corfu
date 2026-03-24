@@ -334,6 +334,42 @@ input {
     font-style: normal;
 }
 
+/* Status filter tabs */
+.status-filter {
+    max-width: 630px;
+    margin: 8px auto 0;
+    display: flex;
+    gap: 4px;
+    padding-left: 5px;
+}
+
+.filter-tab {
+    display: inline-block;
+    margin: 0;
+    padding: 6px 16px;
+    font-size: 0.85em;
+    background: transparent;
+    color: var(--color-brown-light);
+    border: 1px solid var(--color-gold-muted);
+    border-radius: var(--radius-pill);
+    box-shadow: none;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.filter-tab:hover {
+    background: var(--color-gold-light);
+    color: var(--color-brown-dark);
+    transform: none;
+}
+
+.filter-tab.active {
+    background: var(--color-gold);
+    color: var(--color-white);
+    border-color: var(--color-gold);
+    font-weight: bold;
+}
+
 .game-section-empty {
     justify-content: center;
     border-left: none;

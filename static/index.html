@@ -30,6 +30,11 @@
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <section class="game-section hidden" id="myGamesSection">
             <h2>Your Games</h2>
+            <div class="status-filter" role="tablist" aria-label="Filter games by status">
+                <button role="tab" class="filter-tab active" aria-selected="true" data-status="STARTED" onclick="setMyGamesFilter('STARTED')">In Progress</button>
+                <button role="tab" class="filter-tab" aria-selected="false" data-status="ENDED" onclick="setMyGamesFilter('ENDED')">Finished</button>
+                <button role="tab" class="filter-tab" aria-selected="false" data-status="" onclick="setMyGamesFilter('')">All</button>
+            </div>
             <ul id="myGameList" aria-live="polite"></ul>
         </section>
         <section class="game-section" id="joinGamesSection">
