@@ -30,6 +30,7 @@ async function load() {
         }
         if (meResp.ok) {
             S.me = await meResp.json();
+            if (typeof applyTheme === 'function') applyTheme(S.me.theme || 'taverna');
         }
     } catch (e) {
         console.warn('Could not fetch user details:', e);

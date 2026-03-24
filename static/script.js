@@ -16,6 +16,7 @@ async function setUserHeader() {
         showLogin()
     } else {
         user = await response.json()
+        if (typeof applyTheme === 'function') applyTheme(user.theme || 'taverna');
         setUser(user)
     }
 }

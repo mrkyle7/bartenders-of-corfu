@@ -1,0 +1,184 @@
+/* ── Theme Overrides ─────────────────────────────────────
+   Each theme overrides the semantic tokens defined in base.css :root.
+   Default theme (taverna) uses the :root values — no override needed.
+   ───────────────────────────────────────────────────────── */
+
+/* ============================
+   MEDITERRANEAN
+   Coastal blues, whites, coral
+   ============================ */
+[data-theme="mediterranean"] {
+    /* Page chrome */
+    --theme-bg-start: #f0f7ff;
+    --theme-bg-end: #dbeafe;
+    --theme-text-primary: #1a3a5c;
+    --theme-text-secondary: #1e4d7b;
+    --theme-text-muted: #64748b;
+    --theme-accent: #f97316;
+    --theme-accent-hover: #ea580c;
+    --theme-accent-muted: #93c5fd;
+    --theme-accent-light: #dbeafe;
+    --theme-surface: rgba(255, 255, 255, 0.85);
+    --theme-surface-solid: #f8fbff;
+    --theme-surface-card: #f0f7ff;
+    --theme-border: #3b82f6;
+    --theme-border-muted: #bfdbfe;
+    --theme-input-bg: #fff;
+    --theme-focus-ring: #2563eb;
+    --theme-header-bg: rgba(14, 56, 98, 0.06);
+    --theme-link: #1e4d7b;
+    --theme-link-hover: #f97316;
+    --theme-btn-bg: #f97316;
+    --theme-btn-text: #fff;
+    --theme-btn-hover: #ea580c;
+    --theme-spinner: #3b82f6;
+    --theme-bartender-border: #3b82f6;
+    --theme-bartender-bg: #eff6ff;
+    --theme-meta-color: #0c2d48;
+
+    /* Game board */
+    --theme-board-bg: linear-gradient(160deg, #0c2d48 0%, #1a4870 40%, #0a2440 100%);
+    --theme-board-text: #f0e6d0;
+    --theme-board-border: rgba(59, 130, 246, 0.25);
+    --theme-stats-bg: rgba(12, 45, 72, 0.92);
+    --theme-stats-text: #f0e6d0;
+    --theme-stats-accent: #f97316;
+    --theme-player-active-start: #0d6e3a;
+    --theme-player-active-end: #16a34a;
+    --theme-player-waiting-start: #1e4d7b;
+    --theme-player-waiting-end: #2563eb;
+    --theme-card-bg-start: #fefefe;
+    --theme-card-bg-end: #eff6ff;
+    --theme-card-border: rgba(59, 130, 246, 0.3);
+    --theme-card-text: #1a3a5c;
+    --theme-gold-text: #f97316;
+    --theme-gold-accent: #ea580c;
+}
+
+/* ============================
+   NIGHT CLUB
+   Dark with neon accents
+   ============================ */
+[data-theme="nightclub"] {
+    /* Page chrome */
+    --theme-bg-start: #121218;
+    --theme-bg-end: #1a1a2e;
+    --theme-text-primary: #e0e0e8;
+    --theme-text-secondary: #b0b0c0;
+    --theme-text-muted: #808098;
+    --theme-accent: #00e5ff;
+    --theme-accent-hover: #00b8d4;
+    --theme-accent-muted: #2c2c54;
+    --theme-accent-light: #1a1a3a;
+    --theme-surface: rgba(255, 255, 255, 0.06);
+    --theme-surface-solid: #1e1e30;
+    --theme-surface-card: #22223a;
+    --theme-border: #00e5ff;
+    --theme-border-muted: #3a3a5c;
+    --theme-input-bg: #1e1e30;
+    --theme-focus-ring: #00e5ff;
+    --theme-header-bg: rgba(0, 229, 255, 0.04);
+    --theme-link: #80d0ff;
+    --theme-link-hover: #00e5ff;
+    --theme-btn-bg: #00e5ff;
+    --theme-btn-text: #0a0a14;
+    --theme-btn-hover: #00b8d4;
+    --theme-spinner: #00e5ff;
+    --theme-bartender-border: #00e5ff;
+    --theme-bartender-bg: #1a1a2e;
+    --theme-meta-color: #121218;
+
+    /* Game board */
+    --theme-board-bg: linear-gradient(160deg, #0a0a14 0%, #141428 40%, #080812 100%);
+    --theme-board-text: #c0c0d8;
+    --theme-board-border: rgba(0, 229, 255, 0.2);
+    --theme-stats-bg: rgba(10, 10, 20, 0.94);
+    --theme-stats-text: #c0c0d8;
+    --theme-stats-accent: #00e5ff;
+    --theme-player-active-start: #880e4f;
+    --theme-player-active-end: #e91e90;
+    --theme-player-waiting-start: #1a1a3a;
+    --theme-player-waiting-end: #2c2c54;
+    --theme-card-bg-start: #1e1e30;
+    --theme-card-bg-end: #22223a;
+    --theme-card-border: rgba(0, 229, 255, 0.2);
+    --theme-card-text: #e0e0e8;
+    --theme-gold-text: #00e5ff;
+    --theme-gold-accent: #00b8d4;
+}
+
+/* Night club: override form/input for dark bg */
+[data-theme="nightclub"] form {
+    background: rgba(255, 255, 255, 0.06);
+}
+[data-theme="nightclub"] input {
+    background: var(--theme-input-bg);
+    color: var(--theme-text-primary);
+    border-color: var(--theme-border-muted);
+}
+
+/* ============================
+   SUNSET GARDEN
+   Warm peach, lavender, amber
+   ============================ */
+[data-theme="sunset"] {
+    /* Page chrome */
+    --theme-bg-start: #fff5f0;
+    --theme-bg-end: #ffe8e0;
+    --theme-text-primary: #4a2040;
+    --theme-text-secondary: #8b3a62;
+    --theme-text-muted: #a07080;
+    --theme-accent: #e89020;
+    --theme-accent-hover: #d07810;
+    --theme-accent-muted: #e8c0d0;
+    --theme-accent-light: #ffe0d8;
+    --theme-surface: rgba(255, 255, 255, 0.75);
+    --theme-surface-solid: #fff8f5;
+    --theme-surface-card: #fff0eb;
+    --theme-border: #e89020;
+    --theme-border-muted: #e8c0c0;
+    --theme-input-bg: #fff;
+    --theme-focus-ring: #8b3a62;
+    --theme-header-bg: rgba(139, 58, 98, 0.06);
+    --theme-link: #8b3a62;
+    --theme-link-hover: #e89020;
+    --theme-btn-bg: #e89020;
+    --theme-btn-text: #fff;
+    --theme-btn-hover: #d07810;
+    --theme-spinner: #e89020;
+    --theme-bartender-border: #e89020;
+    --theme-bartender-bg: #fff5f0;
+    --theme-meta-color: #4a2040;
+
+    /* Game board */
+    --theme-board-bg: linear-gradient(160deg, #2a1025 0%, #3d1830 40%, #1e0a1a 100%);
+    --theme-board-text: #f0d0b8;
+    --theme-board-border: rgba(232, 144, 32, 0.25);
+    --theme-stats-bg: rgba(42, 16, 37, 0.92);
+    --theme-stats-text: #f0d0b8;
+    --theme-stats-accent: #e89020;
+    --theme-player-active-start: #1a6030;
+    --theme-player-active-end: #28a050;
+    --theme-player-waiting-start: #5a2040;
+    --theme-player-waiting-end: #8b3a62;
+    --theme-card-bg-start: #fffaf8;
+    --theme-card-bg-end: #ffe8e0;
+    --theme-card-border: rgba(232, 144, 32, 0.3);
+    --theme-card-text: #4a2040;
+    --theme-gold-text: #e89020;
+    --theme-gold-accent: #d07810;
+}
+
+/* ── Smooth transitions (respects reduced motion) ─────── */
+@media (prefers-reduced-motion: no-preference) {
+    body,
+    .gb-header,
+    .gb-stats-bar,
+    .gb-player-strip,
+    .gb-other-player-strip,
+    button,
+    .filter-tab,
+    .bartender-image {
+        transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+    }
+}

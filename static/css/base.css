@@ -23,6 +23,52 @@
     --color-purple-light: #a855f7;
     --color-white: #fff;
 
+    /* ── Semantic Theme Tokens ─────────────────────────────── */
+    --theme-bg-start: var(--color-cream);
+    --theme-bg-end: var(--color-cream-dark);
+    --theme-text-primary: var(--color-brown-dark);
+    --theme-text-secondary: var(--color-brown-medium);
+    --theme-text-muted: var(--color-brown-light);
+    --theme-accent: var(--color-gold);
+    --theme-accent-hover: var(--color-gold-dark);
+    --theme-accent-muted: var(--color-gold-muted);
+    --theme-accent-light: var(--color-gold-light);
+    --theme-surface: rgba(255, 255, 255, 0.7);
+    --theme-surface-solid: #fff8ef;
+    --theme-surface-card: #fdf6e3;
+    --theme-border: var(--color-gold);
+    --theme-border-muted: #ccc;
+    --theme-input-bg: #fff;
+    --theme-focus-ring: var(--color-brown-medium);
+    --theme-header-bg: rgba(74,44,14,0.08);
+    --theme-link: var(--color-brown-medium);
+    --theme-link-hover: var(--color-gold-dark);
+    --theme-btn-bg: var(--color-gold);
+    --theme-btn-text: #fff;
+    --theme-btn-hover: var(--color-gold-dark);
+    --theme-spinner: var(--color-gold);
+    --theme-bartender-border: var(--color-gold);
+    --theme-bartender-bg: #fffbe6;
+    --theme-meta-color: #4a2c0e;
+
+    /* Game board semantic tokens */
+    --theme-board-bg: linear-gradient(160deg, #2c1a0e 0%, #3d2410 40%, #2a1608 100%);
+    --theme-board-text: #e8d5a8;
+    --theme-board-border: rgba(212,160,23,0.25);
+    --theme-stats-bg: rgba(44,26,14,0.92);
+    --theme-stats-text: #f4e8c1;
+    --theme-stats-accent: #d4a017;
+    --theme-player-active-start: #1a5c1a;
+    --theme-player-active-end: #2d8a2d;
+    --theme-player-waiting-start: #5a3010;
+    --theme-player-waiting-end: #7a4820;
+    --theme-card-bg-start: #fffdf8;
+    --theme-card-bg-end: #f5e8c8;
+    --theme-card-border: rgba(212,160,23,0.35);
+    --theme-card-text: #2a1606;
+    --theme-gold-text: #f5d07a;
+    --theme-gold-accent: #d4a850;
+
     /* Radii */
     --radius-sm: 4px;
     --radius-md: 6px;
@@ -37,8 +83,8 @@ body {
     font-family: 'Georgia', serif;
     margin: 0;
     text-align: center;
-    background: linear-gradient(to bottom, var(--color-cream), var(--color-cream-dark));
-    color: var(--color-brown-dark);
+    background: linear-gradient(to bottom, var(--theme-bg-start), var(--theme-bg-end));
+    color: var(--theme-text-primary);
     min-height: 100vh;
     background-attachment: fixed;
 }
@@ -107,8 +153,8 @@ main {
     border-radius: 50%;
     object-fit: cover;
     box-shadow: 0 4px 12px rgba(0,0,0,0.18);
-    border: 4px solid var(--color-gold);
-    background: #fffbe6;
+    border: 4px solid var(--theme-bartender-border);
+    background: var(--theme-bartender-bg);
 }
 
 main .bartender-image {
@@ -124,7 +170,7 @@ header .bartender-image {
 }
 
 header a {
-    color: var(--color-brown-medium);
+    color: var(--theme-link);
     text-decoration: none;
 }
 
@@ -133,7 +179,7 @@ header a:hover {
 }
 
 h1 {
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
     font-size: 2.5em;
     margin-bottom: 10px;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
@@ -152,7 +198,7 @@ ul {
     margin: 20px auto;
     padding: 15px;
     max-width: 600px;
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--theme-surface);
     border-radius: 10px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
@@ -165,7 +211,7 @@ li {
     text-align: left;
     margin: 10px 0;
     font-size: 1.1em;
-    border-left: 3px solid var(--color-gold);
+    border-left: 3px solid var(--theme-border);
     padding-left: 10px;
 }
 
@@ -176,20 +222,20 @@ li {
 
 .game-title {
     font-weight: bold;
-    color: var(--color-brown-dark);
+    color: var(--theme-text-primary);
     margin-bottom: 2px;
 }
 
 .game-players {
     font-size: 0.9em;
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
     margin-bottom: 2px;
 }
 
 .game-status {
     font-size: 0.8em;
     font-style: italic;
-    color: var(--color-brown-light);
+    color: var(--theme-text-muted);
     opacity: 0.85;
 }
 
@@ -207,8 +253,8 @@ button {
     margin: 20px auto;
     padding: 12px 25px;
     font-size: 1.1em;
-    background: var(--color-gold);
-    color: white;
+    background: var(--theme-btn-bg);
+    color: var(--theme-btn-text);
     border: none;
     border-radius: 5px;
     cursor: pointer;
@@ -217,12 +263,12 @@ button {
 }
 
 button:hover {
-    background: var(--color-gold-dark);
+    background: var(--theme-btn-hover);
     transform: scale(1.05);
 }
     
 button:focus {
-    outline: 3px solid var(--color-brown-medium);
+    outline: 3px solid var(--theme-focus-ring);
     outline-offset: 2px;
 }
 
@@ -239,7 +285,7 @@ label {
     display: block;
     margin-bottom: 5px;
     font-weight: bold;
-    color: var(--color-brown-dark);
+    color: var(--theme-text-primary);
 }
 
 input {
@@ -247,7 +293,7 @@ input {
     padding: 8px;
     margin: 0 auto 15px;
     display: block;
-    border: 1px solid #ccc;
+    border: 1px solid var(--theme-border-muted);
     border-radius: 5px;
     font-size: 1em;
 }
@@ -262,7 +308,7 @@ input {
 #message {
     text-align: center;
     margin-top: 20px;
-    color: var(--color-gold);
+    color: var(--theme-accent);
     font-weight: bold;
 }
 
@@ -304,7 +350,7 @@ input {
     justify-content: center;
     border-left: none;
     font-style: italic;
-    color: var(--color-brown-light);
+    color: var(--theme-text-muted);
     opacity: 0.8;
 }
 
@@ -312,7 +358,7 @@ input {
     display: inline-block;
     width: 14px;
     height: 14px;
-    border: 2px solid var(--color-gold);
+    border: 2px solid var(--theme-spinner);
     border-top-color: transparent;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -329,7 +375,7 @@ input {
     margin: 16px auto 0;
     text-align: left;
     font-size: 1.2em;
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
     padding-left: 5px;
     font-style: normal;
 }
@@ -349,8 +395,8 @@ input {
     padding: 6px 16px;
     font-size: 0.85em;
     background: transparent;
-    color: var(--color-brown-light);
-    border: 1px solid var(--color-gold-muted);
+    color: var(--theme-text-muted);
+    border: 1px solid var(--theme-accent-muted);
     border-radius: var(--radius-pill);
     box-shadow: none;
     cursor: pointer;
@@ -358,15 +404,15 @@ input {
 }
 
 .filter-tab:hover {
-    background: var(--color-gold-light);
-    color: var(--color-brown-dark);
+    background: var(--theme-accent-light);
+    color: var(--theme-text-primary);
     transform: none;
 }
 
 .filter-tab.active {
-    background: var(--color-gold);
-    color: var(--color-white);
-    border-color: var(--color-gold);
+    background: var(--theme-accent);
+    color: var(--theme-btn-text);
+    border-color: var(--theme-accent);
     font-weight: bold;
 }
 
@@ -374,7 +420,7 @@ input {
     justify-content: center;
     border-left: none;
     font-style: italic;
-    color: var(--color-brown-light);
+    color: var(--theme-text-muted);
     opacity: 0.8;
 }
 
@@ -388,12 +434,12 @@ input {
     margin: 2px auto;
     padding: 6px 20px;
     font-size: 0.9em;
-    background: #a0724a;
+    background: var(--theme-text-muted);
     box-shadow: none;
 }
 
 .load-more-btn:hover {
-    background: var(--color-brown-light);
+    background: var(--theme-text-secondary);
 }
 
 .game-full-label {
@@ -402,14 +448,14 @@ input {
     padding: 2px 8px;
     font-size: 0.85em;
     font-style: italic;
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
     opacity: 0.7;
 }
 
 /* Turn indicator on game cards */
 .game-turn {
     font-size: 0.8em;
-    color: var(--color-brown-light);
+    color: var(--theme-text-muted);
     font-style: italic;
 }
 
@@ -425,14 +471,14 @@ input {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
     text-decoration: none;
     cursor: pointer;
     padding: 4px;
 }
 
 .notif-bell:hover {
-    color: var(--color-gold-dark);
+    color: var(--theme-link-hover);
     text-decoration: none;
 }
 

@@ -8,7 +8,9 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4a2c0e">
+    <script src="/static/theme.js"></script>
     <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/themes.css">
     <style>
         .profile-section {
             max-width: 400px;
@@ -49,6 +51,57 @@
             color: var(--color-brown-medium);
         }
         .back-link:hover { text-decoration: underline; }
+
+        /* Theme selector */
+        .theme-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            border: none;
+            margin: 0;
+            padding: 0;
+        }
+        .theme-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 12px;
+            border: 2px solid var(--theme-border-muted, #ccc);
+            border-radius: 8px;
+            background: none;
+            cursor: pointer;
+            min-width: 80px;
+            font-size: 0.85em;
+            font-family: inherit;
+            color: inherit;
+            box-shadow: none;
+            margin: 0;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            transform: none;
+        }
+        .theme-option:hover {
+            border-color: var(--theme-accent, var(--color-gold));
+            transform: none;
+        }
+        .theme-option[aria-checked="true"] {
+            border-color: var(--theme-accent, var(--color-gold));
+            box-shadow: 0 0 0 2px var(--theme-accent, var(--color-gold));
+        }
+        .theme-option:focus {
+            outline: 3px solid var(--theme-focus-ring, var(--color-brown-medium));
+            outline-offset: 2px;
+        }
+        .theme-swatch {
+            display: flex;
+            gap: 3px;
+        }
+        .theme-swatch-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1px solid rgba(0,0,0,0.15);
+        }
     </style>
 </head>
 
@@ -58,6 +111,51 @@
         <img src="/static/bartenders.png" alt="Bartenders of Corfu logo" class="bartender-image"
             role="img">
         <h1 id="profileTitle">Your Profile</h1>
+
+        <div class="profile-section">
+            <h2 id="themeHeading">Colour Theme</h2>
+            <div id="themeSelector" role="radiogroup" aria-labelledby="themeHeading">
+                <div class="theme-options">
+                    <button type="button" class="theme-option" role="radio" aria-checked="false"
+                            aria-label="Taverna classic theme" data-theme-value="taverna">
+                        <span class="theme-swatch" aria-hidden="true">
+                            <span class="theme-swatch-dot" style="background:#4a2c0e"></span>
+                            <span class="theme-swatch-dot" style="background:#d4a017"></span>
+                            <span class="theme-swatch-dot" style="background:#f7e7ce"></span>
+                        </span>
+                        Taverna
+                    </button>
+                    <button type="button" class="theme-option" role="radio" aria-checked="false"
+                            aria-label="Mediterranean coastal theme" data-theme-value="mediterranean">
+                        <span class="theme-swatch" aria-hidden="true">
+                            <span class="theme-swatch-dot" style="background:#0c2d48"></span>
+                            <span class="theme-swatch-dot" style="background:#f97316"></span>
+                            <span class="theme-swatch-dot" style="background:#f0f7ff"></span>
+                        </span>
+                        Mediterranean
+                    </button>
+                    <button type="button" class="theme-option" role="radio" aria-checked="false"
+                            aria-label="Night Club dark neon theme" data-theme-value="nightclub">
+                        <span class="theme-swatch" aria-hidden="true">
+                            <span class="theme-swatch-dot" style="background:#1a1a2e"></span>
+                            <span class="theme-swatch-dot" style="background:#00e5ff"></span>
+                            <span class="theme-swatch-dot" style="background:#ff4081"></span>
+                        </span>
+                        Night Club
+                    </button>
+                    <button type="button" class="theme-option" role="radio" aria-checked="false"
+                            aria-label="Sunset Garden warm theme" data-theme-value="sunset">
+                        <span class="theme-swatch" aria-hidden="true">
+                            <span class="theme-swatch-dot" style="background:#4a2040"></span>
+                            <span class="theme-swatch-dot" style="background:#e89020"></span>
+                            <span class="theme-swatch-dot" style="background:#fff5f0"></span>
+                        </span>
+                        Sunset Garden
+                    </button>
+                </div>
+            </div>
+            <div class="profile-msg" id="themeMsg" aria-live="polite"></div>
+        </div>
 
         <div class="profile-section">
             <h2>Change Email</h2>
@@ -91,6 +189,12 @@
         </p>
     </footer>
     <script>
+        function setActiveTheme(theme) {
+            document.querySelectorAll('.theme-option').forEach(btn => {
+                btn.setAttribute('aria-checked', btn.dataset.themeValue === theme ? 'true' : 'false');
+            });
+        }
+
         async function loadProfile() {
             try {
                 const res = await fetch('/userDetails');
@@ -101,6 +205,9 @@
                 const user = await res.json();
                 document.getElementById('profileTitle').textContent = `${user.username}'s Profile`;
                 document.getElementById('currentEmail').value = user.email || '';
+                // Apply server-authoritative theme
+                applyTheme(user.theme || 'taverna');
+                setActiveTheme(user.theme || 'taverna');
             } catch {
                 window.location.href = '/login';
             }
@@ -155,6 +262,50 @@
             } catch {
                 showMsg('passwordMsg', 'An error occurred', 'error');
             }
+        });
+
+        // Theme selector: click and keyboard handling
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const theme = btn.dataset.themeValue;
+                // Immediate visual preview
+                applyTheme(theme);
+                setActiveTheme(theme);
+                // Persist to server
+                try {
+                    const res = await fetch('/v1/users/me/theme', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ theme })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        showMsg('themeMsg', 'Theme updated', 'success');
+                    } else {
+                        showMsg('themeMsg', data.error || 'Failed to update theme', 'error');
+                    }
+                } catch {
+                    showMsg('themeMsg', 'An error occurred', 'error');
+                }
+            });
+        });
+
+        // Arrow key navigation within radiogroup
+        const themeButtons = Array.from(document.querySelectorAll('.theme-option'));
+        themeButtons.forEach((btn, i) => {
+            btn.addEventListener('keydown', (e) => {
+                let next;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    next = themeButtons[(i + 1) % themeButtons.length];
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                    next = themeButtons[(i - 1 + themeButtons.length) % themeButtons.length];
+                }
+                if (next) {
+                    e.preventDefault();
+                    next.focus();
+                    next.click();
+                }
+            });
         });
 
         loadProfile();
