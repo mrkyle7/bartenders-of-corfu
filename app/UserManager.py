@@ -75,6 +75,19 @@ class UserManager:
         user.change_password(old_password, new_password)
         db.update_password(user_id, user._password_hash)
 
+    _VALID_THEMES = {"taverna", "mediterranean", "nightclub", "sunset"}
+
+    def change_theme(self, user_id: UUID, theme: str) -> None:
+        """Change a user's color theme. Raises UserValidationError on invalid theme."""
+        if theme not in self._VALID_THEMES:
+            raise UserValidationError(
+                f"Invalid theme. Must be one of: {', '.join(sorted(self._VALID_THEMES))}"
+            )
+        user = db.get_user_by_id(user_id)
+        if not user or user.status != "active":
+            raise UserValidationError("User not found or account is not active")
+        db.update_theme(user_id, theme)
+
     def delete_user(self, user_id: UUID) -> None:
         """Delete own account: nulls PII, preserves ID for game history."""
         user = db.get_user_by_id(user_id)

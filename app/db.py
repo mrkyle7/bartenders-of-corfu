@@ -27,6 +27,7 @@ class Db:
         "deactivated_by",
         "deleted_at",
         "logged_out_at",
+        "theme",
     )
 
     @staticmethod
@@ -46,6 +47,7 @@ class Db:
                 "deactivated_by": row.get("deactivated_by"),
                 "deleted_at": row.get("deleted_at"),
                 "logged_out_at": row.get("logged_out_at"),
+                "theme": row.get("theme", "taverna"),
             }
         )
 
@@ -188,6 +190,15 @@ class Db:
                     "password_changed_at": "now()",
                 }
             )
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def update_theme(self, user_id: UUID, theme: str) -> bool:
+        response = (
+            self.supabase.table("users")
+            .update({"theme": theme})
             .eq("id", str(user_id))
             .execute()
         )

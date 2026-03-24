@@ -541,6 +541,30 @@ async def change_email(body: ChangeEmailRequest, request: Request):
         )
 
 
+class ChangeThemeRequest(BaseModel):
+    theme: str
+
+
+@app.patch("/v1/users/me/theme")
+async def change_theme(body: ChangeThemeRequest, request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    try:
+        userManager.change_theme(token_user.id, body.theme)
+        logger.info("Theme changed for user %s to %s", token_user.username, body.theme)
+        return JSONResponse(
+            content={"message": "Theme updated successfully", "theme": body.theme}
+        )
+    except UserValidationError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error changing theme for %s", token_user.username)
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to update theme"}
+        )
+
+
 @app.delete("/v1/users/me")
 async def delete_account(request: Request):
     token_user, err = _require_auth(request)
