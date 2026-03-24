@@ -28,9 +28,8 @@ def _register(username: str) -> tuple[str, str]:
             "password": "Password1",
         },
     )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    return data["token"], data["id"]
+    assert resp.status_code == 201, resp.text
+    return resp.cookies["userjwt"], resp.json()["id"]
 
 
 def _auth(token: str) -> dict:
