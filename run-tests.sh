@@ -1,2 +1,2 @@
 #!/bin/bash
-uv run pytest -v
+uv run pytest -v --tb=long
