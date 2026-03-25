@@ -19,8 +19,8 @@
     align-items: center;
     gap: 10px;
     padding: 6px 12px;
-    background: rgba(74,44,14,0.08);
-    border-bottom: 2px solid var(--color-gold);
+    background: var(--theme-header-bg);
+    border-bottom: 2px solid var(--theme-border);
     flex-wrap: wrap;
 }
 
@@ -28,7 +28,7 @@
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    border: 2px solid var(--color-gold);
+    border: 2px solid var(--theme-border);
     object-fit: cover;
     flex-shrink: 0;
 }
@@ -49,12 +49,12 @@
 .gb-header-title {
     font-size: 1em;
     font-weight: bold;
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
 }
 
 .gb-header-gameid {
     font-size: 0.75em;
-    color: var(--color-brown-light);
+    color: var(--theme-text-muted);
     font-family: monospace;
     word-break: break-all;
 }
@@ -65,8 +65,8 @@
     border-radius: 20px;
     font-size: 0.85em;
     font-weight: bold;
-    background: var(--color-gold);
-    color: #fff;
+    background: var(--theme-accent);
+    color: var(--theme-btn-text);
     white-space: nowrap;
 }
 
@@ -76,7 +76,7 @@
 }
 
 .gb-turn-indicator.gb-ended {
-    background: var(--color-brown-dark);
+    background: var(--theme-text-primary);
 }
 
 @keyframes gb-pulse {
@@ -104,8 +104,8 @@
     flex-wrap: wrap;
     gap: 6px;
     padding: 6px 10px;
-    background: rgba(44,26,14,0.92);
-    border-bottom: 2px solid rgba(212,160,23,0.35);
+    background: var(--theme-stats-bg);
+    border-bottom: 2px solid var(--theme-card-border);
 }
 
 .gb-stats-strip {
@@ -115,23 +115,23 @@
     padding: 4px 10px;
     border-radius: 8px;
     background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(212,160,23,0.2);
+    border: 1px solid var(--theme-board-border);
     flex-wrap: wrap;
 }
 
 .gb-stats-strip.active-turn {
-    background: linear-gradient(135deg, #1a5c1a, #2d8a2d);
+    background: linear-gradient(135deg, var(--theme-player-active-start), var(--theme-player-active-end));
     border-color: rgba(45,122,45,0.5);
 }
 
 .gb-stats-strip.is-me {
-    border-color: rgba(212,160,23,0.6);
+    border-color: var(--theme-stats-accent);
 }
 
 .gb-stats-strip-name {
     font-size: 0.82em;
     font-weight: bold;
-    color: var(--color-gold-light);
+    color: var(--theme-accent-light);
     white-space: nowrap;
 }
 
@@ -150,7 +150,7 @@
 
 .gb-stats-strip-stat {
     font-size: 0.72em;
-    color: var(--color-gold-muted);
+    color: var(--theme-accent-muted);
     white-space: nowrap;
 }
 
@@ -192,8 +192,8 @@
             transparent 1px,
             transparent 24px
         ),
-        linear-gradient(160deg, #2c1a0e 0%, #3d2410 40%, #2a1608 100%);
-    color: #e8d5a8;
+        var(--theme-board-bg);
+    color: var(--theme-board-text);
 }
 
 /* ---------- Player mats (cups + bladder per player) ---------- */
@@ -203,7 +203,7 @@
     gap: 12px;
     padding: 12px;
     background: rgba(247,231,206,0.45);
-    border-top: 2px solid rgba(212,160,23,0.25);
+    border-top: 2px solid var(--theme-board-border);
 }
 
 .gb-player-mat {
@@ -252,7 +252,7 @@
 /* BGA-style player strip at top of my sheet */
 .gb-my-sheet {
     padding: 0 0 12px;
-    border-bottom: 2px solid rgba(212,160,23,0.35);
+    border-bottom: 2px solid var(--theme-card-border);
 }
 
 /* Player color strip — green for active player (BGA style) */
@@ -266,13 +266,13 @@
 }
 
 .gb-player-strip.my-turn {
-    background: linear-gradient(135deg, #1a5c1a, #2d8a2d);
+    background: linear-gradient(135deg, var(--theme-player-active-start), var(--theme-player-active-end));
     color: #fff;
 }
 
 .gb-player-strip.waiting {
-    background: linear-gradient(135deg, #5a3010, #7a4820);
-    color: var(--color-gold-light);
+    background: linear-gradient(135deg, var(--theme-player-waiting-start), var(--theme-player-waiting-end));
+    color: var(--theme-accent-light);
 }
 
 .gb-player-strip.game-ended {
@@ -346,13 +346,13 @@
     align-items: center;
     gap: 8px;
     padding: 5px 10px;
-    background: linear-gradient(135deg, #7a4018, #9a5828);
-    color: #f5ddb8;
+    background: linear-gradient(135deg, var(--theme-player-waiting-start), var(--theme-player-waiting-end));
+    color: var(--theme-stats-text);
     border-bottom: 1px solid rgba(0,0,0,0.1);
 }
 
 .gb-other-player-strip.active-turn {
-    background: linear-gradient(135deg, #1a5c1a, #2d8a2d);
+    background: linear-gradient(135deg, var(--theme-player-active-start), var(--theme-player-active-end));
     color: #e0ffe0;
 }
 
@@ -380,7 +380,7 @@
 
 /* ---------- Bottom panel (history) ---------- */
 .gb-bottom-panel {
-    border-top: 2px solid rgba(212,160,23,0.35);
+    border-top: 2px solid var(--theme-card-border);
     background: rgba(255,255,255,0.45);
     flex-shrink: 0;
     max-height: 220px;
@@ -390,8 +390,8 @@
 
 .gb-bottom-tabs {
     display: flex;
-    border-bottom: 1px solid rgba(212,160,23,0.3);
-    background: rgba(74,44,14,0.06);
+    border-bottom: 1px solid var(--theme-board-border);
+    background: var(--theme-header-bg);
     flex-shrink: 0;
 }
 
@@ -401,7 +401,7 @@
     padding: 6px 14px;
     font-size: 0.82em;
     background: none;
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
     border: none;
     border-bottom: 3px solid transparent;
     border-radius: 0;
@@ -412,7 +412,7 @@
 }
 
 .gb-tab-btn:hover { background: rgba(212,160,23,0.1); transform: none; }
-.gb-tab-btn.active { border-bottom-color: var(--color-gold); font-weight: bold; color: var(--color-brown-dark); }
+.gb-tab-btn.active { border-bottom-color: var(--theme-accent); font-weight: bold; color: var(--theme-text-primary); }
 
 .gb-tab-content {
     flex: 1;
@@ -429,27 +429,27 @@
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--color-brown-light);
+    color: var(--theme-text-muted);
     margin: 0 0 6px 0;
     padding-bottom: 3px;
-    border-bottom: 1px solid rgba(212,160,23,0.4);
+    border-bottom: 1px solid var(--theme-card-border);
 }
 
 /* Section titles inside the dark board panel */
 .gb-board-panel .gb-section-title,
 .gb-board-section .gb-section-title {
-    color: #d4a850;
-    border-bottom-color: rgba(212,160,23,0.35);
+    color: var(--theme-gold-accent);
+    border-bottom-color: var(--theme-card-border);
 }
 
 .gb-board-panel .gb-card-row-label,
 .gb-board-section .gb-card-row-label {
-    color: #c49840;
+    color: var(--theme-gold-accent);
 }
 
 .gb-board-panel .gb-bag-count,
 .gb-board-section .gb-bag-count {
-    color: var(--color-gold-muted);
+    color: var(--theme-accent-muted);
 }
 
 /* Bag count text on dark bg */
@@ -457,7 +457,7 @@
 .gb-board-panel #gbBagCount,
 #gbBagCount {
     font-size: 0.78em;
-    color: var(--color-gold-muted);
+    color: var(--theme-accent-muted);
     margin-bottom: 8px;
 }
 
@@ -472,12 +472,12 @@
     background: rgba(0,0,0,0.25);
     border-radius: 8px;
     min-height: 44px;
-    border: 1px solid rgba(212,160,23,0.2);
+    border: 1px solid var(--theme-board-border);
 }
 
 .gb-bag-count {
     font-size: 0.8em;
-    color: var(--color-brown-medium);
+    color: var(--theme-text-secondary);
     margin-bottom: 10px;
 }
 
