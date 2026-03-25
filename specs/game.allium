@@ -372,7 +372,7 @@ entity MoveRecord {
 }
 
 entity RecordedAction {
-    kind: TakenIngredients | SoldCup | DrunkCup | WentForAWee | ClaimedCard | RefreshedRow
+    kind: TakenIngredients | SoldCup | DrunkCup | WentForAWee | ClaimedCard | RefreshedRow | ReRolledSpecials
 }
 
 variant TakenIngredients : RecordedAction {
@@ -406,6 +406,11 @@ variant ClaimedCard : RecordedAction {
 
 variant RefreshedRow : RecordedAction {
     row_position: Integer
+}
+
+variant ReRolledSpecials : RecordedAction {
+    chosen_specials: List<Special>       -- specials the player chose to re-roll
+    results: List<Special?>              -- outcomes in order; null = "nothing"
 }
 
 guarantee: every completed turn action produces exactly one MoveRecord before the next turn begins
@@ -559,6 +564,10 @@ surface PlayerTurn {
             when state.status = active
             and board.player_turn = player.id
             and state.drunk_level >= config.min_drunk_to_refresh
+        ReRollSpecials(player, chosen_specials)
+            when state.status = active
+            and board.player_turn = player.id
+            and state.special_ingredients.count >= 1
         ProposeUndoTurn(player)
             when state.status = active
             and game.status = started

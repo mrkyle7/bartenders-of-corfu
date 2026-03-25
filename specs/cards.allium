@@ -315,3 +315,32 @@ guarantee: the Specialist sell bonus applies only to non-cocktail scoring catego
 guarantee: the Specialist sell bonus is applied after cup doubler doubling: final = doubled_points + specialist_bonus
 guarantee: multiple specialist cards stack: a cup with 2 matching spirit types adds the bonus for each
 guarantee: specialist card effect is permanent; it is never cleared after claiming
+
+-- ─── Re-roll specials ───────────────────────────────────────────────────────
+-- The player chooses one or more specials from their mat and re-rolls each
+-- using the special die. A successful roll replaces the old special with a
+-- new type on the mat. A "nothing" result means that special is simply lost.
+-- No ingredients are added to or removed from the bag.
+-- This is a full turn action.
+
+rule ReRollSpecials {
+    when: ReRollSpecials(player, chosen_specials: List<Special>)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: chosen_specials.count >= 1
+    requires: chosen_specials ⊆ player.special_ingredients
+
+    -- Remove chosen specials from the mat.
+    ensures: player.special_ingredients = player.special_ingredients - chosen_specials
+
+    -- Roll the special die once per chosen special.
+    for _ in chosen_specials:
+        if rolled_result != nothing:
+            ensures: player.special_ingredients = player.special_ingredients + [Special(rolled_result)]
+        -- "nothing" → the special is lost; nothing is returned to the bag.
+}
+
+guarantee: ReRollSpecials consumes the player's one action for the turn
+guarantee: no ingredients are added to or removed from the bag during ReRollSpecials
+guarantee: "nothing" results produce no new special — the player simply loses that special
+guarantee: the player may re-roll any number of their specials (1 to all) in a single action

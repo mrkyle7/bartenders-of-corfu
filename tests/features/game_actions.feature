@@ -15,6 +15,27 @@ Feature: Game turn actions
     And a move record should be created for the game
     And it should be player 2's turn
 
+  Scenario: Player takes ingredients from the open display and places them in a cup
+    Given it is player 1's turn
+    And player 1 has an empty cup 0
+    And the open display contains 5 COLA
+    When player 1 takes 3 COLA from the open display placing all in cup 0
+    Then cup 0 should contain exactly 3 COLA
+    And a move record should be created for the game
+    And it should be player 2's turn
+
+  Scenario: Player takes special ingredients from the open display which gets placed on their player mat
+    Given it is player 1's turn
+    And player 1 has an empty cup 0
+    And player 1 has no special tokens on their player mat
+    And the open display contains 4 COLA and 1 SPECIAL
+    When player 1 takes 1 special from the open display and rolls BITTERS
+    Then player 1's player mat should have 1 BITTERS
+    And it should be player 1's turn
+    When player 1 takes 2 COLA from the open display placing all in cup 0
+    Then cup 0 should contain exactly 2 COLA
+    And a move record should be created for the game
+    And it should be player 2's turn
 
   Scenario: Player takes ingredients in two batches
     Given it is player 1's turn

@@ -163,7 +163,7 @@ def deal_initial_rows(deck: list[Card]) -> tuple[list[CardRow], list[Card]]:
     """Deal cards into 3 rows per cards.allium spec.
 
     Row 1: 3 random karaoke cards (never refreshable).
-    Remaining 13 shuffled: 3 → row 2, 3 → row 3, 7 remain as deck.
+    Remaining 18 shuffled: 3 → row 2, 3 → row 3, 12 remain as deck.
     """
     karaoke_cards = [c for c in deck if c.card_type == "karaoke"]
     non_karaoke = [c for c in deck if c.card_type != "karaoke"]
