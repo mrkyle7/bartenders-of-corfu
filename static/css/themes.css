@@ -53,6 +53,18 @@
     --theme-card-text: #1a3a5c;
     --theme-gold-text: #f97316;
     --theme-gold-accent: #ea580c;
+
+    /* Player sheets */
+    --theme-sheet-area-bg: rgba(219,234,254,0.45);
+    --theme-sheet-bg: rgba(255,255,255,0.7);
+    --theme-sheet-border: rgba(59,130,246,0.25);
+    --theme-sheet-shadow: rgba(12,45,72,0.12);
+
+    /* RGB components */
+    --theme-shadow-rgb: 12,45,72;
+    --theme-accent-rgb: 59,130,246;
+    --theme-border-accent-rgb: 59,130,246;
+    --theme-cream-rgb: 240,230,208;
 }
 
 /* ============================
@@ -105,6 +117,18 @@
     --theme-card-text: #e0e0e8;
     --theme-gold-text: #00e5ff;
     --theme-gold-accent: #00b8d4;
+
+    /* Player sheets */
+    --theme-sheet-area-bg: rgba(20,20,40,0.6);
+    --theme-sheet-bg: rgba(30,30,48,0.8);
+    --theme-sheet-border: rgba(0,229,255,0.15);
+    --theme-sheet-shadow: rgba(0,0,0,0.3);
+
+    /* RGB components */
+    --theme-shadow-rgb: 0,0,0;
+    --theme-accent-rgb: 0,229,255;
+    --theme-border-accent-rgb: 0,229,255;
+    --theme-cream-rgb: 192,192,216;
 }
 
 /* Night club: override form/input for dark bg */
@@ -167,6 +191,18 @@
     --theme-card-text: #4a2040;
     --theme-gold-text: #e89020;
     --theme-gold-accent: #d07810;
+
+    /* Player sheets */
+    --theme-sheet-area-bg: rgba(255,224,216,0.45);
+    --theme-sheet-bg: rgba(255,255,255,0.7);
+    --theme-sheet-border: rgba(232,144,32,0.25);
+    --theme-sheet-shadow: rgba(74,32,64,0.12);
+
+    /* RGB components */
+    --theme-shadow-rgb: 74,32,64;
+    --theme-accent-rgb: 232,144,32;
+    --theme-border-accent-rgb: 232,144,32;
+    --theme-cream-rgb: 240,208,184;
 }
 
 /* ── Smooth transitions (respects reduced motion) ─────── */
@@ -176,6 +212,10 @@
     .gb-stats-bar,
     .gb-player-strip,
     .gb-other-player-strip,
+    .gb-player-mats,
+    .gb-player-mat,
+    .gb-other-sheet,
+    .gb-bottom-panel,
     button,
     .filter-tab,
     .bartender-image {

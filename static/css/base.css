@@ -69,6 +69,18 @@
     --theme-gold-text: #f5d07a;
     --theme-gold-accent: #d4a850;
 
+    /* Player sheet tokens */
+    --theme-sheet-area-bg: rgba(247,231,206,0.45);
+    --theme-sheet-bg: rgba(255,255,255,0.65);
+    --theme-sheet-border: rgba(180,130,40,0.3);
+    --theme-sheet-shadow: rgba(74,44,14,0.12);
+
+    /* RGB component tokens (for rgba() with varying opacity) */
+    --theme-shadow-rgb: 74,44,14;
+    --theme-accent-rgb: 212,160,23;
+    --theme-border-accent-rgb: 180,130,40;
+    --theme-cream-rgb: 247,231,206;
+
     /* Radii */
     --radius-sm: 4px;
     --radius-md: 6px;
@@ -475,6 +487,7 @@ input {
     text-decoration: none;
     cursor: pointer;
     padding: 4px;
+    margin-right: 8px;
 }
 
 .notif-bell:hover {
@@ -484,19 +497,20 @@ input {
 
 .notif-badge {
     position: absolute;
-    top: -4px;
-    right: -6px;
+    top: -6px;
+    right: -8px;
     min-width: 16px;
     height: 16px;
     background: var(--color-red);
     color: var(--color-white);
-    font-size: 0.65em;
+    font-size: 0.6rem;
     font-weight: bold;
     font-style: normal;
     border-radius: var(--radius-pill);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 3px;
+    padding: 0 4px;
     line-height: 1;
+    box-sizing: border-box;
 }
