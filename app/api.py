@@ -904,6 +904,42 @@ async def action_refresh_card_row(
         return JSONResponse(status_code=500, content={"error": "Action failed"})
 
 
+@app.post("/v1/games/{game_id}/actions/quit")
+async def action_quit_game(game_id: str, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.quit_game(game, token_user.id)
+        logger.info("%s quit game %s", token_user.username, game_id)
+        return JSONResponse(
+            content={"game_state": new_state.to_dict(), "move": payload}
+        )
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in quit for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
+@app.post("/v1/games/{game_id}/cancel")
+async def action_cancel_game(game_id: str, request: Request):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.cancel_game(game, token_user.id)
+        logger.info("%s cancelled game %s", token_user.username, game_id)
+        return JSONResponse(
+            content={"game_state": new_state.to_dict(), "move": payload}
+        )
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in cancel for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
 # ─── Move history & replay ────────────────────────────────────────────────────
 
 

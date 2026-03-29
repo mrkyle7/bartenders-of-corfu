@@ -255,9 +255,16 @@ function renderAll(game, replayState = null) {
     // Undo
     renderUndoSection(game, isReplay);
 
+    // Game controls (quit / cancel)
+    renderGameControls(game, isReplay);
+
     // Winner
     const winnerBanner = el('gbWinnerBanner');
-    if (gs.winner) {
+    const isCancelled = game.status === 'ENDED' && !gs.winner;
+    if (isCancelled) {
+        winnerBanner.textContent = 'Game cancelled by host.';
+        winnerBanner.classList.add('visible');
+    } else if (gs.winner) {
         const ws = gs.player_states ? gs.player_states[gs.winner] : null;
         let reason = '';
         if (ws) {
@@ -266,7 +273,7 @@ function renderAll(game, replayState = null) {
             else {
                 // Last player standing — check if all others are eliminated
                 const others = Object.entries(gs.player_states || {}).filter(([id]) => id !== gs.winner);
-                if (others.length > 0 && others.every(([, ps]) => ps.status === 'hospitalised' || ps.status === 'wet')) {
+                if (others.length > 0 && others.every(([, ps]) => ps.status === 'hospitalised' || ps.status === 'wet' || ps.status === 'quit')) {
                     reason = ' (last one standing)';
                 }
             }
@@ -302,7 +309,7 @@ function renderAllStats(game, gs) {
         const isMe = S.me && pid === S.me.id;
         const isActive = !gameEnded && gs.player_turn === pid;
 
-        const isEliminated = pState && (pState.status === 'hospitalised' || pState.status === 'wet');
+        const isEliminated = pState && (pState.status === 'hospitalised' || pState.status === 'wet' || pState.status === 'quit');
 
         const strip = document.createElement('div');
         strip.className = 'gb-stats-strip' +
@@ -321,6 +328,9 @@ function renderAllStats(game, gs) {
             if (pState.status === 'hospitalised') {
                 tag.textContent = '\uD83C\uDFE5 HOSPITALISED';
                 tag.title = 'Drunk level exceeded 5 — eliminated!';
+            } else if (pState.status === 'quit') {
+                tag.textContent = '\uD83D\uDEAA QUIT';
+                tag.title = 'Player quit the game';
             } else {
                 tag.textContent = '\uD83D\uDCA6 WET';
                 tag.title = 'Bladder overflowed — eliminated!';
@@ -1736,6 +1746,8 @@ function formatAction(move) {
         case 'refresh_card_row': return `Refreshed row ${a.row_position ?? ''}`;
         case 'undo':             return `Undo (turn ${(a.target_turn_number ?? 0) + 1})`;
         case 'draw_from_bag':    return 'Drew from bag';
+        case 'quit_game':        return 'Quit the game';
+        case 'cancel_game':      return 'Cancelled the game';
         default:                 return a.type || '?';
     }
 }
@@ -1752,6 +1764,8 @@ function formatActionDetail(move) {
         case 'refresh_card_row': return _detailRefreshCardRow(a);
         case 'undo':             return _frag(h('em', null, `Undid turn ${(a.target_turn_number ?? 0) + 1}`));
         case 'draw_from_bag':    return _frag(h('em', null, `Drew ${(a.drawn || []).length} item(s) from the bag`));
+        case 'quit_game':        return _frag(h('em', null, 'Player quit the game'));
+        case 'cancel_game':      return _frag(h('em', null, 'Game cancelled by host'));
         default:                 return _frag(h('em', null, 'No details available'));
     }
 }
@@ -2765,6 +2779,99 @@ async function voteUndo(vote, agreeBtn, disagreeBtn) {
         showError('Network error voting on undo.');
         setButtonBusy(agreeBtn, false);
         setButtonBusy(disagreeBtn, false);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Game controls (quit / cancel)
+// ─────────────────────────────────────────────────────────────
+function renderGameControls(game, isReplay) {
+    const section = el('gbGameControls');
+    if (!section) return;
+    if (isReplay || game.status !== 'STARTED') {
+        section.classList.add('hidden');
+        return;
+    }
+    section.replaceChildren();
+
+    const gs = game.game_state || {};
+    const myState = gs.player_states?.[S.me?.id];
+    const isHost = S.me && S.me.id === game.host;
+    const isActive = myState && myState.status === 'active';
+
+    if (!isActive && !isHost) {
+        section.classList.add('hidden');
+        return;
+    }
+    section.classList.remove('hidden');
+
+    const btns = document.createElement('div');
+    btns.className = 'gb-game-controls-btns';
+
+    // Quit button — any active player
+    if (isActive) {
+        const quitBtn = document.createElement('button');
+        quitBtn.className = 'gb-game-ctrl-btn gb-game-ctrl-quit';
+        quitBtn.textContent = 'Quit Game';
+        quitBtn.setAttribute('aria-label', 'Quit this game');
+        quitBtn.onclick = () => doQuitGame(quitBtn);
+        btns.appendChild(quitBtn);
+    }
+
+    // Cancel button — host only
+    if (isHost) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'gb-game-ctrl-btn gb-game-ctrl-cancel';
+        cancelBtn.textContent = 'Cancel Game';
+        cancelBtn.setAttribute('aria-label', 'Cancel this game (host only)');
+        cancelBtn.onclick = () => doCancelGame(cancelBtn);
+        btns.appendChild(cancelBtn);
+    }
+
+    section.appendChild(btns);
+}
+
+async function doQuitGame(btn) {
+    if (!confirm('Are you sure you want to quit? You will be eliminated from the game.')) return;
+    setButtonBusy(btn, true, 'Quitting…');
+    clearError();
+    try {
+        const resp = await gameAction('quit');
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.detail || d.error || 'Failed to quit game.');
+        } else {
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
+    } finally {
+        setButtonBusy(btn, false);
+    }
+}
+
+async function doCancelGame(btn) {
+    if (!confirm('Are you sure you want to cancel this game? The game will end with no winner.')) return;
+    setButtonBusy(btn, true, 'Cancelling…');
+    clearError();
+    try {
+        const resp = await fetch(`/v1/games/${S.gameId}/cancel`, { method: 'POST' });
+        if (resp.status === 401 || resp.status === 403) {
+            window.location.href = '/';
+            return;
+        }
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.detail || d.error || 'Failed to cancel game.');
+        } else {
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        showError('Network error. Please try again.');
+    } finally {
+        setButtonBusy(btn, false);
     }
 }
 

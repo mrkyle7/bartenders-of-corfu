@@ -336,6 +336,16 @@ class Db:
         )
         return len(response.data) == 1
 
+    def end_game(self, game_id: UUID, game_state: GameState) -> bool:
+        """End a game (cancel or quit): save state and set status=ENDED."""
+        response = (
+            self.supabase.table("games")
+            .update({"latest_state": game_state.to_dict(), "status": "ENDED"})
+            .eq("id", str(game_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
     def get_next_move_number(self, game_id: UUID, turn_number: int) -> int:
         """Return the next move_number for (game_id, turn_number), starting at 1."""
         resp = (
