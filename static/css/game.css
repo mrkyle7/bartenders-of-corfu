@@ -3837,3 +3837,46 @@
         font-size: 0.78em;
     }
 }
+
+/* ---------- Game Controls (Quit / Cancel) ---------- */
+.gb-game-controls {
+    margin-top: 12px;
+    padding: 8px;
+    border-top: 1px solid rgba(var(--theme-accent-rgb),0.2);
+}
+
+.gb-game-controls-btns {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.gb-game-ctrl-btn {
+    display: inline-block;
+    padding: 6px 14px;
+    font-size: 0.78em;
+    font-weight: bold;
+    border: 1.5px solid;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+}
+
+.gb-game-ctrl-quit {
+    background: transparent;
+    color: var(--color-red, #c0392b);
+    border-color: var(--color-red, #c0392b);
+}
+.gb-game-ctrl-quit:hover { background: var(--color-red, #c0392b); color: #fff; }
+
+.gb-game-ctrl-cancel {
+    background: transparent;
+    color: var(--color-red-dark, #922b21);
+    border-color: var(--color-red-dark, #922b21);
+}
+.gb-game-ctrl-cancel:hover { background: var(--color-red-dark, #922b21); color: #fff; }
+
+.gb-game-ctrl-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

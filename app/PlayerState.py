@@ -87,7 +87,7 @@ class PlayerState:
 
     @property
     def is_eliminated(self) -> bool:
-        return self.status in ("hospitalised", "wet")
+        return self.status in ("hospitalised", "wet", "quit")
 
     @classmethod
     def new_player(cls, player_id: UUID) -> "PlayerState":

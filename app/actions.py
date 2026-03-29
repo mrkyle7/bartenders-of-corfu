@@ -932,3 +932,51 @@ def refresh_card_row(
 
     payload = {"row_position": row_position, "cards_removed": len(removed)}
     return gs, payload
+
+
+def quit_game(
+    gs: GameState,
+    player_id: UUID,
+) -> tuple[GameState, dict]:
+    """QuitGame — a player voluntarily leaves the game.
+
+    Sets the player's status to 'quit'. If only one active player remains,
+    that player wins by last-player-standing. If it was the quitting player's
+    turn, the turn advances to the next active player.
+    """
+    gs = _deep_copy_state(gs)
+    ps = gs.player_states.get(player_id)
+    if ps is None:
+        raise GameException("Player not found in this game", status_code=404)
+    _require_active(ps)
+
+    ps.status = "quit"
+
+    # If it was this player's turn, reset batch state and advance
+    if gs.player_turn == player_id:
+        gs.ingredients_taken_this_turn = 0
+        gs.drunk_ingredients_this_turn = []
+        gs.bag_draw_pending = []
+        gs.taken_records_this_turn = []
+        gs.turn_number += 1
+        _advance_turn(gs)
+
+    _check_last_player_standing(gs)
+
+    payload = {"player_id": str(player_id)}
+    return gs, payload
+
+
+def cancel_game(
+    gs: GameState,
+) -> tuple[GameState, dict]:
+    """CancelGame — the host cancels the game. No winner is declared."""
+    gs = _deep_copy_state(gs)
+
+    # Mark all active players as quit
+    for ps in gs.player_states.values():
+        if not ps.is_eliminated:
+            ps.status = "quit"
+
+    payload = {"cancelled": True}
+    return gs, payload

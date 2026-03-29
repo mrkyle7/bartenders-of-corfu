@@ -224,6 +224,29 @@ class GameManager:
         self._apply_action(game, player_id, "refresh_card_row", new_state, payload)
         return new_state, payload
 
+    def quit_game(self, game: Game, player_id: UUID) -> tuple[GameState, dict]:
+        """A player voluntarily quits the game."""
+        self._require_started(game)
+        if player_id not in game.players:
+            raise GameException("Not a member of this game", status_code=403)
+        new_state, payload = actions.quit_game(game.game_state, player_id)
+        self._apply_action(game, player_id, "quit_game", new_state, payload)
+        # If no winner was set (game continues), update_game_state handles it.
+        # If last-player-standing triggered, update_game_state sets ENDED via winner.
+        # Either way, _apply_action already persisted.
+        return new_state, payload
+
+    def cancel_game(self, game: Game, requester_id: UUID) -> tuple[GameState, dict]:
+        """The host cancels the game. No winner is declared."""
+        self._require_started(game)
+        if game.host != requester_id:
+            raise GameException("Only the host can cancel the game", status_code=403)
+        new_state, payload = actions.cancel_game(game.game_state)
+        self._apply_action(game, requester_id, "cancel_game", new_state, payload)
+        # Force ENDED status since there's no winner to trigger it automatically
+        db.end_game(game.id, new_state)
+        return new_state, payload
+
     # ─── History & replay ─────────────────────────────────────────────────────
 
     def get_history(self, game_id: UUID) -> list[dict]:
