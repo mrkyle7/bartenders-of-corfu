@@ -840,17 +840,17 @@ function renderMySheet(game, gs, myState, isReplay) {
     // Drink combinations quick-reference (rendered once, then toggled)
     renderDrinkCombinations();
 
+    // Exit reroll mode if it's no longer our turn
+    if (S.rerollMode && !isMyTurn) {
+        S.rerollMode = false;
+        S.rerollSelected = [];
+    }
+
     // Special ingredients — only show section if non-empty
-    const specialsEl = el('gbMySpecials');
-    specialsEl.replaceChildren();
-    const specials = myState.special_ingredients || [];
-    if (specials.length > 0) {
-        const specialsTitle = document.createElement('div');
-        specialsTitle.className = 'gb-section-title';
-        specialsTitle.classList.add('gb-section-title--mt');
-        specialsTitle.textContent = 'Specials on Mat';
-        specialsEl.appendChild(specialsTitle);
-        specials.forEach(s => specialsEl.appendChild(makeIngredientBadge(s)));
+    if (S.rerollMode) {
+        renderRerollSpecials();
+    } else {
+        renderSpecialsSection(myState, isMyTurn);
     }
 
     // Claimed cards — only show section if non-empty
@@ -2201,6 +2201,130 @@ async function doRefreshRow(rowPosition, btn) {
     }
 }
 
+// ─── Specials rendering ──────────────────────────────────────────────────────
+
+function renderSpecialsSection(myState, isMyTurn) {
+    const specialsEl = el('gbMySpecials');
+    specialsEl.replaceChildren();
+    const specials = myState.special_ingredients || [];
+    if (specials.length > 0) {
+        const specialsTitle = document.createElement('div');
+        specialsTitle.className = 'gb-section-title';
+        specialsTitle.classList.add('gb-section-title--mt');
+        specialsTitle.textContent = 'Specials on Mat';
+        specialsEl.appendChild(specialsTitle);
+        specials.forEach(s => specialsEl.appendChild(makeIngredientBadge(s)));
+    }
+}
+
+// ─── Re-roll Specials ────────────────────────────────────────────────────────
+
+function enterRerollMode() {
+    S.rerollMode = true;
+    S.rerollSelected = [];
+    renderRerollSpecials();
+}
+
+function exitRerollMode() {
+    S.rerollMode = false;
+    S.rerollSelected = [];
+    // Re-render the specials section in normal mode
+    const myState = S.game?.game_state?.player_states?.[S.me?.id];
+    if (myState) renderSpecialsSection(myState, true);
+}
+
+function renderRerollSpecials() {
+    const myState = S.game?.game_state?.player_states?.[S.me?.id];
+    if (!myState) return;
+    const specialsEl = el('gbMySpecials');
+    specialsEl.replaceChildren();
+
+    const specials = myState.special_ingredients || [];
+    if (specials.length === 0) { exitRerollMode(); return; }
+
+    const title = document.createElement('div');
+    title.className = 'gb-section-title gb-section-title--mt';
+    title.textContent = 'Select Specials to Re-roll';
+    specialsEl.appendChild(title);
+
+    const hint = document.createElement('div');
+    hint.className = 'gb-reroll-hint';
+    hint.textContent = 'Tap specials to select them for re-rolling. Rolling "nothing" loses the special.';
+    specialsEl.appendChild(hint);
+
+    const badgesWrap = document.createElement('div');
+    badgesWrap.className = 'gb-reroll-badges';
+
+    specials.forEach((s, idx) => {
+        const badge = makeIngredientBadge(s);
+        badge.classList.add('gb-reroll-selectable');
+        badge.dataset.rerollIdx = idx;
+        if (S.rerollSelected.includes(idx)) badge.classList.add('gb-reroll-selected');
+        badge.onclick = () => {
+            if (S.rerollSelected.includes(idx)) {
+                S.rerollSelected = S.rerollSelected.filter(i => i !== idx);
+            } else {
+                S.rerollSelected.push(idx);
+            }
+            renderRerollSpecials();
+        };
+        badgesWrap.appendChild(badge);
+    });
+    specialsEl.appendChild(badgesWrap);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'gb-reroll-btn-row';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'gb-btn gb-btn-primary';
+    confirmBtn.textContent = `Re-roll ${S.rerollSelected.length} Special${S.rerollSelected.length !== 1 ? 's' : ''}`;
+    confirmBtn.disabled = S.rerollSelected.length === 0;
+    confirmBtn.onclick = () => doRerollSpecials(confirmBtn);
+    btnRow.appendChild(confirmBtn);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'gb-btn gb-btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => exitRerollMode();
+    btnRow.appendChild(cancelBtn);
+
+    specialsEl.appendChild(btnRow);
+}
+
+async function doRerollSpecials(btn) {
+    if (btn) btn.classList.add('is-busy');
+    clearError();
+    const myState = S.game?.game_state?.player_states?.[S.me?.id];
+    if (!myState) return;
+    const specials = myState.special_ingredients || [];
+    const chosen = S.rerollSelected.map(idx => specials[idx]).filter(Boolean);
+    if (chosen.length === 0) { showError('Select at least one special to re-roll.'); return; }
+    try {
+        const resp = await gameAction('reroll-specials', { chosen_specials: chosen });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.detail || d.error || 'Cannot re-roll specials right now.');
+        } else {
+            const data = await resp.json();
+            S.rerollMode = false;
+            S.rerollSelected = [];
+            // Show results via the payload
+            if (data.move?.results) {
+                const msgs = data.move.results.map((r, i) =>
+                    `${chosen[i]} → ${r || 'nothing'}`
+                );
+                showError('Re-roll: ' + msgs.join(', '));
+            }
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
+    } finally {
+        if (btn) btn.classList.remove('is-busy');
+    }
+}
+
 function toggleStoredActions(cardDiv, cardIndex, card) {
     // If actions already shown, toggle off
     const existing = cardDiv.querySelector('.gb-store-card-actions');
@@ -2946,6 +3070,14 @@ function renderActionBar(game, gs, isReplay) {
     claimBtn.disabled = !canClaim;
     claimBtn.onclick = () => {
         el('gbCardRows')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    // Reroll: available if player has at least 1 special
+    const rerollBtn = el('gbActionReroll');
+    rerollBtn.disabled = specials.length < 1;
+    rerollBtn.onclick = () => {
+        enterRerollMode();
+        el('gbMySpecials')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 }
 

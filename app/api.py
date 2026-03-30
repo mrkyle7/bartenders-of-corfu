@@ -882,6 +882,32 @@ class RefreshRowRequest(BaseModel):
     row_position: int
 
 
+class RerollSpecialsRequest(BaseModel):
+    chosen_specials: List[str]
+
+
+@app.post("/v1/games/{game_id}/actions/reroll-specials")
+async def action_reroll_specials(
+    game_id: str, body: RerollSpecialsRequest, request: Request
+):
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+    try:
+        new_state, payload = gameManager.reroll_specials(
+            game, token_user.id, body.chosen_specials
+        )
+        logger.info("%s rerolled specials in game %s", token_user.username, game_id)
+        return JSONResponse(
+            content={"game_state": new_state.to_dict(), "move": payload}
+        )
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception:
+        logger.exception("Error in reroll-specials for game %s", game_id)
+        return JSONResponse(status_code=500, content={"error": "Action failed"})
+
+
 @app.post("/v1/games/{game_id}/actions/refresh-card-row")
 async def action_refresh_card_row(
     game_id: str, body: RefreshRowRequest, request: Request

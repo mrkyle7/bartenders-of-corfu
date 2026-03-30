@@ -880,6 +880,60 @@ def use_stored_spirit(
     return gs, payload
 
 
+def reroll_specials(
+    gs: GameState,
+    player_id: UUID,
+    chosen_specials: list[str],
+) -> tuple[GameState, dict]:
+    """ReRollSpecials action — re-roll selected specials from the player's mat.
+
+    Each chosen special is removed and the special die is rolled once per chosen
+    special.  If the roll is not "nothing", a new special of the rolled type is
+    added.  If the roll is "nothing", the special is simply lost (nothing is
+    returned to the bag).  This consumes the player's turn action.
+    """
+    gs = _deep_copy_state(gs)
+    _require_turn(gs, player_id)
+    ps = gs.player_states[player_id]
+    _require_active(ps)
+    _require_no_take_in_progress(gs)
+
+    if len(chosen_specials) < 1:
+        raise GameException("Must choose at least 1 special to re-roll", status_code=400)
+
+    # Validate all chosen specials are on the player's mat
+    mat = list(ps.special_ingredients)
+    for s in chosen_specials:
+        if s not in mat:
+            raise GameException(
+                f"Special '{s}' is not on your player mat", status_code=400
+            )
+        mat.remove(s)
+
+    # Remove chosen specials from mat
+    for s in chosen_specials:
+        ps.special_ingredients.remove(s)
+
+    # Roll once per chosen special
+    results: list[str | None] = []
+    for _ in chosen_specials:
+        rolled = SpecialType.roll()
+        if rolled != SpecialType.NOTHING:
+            ps.special_ingredients.append(rolled.value)
+            results.append(rolled.value)
+        else:
+            results.append(None)
+
+    gs.turn_number += 1
+    _advance_turn(gs)
+
+    payload = {
+        "chosen_specials": chosen_specials,
+        "results": results,
+    }
+    return gs, payload
+
+
 def refresh_card_row(
     gs: GameState,
     player_id: UUID,

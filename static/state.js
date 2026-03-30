@@ -26,6 +26,10 @@ const state = {
     stagingActive:       false, // true when staging area is visible
     stagingTakeCount:    0,     // total items to take this turn
     stagingAlreadyTaken: 0,     // items already taken in previous batches
+
+    // Re-roll specials state
+    rerollMode:     false,  // true when selecting specials for re-roll
+    rerollSelected: [],     // indices into special_ingredients to re-roll
 };
 
 export default state;
