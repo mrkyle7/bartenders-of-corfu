@@ -595,3 +595,73 @@ Feature: Game turn actions
     When player 2 takes 3 ingredients from the bag
     And player 1 sells cup 1 with no declared specials
     Then player 1 should have 6 points
+
+  # ── ReRollSpecials ──────────────────────────────────────────────────────────
+
+  Scenario: Player re-rolls a single special and gets a new one
+    Given it is player 1's turn
+    And player 1 has "sugar" on their player mat
+    When player 1 re-rolls specials "sugar" and rolls "lemon"
+    Then player 1's player mat should have 1 LEMON
+    And a move record should be created for the game
+    And it should be player 2's turn
+
+  Scenario: Player re-rolls multiple specials
+    Given it is player 1's turn
+    And player 1 has "sugar" and "lemon" on their player mat
+    When player 1 re-rolls specials "sugar,lemon" and rolls "bitters,cointreau"
+    Then player 1's player mat should have 1 BITTERS and 1 COINTREAU
+    And it should be player 2's turn
+
+  Scenario: Player re-rolls a special and rolls nothing — special is lost
+    Given it is player 1's turn
+    And player 1 has "sugar" on their player mat
+    When player 1 re-rolls specials "sugar" and rolls "nothing"
+    Then player 1's player mat should be empty
+    And it should be player 2's turn
+
+  Scenario: Player re-rolls all specials with mixed results
+    Given it is player 1's turn
+    And player 1 has "sugar" and "lemon" on their player mat
+    When player 1 re-rolls specials "sugar,lemon" and rolls "bitters,nothing"
+    Then player 1's player mat should have 1 BITTERS
+    And it should be player 2's turn
+
+  Scenario: Re-roll can yield the same special type
+    Given it is player 1's turn
+    And player 1 has "sugar" on their player mat
+    When player 1 re-rolls specials "sugar" and rolls "sugar"
+    Then player 1's player mat should have 1 SUGAR
+    And it should be player 2's turn
+
+  Scenario: ReRollSpecials with no specials chosen is rejected
+    Given it is player 1's turn
+    And player 1 has "sugar" on their player mat
+    When player 1 tries to re-roll specials ""
+    Then the action should be rejected with a 400 error
+
+  Scenario: ReRollSpecials with a special not on the mat is rejected
+    Given it is player 1's turn
+    And player 1 has "sugar" on their player mat
+    When player 1 tries to re-roll specials "lemon"
+    Then the action should be rejected with a 400 error
+
+  Scenario: ReRollSpecials is rejected when not your turn
+    Given it is player 1's turn
+    And player 1 has "sugar" on their player mat
+    When player 2 tries to re-roll specials "sugar"
+    Then the action should be rejected with a 409 error
+
+  Scenario: ReRollSpecials is blocked while a take-ingredients batch is in progress
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 has "sugar" on their player mat
+    When player 1 takes 1 ingredient from the bag
+    And player 1 tries to re-roll specials "sugar"
+    Then the action should be rejected with a 409 error
+
+  Scenario: Bag contents unchanged after ReRollSpecials
+    Given it is player 1's turn
+    And player 1 has "sugar" on their player mat
+    When player 1 re-rolls specials "sugar" and rolls "nothing"
+    Then the bag size should be unchanged
