@@ -1506,6 +1506,18 @@ def player_try_reroll_specials(ctx, n, chosen):
     ctx["last_status"] = resp.status_code
 
 
+@when(parsers.parse("player {n:d} tries to re-roll with no specials"))
+def player_try_reroll_empty(ctx, n):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
+        json={"chosen_specials": []},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
 @then(parsers.parse("player {n:d}'s player mat should be empty"))
 def player_mat_empty(ctx, n):
     ps = _player_state(ctx, n)
