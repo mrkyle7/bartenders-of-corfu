@@ -214,6 +214,16 @@ class GameManager:
         self._apply_action(game, player_id, "use_stored_spirit", new_state, payload)
         return new_state, payload
 
+    def reroll_specials(
+        self, game: Game, player_id: UUID, chosen_specials: list[str]
+    ) -> tuple[GameState, dict]:
+        self._require_started(game)
+        new_state, payload = actions.reroll_specials(
+            game.game_state, player_id, chosen_specials
+        )
+        self._apply_action(game, player_id, "reroll_specials", new_state, payload)
+        return new_state, payload
+
     def refresh_card_row(
         self, game: Game, player_id: UUID, row_position: int
     ) -> tuple[GameState, dict]:

@@ -2605,6 +2605,68 @@
     margin-top: 6px;
 }
 
+/* Re-roll specials UI */
+.gb-reroll-hint {
+    font-size: 0.8rem;
+    color: var(--theme-text-muted, #888);
+    margin-bottom: 6px;
+}
+
+.gb-reroll-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.gb-reroll-selectable {
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.gb-reroll-selectable:hover {
+    border-color: var(--theme-accent, #4a90d9);
+}
+
+.gb-reroll-selected {
+    border-color: var(--theme-accent, #4a90d9);
+    box-shadow: 0 0 6px var(--theme-accent, #4a90d9);
+}
+
+.gb-reroll-btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.gb-reroll-btn-row button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--theme-border);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.gb-reroll-btn-row .gb-btn-primary {
+    background: var(--theme-accent, #4a90d9);
+    color: #fff;
+    border-color: var(--theme-accent, #4a90d9);
+}
+
+.gb-reroll-btn-row .gb-btn-primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.gb-reroll-btn-row .gb-btn-secondary {
+    background: var(--theme-bg-card, #2a2a2a);
+    color: var(--theme-text-primary, #eee);
+}
+
 /* Other player specials row */
 .gb-specials-row {
     display: flex;

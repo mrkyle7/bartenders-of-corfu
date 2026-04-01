@@ -1455,3 +1455,68 @@ def player_holds_specialist_card(ctx, n, spirit_type):
         return gs
 
     _patch_game_state(ctx["game_id"], patch)
+
+
+# ── ReRollSpecials steps ─────────────────────────────────────────────────────
+
+
+@when(
+    parsers.parse(
+        'player {n:d} re-rolls specials "{chosen}" and rolls "{results}"'
+    )
+)
+def player_reroll_specials(ctx, n, chosen, results):
+    token, _ = _player(ctx, n)
+    chosen_list = [s.strip() for s in chosen.split(",") if s.strip()]
+    result_list = [s.strip() for s in results.split(",") if s.strip()]
+
+    # Record bag size before the action for later assertion
+    game = _get_game(token, ctx["game_id"])
+    ctx["bag_size_before"] = len(game["game_state"].get("bag_contents", []))
+
+    # Map result strings to SpecialType enums for the mock
+    roll_returns = [SpecialType[r.upper()] for r in result_list]
+
+    with patch("app.actions.SpecialType") as mock_st:
+        # Preserve enum members so validation still works
+        for member in SpecialType:
+            setattr(mock_st, member.name, member)
+        mock_st.roll.side_effect = roll_returns
+
+        resp = _client.post(
+            f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
+            json={"chosen_specials": chosen_list},
+            cookies=_auth(token),
+        )
+    assert resp.status_code == 200, resp.text
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(parsers.parse('player {n:d} tries to re-roll specials "{chosen}"'))
+def player_try_reroll_specials(ctx, n, chosen):
+    token, _ = _player(ctx, n)
+    chosen_list = [s.strip() for s in chosen.split(",") if s.strip()]
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
+        json={"chosen_specials": chosen_list},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@then(parsers.parse("player {n:d}'s player mat should be empty"))
+def player_mat_empty(ctx, n):
+    ps = _player_state(ctx, n)
+    specials = ps.get("special_ingredients", [])
+    assert specials == [], f"Expected empty mat, got {specials}"
+
+
+@then("the bag size should be unchanged")
+def bag_size_unchanged(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    bag_size_after = len(game["game_state"].get("bag_contents", []))
+    assert bag_size_after == ctx["bag_size_before"], (
+        f"Bag size changed: was {ctx['bag_size_before']}, now {bag_size_after}"
+    )
