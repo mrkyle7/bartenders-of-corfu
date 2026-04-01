@@ -637,7 +637,7 @@ Feature: Game turn actions
   Scenario: ReRollSpecials with no specials chosen is rejected
     Given it is player 1's turn
     And player 1 has "sugar" on their player mat
-    When player 1 tries to re-roll specials ""
+    When player 1 tries to re-roll with no specials
     Then the action should be rejected with a 400 error
 
   Scenario: ReRollSpecials with a special not on the mat is rejected
