@@ -2213,7 +2213,31 @@ function renderSpecialsSection(myState, isMyTurn) {
         specialsTitle.classList.add('gb-section-title--mt');
         specialsTitle.textContent = 'Specials on Mat';
         specialsEl.appendChild(specialsTitle);
-        specials.forEach(s => specialsEl.appendChild(makeIngredientBadge(s)));
+
+        const row = document.createElement('div');
+        row.className = 'gb-specials-mat-row';
+        specials.forEach(s => row.appendChild(makeIngredientBadge(s)));
+
+        // Inline re-roll tile (like the wee button next to bladder)
+        if (isMyTurn) {
+            const tile = document.createElement('div');
+            tile.className = 'gb-reroll-tile';
+            tile.setAttribute('role', 'button');
+            tile.setAttribute('tabindex', '0');
+            tile.setAttribute('aria-label', 'Re-roll specials — risk losing them for new ones');
+            tile.append(
+                h('span', { className: 'gb-reroll-tile-icon' }, '\uD83C\uDFB2'),
+                h('span', { className: 'gb-reroll-tile-label' }, 'Re-roll')
+            );
+            tile.onclick = () => {
+                enterRerollMode();
+                specialsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            };
+            tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click(); } };
+            row.appendChild(tile);
+        }
+
+        specialsEl.appendChild(row);
     }
 }
 
