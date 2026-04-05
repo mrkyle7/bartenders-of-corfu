@@ -105,6 +105,38 @@ class UserManager:
             raise UserValidationError("Target user not found or is not active")
         db.deactivate_user(target_id, admin_id)
 
+    _VALID_BOT_STRATEGIES = {
+        "random",
+        "karaoke",
+        "cocktail",
+        "safe",
+        "aggressive",
+        "specialist",
+    }
+
+    _BOT_DISPLAY_NAMES = {
+        "random": "Randy Random",
+        "karaoke": "Karaoke Kyle",
+        "cocktail": "Cocktail Carl",
+        "safe": "Safe Sally",
+        "aggressive": "Aggressive Andy",
+        "specialist": "Specialist Sam",
+    }
+
+    def get_or_create_bot(self, strategy: str) -> User:
+        """Get an existing bot user for the strategy, or create one."""
+        if strategy not in self._VALID_BOT_STRATEGIES:
+            raise UserValidationError(
+                f"Invalid bot strategy. Must be one of: {', '.join(sorted(self._VALID_BOT_STRATEGIES))}"
+            )
+        existing = db.get_bot_by_strategy(strategy)
+        if existing:
+            return existing
+        display_name = self._BOT_DISPLAY_NAMES.get(strategy, f"Bot {strategy}")
+        bot = User.new_bot(display_name, strategy)
+        db.add_user(bot)
+        return bot
+
     def reactivate_user(self, admin_id: UUID, target_id: UUID) -> None:
         """Admin reactivates a deactivated account."""
         admin = db.get_user_by_id(admin_id)

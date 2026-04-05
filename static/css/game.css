@@ -4066,3 +4066,31 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* Bot controls in lobby */
+.gb-bot-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.gb-bot-controls select {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--theme-border, #ccc);
+    background: var(--theme-bg-card, #fff);
+    color: var(--theme-text-primary, #333);
+    font-size: 0.9rem;
+}
+
+.gb-add-bot-btn {
+    font-size: 0.85rem;
+    padding: 6px 14px;
+}
+
+.gb-bot-player {
+    opacity: 0.85;
+    font-style: italic;
+}
