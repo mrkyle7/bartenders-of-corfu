@@ -136,7 +136,7 @@ class TestUser(unittest.TestCase):
 
         # Test to_dict (public view)
         user_dict = original_user.to_dict()
-        expected_keys = {"id", "username", "status", "theme"}
+        expected_keys = {"id", "username", "status", "theme", "is_bot"}
         self.assertEqual(
             set(user_dict.keys()),
             expected_keys,
@@ -151,6 +151,7 @@ class TestUser(unittest.TestCase):
             "username",
             "status",
             "theme",
+            "is_bot",
             "is_admin",
             "created_at",
             "deactivated_at",
