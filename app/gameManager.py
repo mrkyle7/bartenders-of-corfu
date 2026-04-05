@@ -2,12 +2,16 @@ import logging
 from uuid import UUID
 
 from app import actions
+from app.bot_player import process_bot_turns
 from app.db import db
 from app.game import Game, GameException, Status
 from app.GameState import GameState
 
 
 class GameManager:
+    # Track games currently processing bot turns to prevent re-entrancy
+    _bot_processing: set[UUID] = set()
+
     def new_game(self, host_id: UUID) -> UUID:
         """Create a new game for the host user and return the game ID."""
         game = Game.new_game(host_id)
@@ -33,6 +37,25 @@ class GameManager:
                 return
             case _:
                 raise GameException("Failed to join game", status_code=500)
+
+    def add_bot(self, requester_id: UUID, game_id: UUID, strategy: str) -> UUID:
+        """Add a bot player to a game. Only the host can add bots."""
+        from app.UserManager import UserManager
+
+        game = db.get_game(game_id)
+        if game is None:
+            raise GameException("Game not found", status_code=404)
+        if game.host != requester_id:
+            raise GameException("Only the host can add bots", status_code=403)
+        if game.status != Status.NEW:
+            raise GameException(
+                "Can only add bots to games that haven't started", status_code=409
+            )
+
+        user_manager = UserManager()
+        bot_user = user_manager.get_or_create_bot(strategy)
+        self.add_player(bot_user.id, game_id)
+        return bot_user.id
 
     def remove_player(self, requester_id: UUID, game_id: UUID, target_id: UUID):
         game = db.get_game(game_id)
@@ -79,6 +102,7 @@ class GameManager:
             case "not_new":
                 raise GameException("Game has already been started", status_code=409)
             case "ok":
+                self._schedule_bot_turns(game_id)
                 return
             case _:
                 raise GameException("Failed to start game", status_code=500)
@@ -131,7 +155,24 @@ class GameManager:
             state_before,
         )
         db.update_game_state(game.id, new_state)
+        # If the turn changed, check if the next player is a bot
+        old_turn = game.game_state.player_turn
+        new_turn = new_state.player_turn
+        if new_turn != old_turn and new_state.winner is None:
+            self._schedule_bot_turns(game.id)
         return new_state
+
+    def _schedule_bot_turns(self, game_id: UUID) -> None:
+        """Process bot turns if the current player is a bot."""
+        if game_id in self._bot_processing:
+            return  # already processing bots for this game
+        self._bot_processing.add(game_id)
+        try:
+            process_bot_turns(self, game_id)
+        except Exception:
+            logging.exception("Error processing bot turns for game %s", game_id)
+        finally:
+            self._bot_processing.discard(game_id)
 
     def draw_from_bag(
         self, game: Game, player_id: UUID, count: int
@@ -291,7 +332,23 @@ class GameManager:
             raise GameException("No moves to undo", status_code=409)
 
         last_turn = moves[-1]["turn_number"]
-        return db.create_undo_request(game.id, last_turn, player_id)
+        undo_req = db.create_undo_request(game.id, last_turn, player_id)
+
+        # Auto-vote agree for all bot players
+        from app.bot_player import get_bot_ids_for_game
+
+        bot_ids = get_bot_ids_for_game(game.players)
+        for bot_id in bot_ids:
+            if str(bot_id) == str(player_id):
+                continue  # proposer already voted
+            ps = game.game_state.player_states.get(bot_id)
+            if ps and not ps.is_eliminated:
+                try:
+                    self.vote_undo(game, bot_id, undo_req["id"], "agree")
+                except GameException:
+                    pass  # already voted or other issue
+
+        return undo_req
 
     def vote_undo(
         self, game: Game, player_id: UUID, request_id: str, vote: str

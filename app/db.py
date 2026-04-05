@@ -28,6 +28,8 @@ class Db:
         "deleted_at",
         "logged_out_at",
         "theme",
+        "is_bot",
+        "bot_strategy",
     )
 
     @staticmethod
@@ -48,25 +50,24 @@ class Db:
                 "deleted_at": row.get("deleted_at"),
                 "logged_out_at": row.get("logged_out_at"),
                 "theme": row.get("theme", "taverna"),
+                "is_bot": row.get("is_bot", False),
+                "bot_strategy": row.get("bot_strategy"),
             }
         )
 
     def add_user(self, user: User) -> bool:
         password_value = bytesToHexString(user._password_hash)
-        response = (
-            self.supabase.table("users")
-            .insert(
-                {
-                    "id": str(user.id),
-                    "username": user.username,
-                    "email": user.email,
-                    "password": password_value,
-                    "status": user.status,
-                    "is_admin": user.is_admin,
-                }
-            )
-            .execute()
-        )
+        row = {
+            "id": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "password": password_value,
+            "status": user.status,
+            "is_admin": user.is_admin,
+            "is_bot": user.is_bot,
+            "bot_strategy": user.bot_strategy,
+        }
+        response = self.supabase.table("users").insert(row).execute()
         return len(response.data) == 1
 
     def get_user_by_username(self, username: str) -> User | None:
@@ -108,6 +109,34 @@ class Db:
             .neq("status", "deleted")
             .order("created_at", desc=True)
             .limit(1000)
+            .execute()
+        )
+        return [self._row_to_user(row) for row in response.data]
+
+    def get_bot_by_strategy(self, strategy: str) -> User | None:
+        """Find an existing active bot user for the given strategy."""
+        response = (
+            self.supabase.table("users")
+            .select(*self._USER_COLUMNS)
+            .eq("is_bot", True)
+            .eq("bot_strategy", strategy)
+            .eq("status", "active")
+            .limit(1)
+            .execute()
+        )
+        if len(response.data) >= 1:
+            return self._row_to_user(response.data[0])
+        return None
+
+    def get_bot_users_by_ids(self, ids: set[UUID]) -> list[User]:
+        """Return only bot users from the given IDs."""
+        if not ids:
+            return []
+        response = (
+            self.supabase.table("users")
+            .select(*self._USER_COLUMNS)
+            .in_("id", [str(i) for i in ids])
+            .eq("is_bot", True)
             .execute()
         )
         return [self._row_to_user(row) for row in response.data]

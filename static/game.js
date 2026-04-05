@@ -120,12 +120,12 @@ async function resolvePlayerNames(playerIds) {
             const r = await fetch(`/v1/users/${encodeURIComponent(pid)}`);
             if (r.ok) {
                 const u = await r.json();
-                S.players[pid] = { id: pid, username: u.username || pid };
+                S.players[pid] = { id: pid, username: u.username || pid, is_bot: u.is_bot || false };
             } else {
-                S.players[pid] = { id: pid, username: pid.slice(0, 8) };
+                S.players[pid] = { id: pid, username: pid.slice(0, 8), is_bot: false };
             }
         } catch {
-            S.players[pid] = { id: pid, username: pid.slice(0, 8) };
+            S.players[pid] = { id: pid, username: pid.slice(0, 8), is_bot: false };
         }
     }));
 }
@@ -404,6 +404,10 @@ function renderLobby(game) {
         if (pid === game.host) {
             nameSpan.textContent += ' (host)';
         }
+        if (S.players[pid] && S.players[pid].is_bot) {
+            nameSpan.textContent += ' (bot)';
+            entry.classList.add('gb-bot-player');
+        }
         entry.appendChild(nameSpan);
 
         if (isHost && pid !== game.host) {
@@ -434,11 +438,34 @@ function renderLobby(game) {
         list.appendChild(entry);
     });
 
-    // Start Game button — host only
+    // Add Bot + Start Game buttons — host only
     const section = el('gbStartGameSection');
     if (!section) return;
     section.replaceChildren();
     if (isHost) {
+        // Add Bot controls
+        const isFull = (game.players || []).length >= 4;
+        if (!isFull) {
+            const botRow = document.createElement('div');
+            botRow.className = 'gb-bot-controls';
+
+            const select = document.createElement('select');
+            select.id = 'gbBotStrategy';
+            select.setAttribute('aria-label', 'Bot strategy');
+            select.innerHTML = '<option value="">Loading strategies…</option>';
+            botRow.appendChild(select);
+
+            const addBtn = document.createElement('button');
+            addBtn.className = 'gb-action-btn gb-add-bot-btn';
+            addBtn.textContent = 'Add Bot';
+            addBtn.setAttribute('aria-label', 'Add a bot player');
+            addBtn.onclick = addBot;
+            botRow.appendChild(addBtn);
+
+            section.appendChild(botRow);
+            loadBotStrategies();
+        }
+
         const btn = document.createElement('button');
         btn.id = 'gbBtnStartGame';
         btn.className = 'gb-action-btn';
@@ -446,6 +473,45 @@ function renderLobby(game) {
         btn.setAttribute('aria-label', 'Start the game');
         btn.onclick = startGame;
         section.appendChild(btn);
+    }
+}
+
+async function loadBotStrategies() {
+    try {
+        const resp = await fetch('/v1/bot-strategies');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const select = el('gbBotStrategy');
+        if (!select) return;
+        select.innerHTML = '';
+        (data.strategies || []).forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+            select.appendChild(opt);
+        });
+    } catch { /* ignore */ }
+}
+
+async function addBot() {
+    const select = el('gbBotStrategy');
+    if (!select || !select.value) return;
+    const strategy = select.value;
+    clearError();
+    try {
+        const resp = await fetch(`/v1/games/${S.gameId}/add-bot`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ strategy }),
+        });
+        if (resp.ok) {
+            await refreshGame();
+        } else {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.error || 'Failed to add bot');
+        }
+    } catch (e) {
+        showError('Network error adding bot');
     }
 }
 

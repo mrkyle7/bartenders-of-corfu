@@ -324,6 +324,37 @@ async def join_game(game_id: str, request: Request):
         return JSONResponse(status_code=500, content={"error": "Failed to join game"})
 
 
+class AddBotRequest(BaseModel):
+    strategy: str
+
+
+@app.post("/v1/games/{game_id}/add-bot")
+async def add_bot(game_id: str, body: AddBotRequest, request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    try:
+        bot_id = gameManager.add_bot(token_user.id, UUID(game_id), body.strategy)
+        logger.info(
+            "%s added bot (%s) to game %s", token_user.username, body.strategy, game_id
+        )
+        return JSONResponse(content={"message": "Bot added", "bot_id": str(bot_id)})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except Exception as e:
+        logger.exception("Error adding bot to game")
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.get("/v1/bot-strategies")
+async def list_bot_strategies():
+    """Return available bot strategies for the UI."""
+    from app.UserManager import UserManager
+
+    strategies = sorted(UserManager._VALID_BOT_STRATEGIES)
+    return JSONResponse(content={"strategies": strategies})
+
+
 @app.post("/v1/games/{game_id}/start")
 async def start_game(game_id: str, request: Request):
     token_user, err = _require_auth(request)

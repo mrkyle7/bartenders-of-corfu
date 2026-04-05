@@ -26,6 +26,8 @@ class User:
         self.id: UUID = uuid4()
         self.status: str = "active"
         self.is_admin: bool = False
+        self.is_bot: bool = False
+        self.bot_strategy: Optional[str] = None
         self.username: Optional[str] = self._validate_name(username)
         self.email: Optional[str] = self._validate_email(email)
         self._password_hash: Optional[bytes] = self._hash_password(password)
@@ -36,6 +38,27 @@ class User:
         self.deleted_at: Optional[str] = None
         self.logged_out_at: Optional[str] = None
         self.theme: str = "taverna"
+
+    @classmethod
+    def new_bot(cls, username: str, strategy: str) -> "User":
+        """Create a bot user that doesn't require email/password."""
+        user = cls.__new__(cls)
+        user.id = uuid4()
+        user.status = "active"
+        user.is_admin = False
+        user.is_bot = True
+        user.bot_strategy = strategy
+        user.username = user._validate_name(username)
+        user.email = None
+        user._password_hash = None
+        user.created_at = None
+        user.password_changed_at = None
+        user.deactivated_at = None
+        user.deactivated_by = None
+        user.deleted_at = None
+        user.logged_out_at = None
+        user.theme = "taverna"
+        return user
 
     def _validate_name(self, name: str) -> str:
         if not isinstance(name, str):
@@ -133,7 +156,10 @@ class User:
             "username": self.username,
             "status": self.status,
             "theme": self.theme,
+            "is_bot": self.is_bot,
         }
+        if self.is_bot and self.bot_strategy:
+            result["bot_strategy"] = self.bot_strategy
 
         if include_sensitive:
             result["is_admin"] = self.is_admin
@@ -154,6 +180,8 @@ class User:
         user.id = UUID(data["id"])
         user.status = data.get("status", "active")
         user.is_admin = data.get("is_admin", False)
+        user.is_bot = data.get("is_bot", False)
+        user.bot_strategy = data.get("bot_strategy")
         user.username = data.get("username")
         user.email = data.get("email")
         user.created_at = data.get("created_at")
