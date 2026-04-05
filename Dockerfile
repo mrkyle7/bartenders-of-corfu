@@ -25,6 +25,7 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY log_conf.yaml .
 COPY app ./app
 COPY static ./static
+COPY playtesting ./playtesting
 
 EXPOSE 8000
 
