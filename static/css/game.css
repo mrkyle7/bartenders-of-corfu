@@ -2805,6 +2805,7 @@
     align-items: center;
     gap: 8px;
     padding: 4px 0;
+    color: var(--theme-text-primary);
 }
 
 /* Pointer events disabled on nested badge */

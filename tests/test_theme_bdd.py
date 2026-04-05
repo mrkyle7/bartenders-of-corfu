@@ -72,10 +72,7 @@ def fetch_user_details(ctx):
 @when(parsers.parse('an unauthenticated user changes their theme to "{theme}"'))
 def change_theme_unauthenticated(ctx, theme):
     _client.cookies.clear()
-    resp = _client.patch(
-        "/v1/users/me/theme",
-        json={"theme": theme}
-    )
+    resp = _client.patch("/v1/users/me/theme", json={"theme": theme})
 
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code

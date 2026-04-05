@@ -56,7 +56,10 @@ class Db:
         )
 
     def add_user(self, user: User) -> bool:
-        password_value = bytesToHexString(user._password_hash)
+        if user.is_bot:
+            password_value = None
+        else: 
+            password_value = bytesToHexString(user._password_hash)
         row = {
             "id": str(user.id),
             "username": user.username,

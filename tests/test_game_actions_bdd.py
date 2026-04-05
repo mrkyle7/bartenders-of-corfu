@@ -260,8 +260,9 @@ def player_has_specials(ctx, n, specials):
             return gs
 
         _patch_game_state(ctx["game_id"], patch)
-        
-@given(parsers.parse('player {n:d} has no special tokens on their player mat'))
+
+
+@given(parsers.parse("player {n:d} has no special tokens on their player mat"))
 def player_has_no_specials(ctx, n):
     _, pid = _player(ctx, n)
 
@@ -622,7 +623,8 @@ def player_take_n_to_cup(ctx, n, count, cup_index):
     )
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
-    
+
+
 @when(
     parsers.parse(
         "player {n:d} takes {spec} from the open display placing all in cup {cup_index:d}"
@@ -633,17 +635,23 @@ def player_take_open_to_cup(ctx, n, spec, cup_index):
 
     token, _ = _player(ctx, n)
     assignments = [
-        {"ingredient": ingredient.name, "source": "display", "disposition": 'cup', "cup_index": cup_index}
+        {
+            "ingredient": ingredient.name,
+            "source": "display",
+            "disposition": "cup",
+            "cup_index": cup_index,
+        }
         for ingredient in ingredients
     ]
     take_resp = _client.post(
-        f"/v1/games/{ctx["game_id"]}/actions/take-ingredients",
+        f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
         json={"assignments": assignments},
         cookies=_auth(token),
     )
     ctx["last_resp"] = take_resp
     ctx["last_status"] = take_resp.status_code
-    
+
+
 @when(
     parsers.parse(
         "player {n:d} takes 1 special from the open display and rolls {special}"
@@ -656,11 +664,9 @@ def player_take_open_special(ctx, n, special):
         mock_SpecialType.roll.return_value = special
 
         token, _ = _player(ctx, n)
-        assignments = [
-            {"ingredient": Ingredient.SPECIAL.name, "source": "display"}
-        ]
+        assignments = [{"ingredient": Ingredient.SPECIAL.name, "source": "display"}]
         take_resp = _client.post(
-            f"/v1/games/{ctx["game_id"]}/actions/take-ingredients",
+            f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
             json={"assignments": assignments},
             cookies=_auth(token),
         )
@@ -942,6 +948,7 @@ def cup_contains_count(ctx, cup_index, count):
         f"Expected {count} in cup {cup_index}, got {len(ingredients)}"
     )
 
+
 @then(parsers.parse("cup {cup_index:d} should contain exactly {spec}"))
 def cup_contains_spec(ctx, cup_index, spec):
     ps = _player_state(ctx, 1)
@@ -950,15 +957,17 @@ def cup_contains_spec(ctx, cup_index, spec):
     assert [e.name for e in expected] == ingredients, (
         f"Expected {expected} in cup {cup_index}, got {ingredients}"
     )
-    
+
+
 @then(parsers.parse("player {n:d}'s player mat should have {spec}"))
 def mat_contains_spec(ctx, spec):
     ps = _player_state(ctx, 1)
     expected = _parse_special_spec(spec)
-    ingredients = ps.get('special_ingredients')
+    ingredients = ps.get("special_ingredients")
     assert [e.value for e in expected] == ingredients, (
         f"Expected {expected} on mat, got {ingredients}"
     )
+
 
 @then(
     parsers.parse(
@@ -1291,6 +1300,7 @@ def _parse_ingredient_spec(spec: str) -> list[Ingredient]:
                 pass
     return result
 
+
 def _parse_special_spec(spec: str) -> list[SpecialType]:
     """Parse '1 BITTERS' or '2 BITTERS and 1 SUGAR' into [SpecialType, ...]."""
     result = []
@@ -1460,11 +1470,7 @@ def player_holds_specialist_card(ctx, n, spirit_type):
 # ── ReRollSpecials steps ─────────────────────────────────────────────────────
 
 
-@when(
-    parsers.parse(
-        'player {n:d} re-rolls specials "{chosen}" and rolls "{results}"'
-    )
-)
+@when(parsers.parse('player {n:d} re-rolls specials "{chosen}" and rolls "{results}"'))
 def player_reroll_specials(ctx, n, chosen, results):
     token, _ = _player(ctx, n)
     chosen_list = [s.strip() for s in chosen.split(",") if s.strip()]

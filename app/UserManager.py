@@ -18,6 +18,7 @@ class UserManager:
         if (
             user
             and user.status == "active"
+            and not user.is_bot
             and user.verify_secret(password, user._password_hash)
         ):
             return user

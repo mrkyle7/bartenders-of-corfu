@@ -524,9 +524,7 @@ def sell_cup(
             for cd in ps.cards
             if cd.get("card_type") == "specialist" and cd.get("spirit_type")
         }
-        cup_spirit_types = {
-            i.name for i in cup.ingredients if i in _SPIRITS
-        }
+        cup_spirit_types = {i.name for i in cup.ingredients if i in _SPIRITS}
         matching = specialist_spirit_types & cup_spirit_types
         pts += len(matching) * 2
 
@@ -604,7 +602,9 @@ def go_for_a_wee(
     _require_no_take_in_progress(gs)
 
     if not ps.bladder:
-        raise GameException("Cannot go for a wee with an empty bladder", status_code=409)
+        raise GameException(
+            "Cannot go for a wee with an empty bladder", status_code=409
+        )
 
     excreted = list(ps.bladder)
     # Return bladder contents to the bag
@@ -899,7 +899,9 @@ def reroll_specials(
     _require_no_take_in_progress(gs)
 
     if len(chosen_specials) < 1:
-        raise GameException("Must choose at least 1 special to re-roll", status_code=400)
+        raise GameException(
+            "Must choose at least 1 special to re-roll", status_code=400
+        )
 
     # Validate all chosen specials are on the player's mat
     mat = list(ps.special_ingredients)
