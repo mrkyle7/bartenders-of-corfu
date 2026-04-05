@@ -3,7 +3,7 @@
  * Vanilla ES2022.
  */
 
-import { SPIRITS, CARD_COST_TOKEN, CARD_COST_COUNT, MAX_SLOTS } from './constants.js';
+import { SPIRITS, CARD_COST_TOKEN, CARD_COST_COUNT, MAX_SLOTS, INGREDIENT_ICONS } from './constants.js';
 import { ingredientLabel, ingredientIcon, ingredientKind, makeIngredientBadge, makeCostBadge } from './ingredients.js';
 import { h, text, el, showError, clearError, showModalError, clearModalError,
          setButtonBusy, formatTime, flash, switchTab, openModal, closeModal } from './dom.js';
@@ -2328,25 +2328,111 @@ async function doRerollSpecials(btn) {
         if (!resp.ok) {
             const d = await resp.json().catch(() => ({}));
             showError(d.detail || d.error || 'Cannot re-roll specials right now.');
-        } else {
-            const data = await resp.json();
-            S.rerollMode = false;
-            S.rerollSelected = [];
-            // Show results via the payload
-            if (data.move?.results) {
-                const msgs = data.move.results.map((r, i) =>
-                    `${chosen[i]} → ${r || 'nothing'}`
-                );
-                showError('Re-roll: ' + msgs.join(', '));
-            }
-            await refreshGame();
-            await refreshHistory();
+            if (btn) btn.classList.remove('is-busy');
+            return;
         }
+        const data = await resp.json();
+        S.rerollMode = false;
+        S.rerollSelected = [];
+        const results = data.move?.results || [];
+        // Show the rolling animation before refreshing game state
+        await showRerollAnimation(chosen, results);
+        await refreshGame();
+        await refreshHistory();
     } catch (e) {
         if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
     } finally {
         if (btn) btn.classList.remove('is-busy');
     }
+}
+
+const _REROLL_FACES = ['bitters', 'cointreau', 'lemon', 'sugar', 'vermouth', 'nothing'];
+const _NOTHING_ICON = '❌';
+const _NOTHING_LABEL = 'Nothing';
+
+function _specialIcon(name) {
+    if (!name) return _NOTHING_ICON;
+    return INGREDIENT_ICONS[name.toUpperCase()] || '✨';
+}
+function _specialLabel(name) {
+    if (!name) return _NOTHING_LABEL;
+    return ingredientLabel(name);
+}
+
+/**
+ * Show a slot-machine-style rolling animation for each re-rolled special.
+ * Renders directly into gbMySpecials and resolves when animation completes.
+ */
+function showRerollAnimation(chosen, results) {
+    return new Promise(resolve => {
+        const container = el('gbMySpecials');
+        container.replaceChildren();
+
+        const title = document.createElement('div');
+        title.className = 'gb-section-title gb-section-title--mt';
+        title.textContent = 'Rolling Specials…';
+        container.appendChild(title);
+
+        const grid = document.createElement('div');
+        grid.className = 'gb-reroll-anim-grid';
+        container.appendChild(grid);
+
+        const slots = [];
+        chosen.forEach((orig, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'gb-reroll-slot';
+
+            const fromLabel = document.createElement('div');
+            fromLabel.className = 'gb-reroll-slot-from';
+            fromLabel.textContent = `${_specialIcon(orig)} ${_specialLabel(orig)}`;
+            slot.appendChild(fromLabel);
+
+            const arrow = document.createElement('div');
+            arrow.className = 'gb-reroll-slot-arrow';
+            arrow.textContent = '→';
+            slot.appendChild(arrow);
+
+            const dieEl = document.createElement('div');
+            dieEl.className = 'gb-reroll-die';
+            dieEl.textContent = '🎲';
+            slot.appendChild(dieEl);
+
+            grid.appendChild(slot);
+            slots.push({ slot, dieEl, result: results[i] });
+        });
+
+        // Animate each slot: rapid cycling then land on result
+        const CYCLE_MS = 80;       // time per face change
+        const CYCLES = 12;         // total face changes before settling
+        const STAGGER_MS = 400;    // delay between each slot starting to resolve
+
+        slots.forEach(({ dieEl, result, slot }, idx) => {
+            let tick = 0;
+            const startDelay = idx * STAGGER_MS;
+
+            setTimeout(() => {
+                dieEl.classList.add('gb-reroll-die-spinning');
+                const interval = setInterval(() => {
+                    const face = _REROLL_FACES[tick % _REROLL_FACES.length];
+                    dieEl.textContent = `${_specialIcon(face)} ${_specialLabel(face)}`;
+                    tick++;
+                    if (tick >= CYCLES) {
+                        clearInterval(interval);
+                        // Land on final result
+                        dieEl.classList.remove('gb-reroll-die-spinning');
+                        const isNothing = result === null || result === undefined;
+                        dieEl.textContent = `${_specialIcon(result)} ${_specialLabel(result)}`;
+                        dieEl.classList.add(isNothing ? 'gb-reroll-die-nothing' : 'gb-reroll-die-result');
+                        slot.classList.add('gb-reroll-slot-done');
+                    }
+                }, CYCLE_MS);
+            }, startDelay);
+        });
+
+        // Total animation time + a pause to read results
+        const totalMs = (slots.length - 1) * STAGGER_MS + CYCLES * CYCLE_MS + 1500;
+        setTimeout(resolve, totalMs);
+    });
 }
 
 function toggleStoredActions(cardDiv, cardIndex, card) {
