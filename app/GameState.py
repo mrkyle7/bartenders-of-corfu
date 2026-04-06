@@ -9,18 +9,18 @@ from app.user import User
 
 OPEN_DISPLAY_SIZE = 5
 
-INITIAL_BAG: list[Ingredient] = (
-    [Ingredient.WHISKEY] * 5
-    + [Ingredient.GIN] * 5
-    + [Ingredient.RUM] * 5
-    + [Ingredient.TEQUILA] * 5
-    + [Ingredient.VODKA] * 5
-    + [Ingredient.COLA] * 5
-    + [Ingredient.SODA] * 5
-    + [Ingredient.TONIC] * 5
-    + [Ingredient.CRANBERRY] * 5
-    + [Ingredient.SPECIAL] * 5
-)
+def create_initial_bag(num_players: int) -> list[Ingredient]:
+    multiplier = num_players + 3
+    return ([Ingredient.WHISKEY] * multiplier
+    + [Ingredient.GIN] * multiplier
+    + [Ingredient.RUM] * multiplier
+    + [Ingredient.TEQUILA] * multiplier
+    + [Ingredient.VODKA] * multiplier
+    + [Ingredient.COLA] * multiplier
+    + [Ingredient.SODA] * multiplier
+    + [Ingredient.TONIC] * multiplier
+    + [Ingredient.CRANBERRY] * multiplier
+    + [Ingredient.SPECIAL] * multiplier)
 
 
 class GameState:
@@ -89,7 +89,7 @@ class GameState:
     @classmethod
     def start_game(cls, players: list[UUID]) -> "GameState":
         """Build the initial game state when a game is started."""
-        bag = list(INITIAL_BAG)
+        bag = list(create_initial_bag(len(players)))
         random.shuffle(bag)
 
         # Draw 5 ingredients to the open display

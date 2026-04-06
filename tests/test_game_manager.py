@@ -264,6 +264,33 @@ class TestStartGame(GameManagerTestCase):
 
         return host_token, host_id, game_id, player_token, player_id
 
+        
+    def _setup_game_with_four_players(self):
+        """Create a game and add a second player. Returns (host_token, host_id, game_id, player_token, player_id)."""
+        host = _unique("host")
+        host_reg = self._register(host, f"{host}@example.com")
+        host_token = self._token(host_reg)
+        host_id = host_reg.json()["id"]
+        game_id = self._new_game(host_token)
+
+        player = _unique("player")
+        player3 = _unique("player3")
+        player4 = _unique("player4")
+        player_reg = self._register(player, f"{player}@example.com")
+        player_reg3 = self._register(player3, f"{player3}@example.com")
+        player_reg4 = self._register(player4, f"{player4}@example.com")
+        player_token = self._token(player_reg)
+        player_token3 = self._token(player_reg3)
+        player_token4 = self._token(player_reg4)
+        player_id = player_reg.json()["id"]
+        player_id3 = player_reg3.json()["id"]
+        player_id4 = player_reg4.json()["id"]
+        self._join_game(player_token, game_id)
+        self._join_game(player_token3, game_id)
+        self._join_game(player_token4, game_id)
+
+        return host_token, host_id, game_id, player_token, player_id, player_id3, player_id4
+
     def test_host_can_start_game_with_two_players(self):
         host_token, _, game_id, _, _ = self._setup_game_with_two_players()
         resp = self._start_game(host_token, game_id)
@@ -289,6 +316,22 @@ class TestStartGame(GameManagerTestCase):
         self.assertEqual(len(state["bag_contents"]), 45)  # 50 - 5 open
         self.assertIn(host_id, state["player_states"])
         self.assertIn(player_id, state["player_states"])
+        self.assertIsNotNone(state["player_turn"])
+
+    def test_start_game_initialises_game_state_4_player(self):
+        """Started game should have bag, open_display (5 items), and player states."""
+        host_token, host_id, game_id, _, player_id, player_id3, player_id4= self._setup_game_with_four_players()
+        self._start_game(host_token, game_id)
+        game_resp = self.client.get(
+            f"/v1/games/{game_id}", cookies=self._auth(host_token)
+        )
+        state = game_resp.json()["game_state"]
+        self.assertEqual(len(state["open_display"]), 5)
+        self.assertEqual(len(state["bag_contents"]), 65)  # 70 - 5 open
+        self.assertIn(host_id, state["player_states"])
+        self.assertIn(player_id, state["player_states"])
+        self.assertIn(player_id3, state["player_states"])
+        self.assertIn(player_id4, state["player_states"])
         self.assertIsNotNone(state["player_turn"])
 
     def test_start_game_player_state_has_correct_initial_values(self):
