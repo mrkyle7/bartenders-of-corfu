@@ -130,7 +130,7 @@ resource "google_compute_firewall" "allow_http" {
 
   allow {
     protocol = "tcp"
-    ports    = ["80", "443", "30080", "6443"]
+    ports    = ["80", "443", "30080"]
   }
 
   source_ranges = ["0.0.0.0/0"]

@@ -22,18 +22,19 @@
       }
     ],
     "Stop": [
-    {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "uv run ruff check && uv run ruff format --check"
-        }
-      ]
-    }
-  ]
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ruff check && uv run ruff format --check"
+          }
+        ]
+      }
+    ]
   },
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
-    "allium@juxt-plugins": true
+    "allium@juxt-plugins": true,
+    "engineering-skills@claude-code-skills": true
   }
 }

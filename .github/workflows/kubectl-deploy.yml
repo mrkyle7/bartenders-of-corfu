@@ -41,30 +41,23 @@ jobs:
       - name: Run gcloud command
         run: gcloud info
 
-      - name: Copy kubeconfig to /tmp
+      - name: Start SSH tunnel to k8s API
+        run: |
+          gcloud compute ssh k3s-vm-1 \
+            --zone=us-east1-d \
+            --project=bartenders-464918 \
+            --ssh-flag="-L 6443:127.0.0.1:6443 -N -f" \
+            --quiet
+
+      - name: Fetch kubeconfig from VM
         run: |
           gcloud compute ssh k3s-vm-1 \
             --zone=us-east1-d \
             --project=bartenders-464918 \
             --ssh-flag="-T" \
             --quiet \
-            --command="sudo cp /etc/rancher/k3s/k3s.yaml /tmp/k3s.yaml && sudo chmod 644 /tmp/k3s.yaml"
-
-      - name: Fetch kubeconfig from VM
-        run: |
-          gcloud compute scp \
-            --zone=us-east1-d \
-            --project=bartenders-464918 \
-            --quiet \
-            k3s-vm-1:/tmp/k3s.yaml kubeconfig
-
-      - name: Patch kubeconfig server address
-        run: |
-          VM_IP=$(gcloud compute instances describe k3s-vm-1 \
-            --zone=us-east1-d \
-            --project=bartenders-464918 \
-            --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
-          sed -i "s/0.0.0.0/$VM_IP/" kubeconfig
+            --command="sudo cat /etc/rancher/k3s/k3s.yaml" > kubeconfig
+          sed -i "s/0.0.0.0/127.0.0.1/" kubeconfig
 
       - name: Test kubectl access
         env:
