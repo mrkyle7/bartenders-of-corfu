@@ -146,6 +146,49 @@ resource "google_dns_record_set" "cheetahmoongames" {
   rrdatas      = [google_compute_instance.k3s.network_interface[0].access_config[0].nat_ip]
 }
 
+resource "google_artifact_registry_repository" "docker_us" {
+  project       = var.project_name
+  location      = var.region
+  repository_id = "docker-us"
+  description   = "Docker images for bartenders"
+  format        = "DOCKER"
+
+  labels = {
+    env    = var.env
+    region = var.region
+    app    = var.app_name
+  }
+
+  # Delete untagged images after 7 days — these are usually orphaned build layers
+  cleanup_policies {
+    id     = "delete-untagged"
+    action = "DELETE"
+    condition {
+      tag_state  = "UNTAGGED"
+      older_than = "604800s" # 7 days
+    }
+  }
+
+  # Delete tagged images older than 30 days
+  cleanup_policies {
+    id     = "delete-old-tagged"
+    action = "DELETE"
+    condition {
+      tag_state  = "TAGGED"
+      older_than = "2592000s" # 30 days
+    }
+  }
+
+  # Always keep the 10 most recent versions (overrides DELETE rules above)
+  cleanup_policies {
+    id     = "keep-recent"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 10
+    }
+  }
+}
+
 resource "google_storage_bucket" "k3s-storage" {
   name     = var.bucket_name
   location = var.region
