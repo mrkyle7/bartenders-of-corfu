@@ -688,7 +688,8 @@ function renderBoard(game, gs, isReplay) {
         // Refresh row button (needs drunk level >= 3; row 1 is karaoke row — never refreshable)
         const isMyTurn = S.me && gs.player_turn === S.me.id;
         const drunkLevel = myState ? (myState.drunk_level || 0) : 0;
-        if (!isReplay && isMyTurn && row.position !== 1) {
+        const boardTakeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
+        if (!isReplay && isMyTurn && !boardTakeInProgress && row.position !== 1) {
             if (drunkLevel >= 3) {
                 const refreshBtn = document.createElement('button');
                 refreshBtn.className = 'gb-refresh-row-btn';
@@ -916,7 +917,7 @@ function renderMySheet(game, gs, myState, isReplay) {
     if (S.rerollMode) {
         renderRerollSpecials();
     } else {
-        renderSpecialsSection(myState, isMyTurn);
+        renderSpecialsSection(myState, isMyTurn, gs);
     }
 
     // Claimed cards — only show section if non-empty
@@ -1011,23 +1012,28 @@ function renderBladderWeeRow(myState, isMyTurn, game, gs) {
     container.appendChild(bladderWrap);
 
     // Wee button (next to bladder)
+    const takeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
     if (isMyTurn) {
+        const weeDisabled = takeInProgress || bladder.length === 0;
         const tile = document.createElement('div');
-        tile.className = 'gb-wee-tile';
+        tile.className = 'gb-wee-tile' + (weeDisabled ? ' disabled' : '');
         tile.setAttribute('role', 'button');
-        tile.setAttribute('tabindex', '0');
+        tile.setAttribute('tabindex', weeDisabled ? '-1' : '0');
         tile.setAttribute('aria-label', `Go for a wee \u2014 empties bladder, sobers up 1 level (${toiletTokens} tokens left)`);
+        if (weeDisabled) tile.setAttribute('aria-disabled', 'true');
         tile.append(
             h('span', { className: 'gb-wee-icon' }, '\uD83D\uDEBD'),
             h('span', { className: 'gb-wee-label' }, 'Wee')
         );
-        tile.onclick = () => doWee(tile);
-        tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
+        if (!weeDisabled) {
+            tile.onclick = () => doWee(tile);
+            tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doWee(tile); } };
+        }
         container.appendChild(tile);
     }
 
     // Claimable cards — show cards the player can afford, right below bladder
-    if (isMyTurn && gs.card_rows) {
+    if (isMyTurn && !takeInProgress && gs.card_rows) {
         const claimable = [];
         for (const row of gs.card_rows) {
             for (const card of (row.cards || [])) {
@@ -1212,7 +1218,8 @@ function renderMyCups(myState, isMyTurn, game, gs) {
         cupEl.appendChild(ingArea);
 
         // Inline action buttons below cup (no overlay/modal)
-        if (isMyTurn) {
+        const cupTakeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
+        if (isMyTurn && !cupTakeInProgress) {
             const actions = document.createElement('div');
             actions.className = 'gb-cup-inline-actions';
 
@@ -2269,7 +2276,7 @@ async function doRefreshRow(rowPosition, btn) {
 
 // ─── Specials rendering ──────────────────────────────────────────────────────
 
-function renderSpecialsSection(myState, isMyTurn) {
+function renderSpecialsSection(myState, isMyTurn, gs) {
     const specialsEl = el('gbMySpecials');
     specialsEl.replaceChildren();
     const specials = myState.special_ingredients || [];
@@ -2285,7 +2292,8 @@ function renderSpecialsSection(myState, isMyTurn) {
         specials.forEach(s => row.appendChild(makeIngredientBadge(s)));
 
         // Inline re-roll tile (like the wee button next to bladder)
-        if (isMyTurn) {
+        const specialsTakeInProgress = gs && (gs.ingredients_taken_this_turn || 0) > 0;
+        if (isMyTurn && !specialsTakeInProgress) {
             const tile = document.createElement('div');
             tile.className = 'gb-reroll-tile';
             tile.setAttribute('role', 'button');
@@ -2320,7 +2328,7 @@ function exitRerollMode() {
     S.rerollSelected = [];
     // Re-render the specials section in normal mode
     const myState = S.game?.game_state?.player_states?.[S.me?.id];
-    if (myState) renderSpecialsSection(myState, true);
+    if (myState) renderSpecialsSection(myState, true, S.game?.game_state);
 }
 
 function renderRerollSpecials() {
@@ -2496,7 +2504,80 @@ function showRerollAnimation(chosen, results) {
         });
 
         // Total animation time + a pause to read results
-        const totalMs = (slots.length - 1) * STAGGER_MS + CYCLES * CYCLE_MS + 1500;
+        const totalMs = (slots.length - 1) * STAGGER_MS + CYCLES * CYCLE_MS + 3000;
+        setTimeout(resolve, totalMs);
+    });
+}
+
+/**
+ * Show a slot-machine-style rolling animation for specials drawn during take-ingredients.
+ * Similar to showRerollAnimation but shows "Special Token" as the source instead of an original special.
+ */
+function showSpecialDrawAnimation(results) {
+    return new Promise(resolve => {
+        const container = el('gbMySpecials');
+        container.replaceChildren();
+
+        const title = document.createElement('div');
+        title.className = 'gb-section-title gb-section-title--mt';
+        title.textContent = 'Rolling Specials\u2026';
+        container.appendChild(title);
+
+        const grid = document.createElement('div');
+        grid.className = 'gb-reroll-anim-grid';
+        container.appendChild(grid);
+
+        const slots = [];
+        results.forEach((result, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'gb-reroll-slot';
+
+            const fromLabel = document.createElement('div');
+            fromLabel.className = 'gb-reroll-slot-from';
+            fromLabel.textContent = '\u2728 Special Token';
+            slot.appendChild(fromLabel);
+
+            const arrow = document.createElement('div');
+            arrow.className = 'gb-reroll-slot-arrow';
+            arrow.textContent = '\u2192';
+            slot.appendChild(arrow);
+
+            const dieEl = document.createElement('div');
+            dieEl.className = 'gb-reroll-die';
+            dieEl.textContent = '\uD83C\uDFB2';
+            slot.appendChild(dieEl);
+
+            grid.appendChild(slot);
+            slots.push({ slot, dieEl, result });
+        });
+
+        const CYCLE_MS = 80;
+        const CYCLES = 12;
+        const STAGGER_MS = 400;
+
+        slots.forEach(({ dieEl, result, slot }, idx) => {
+            let tick = 0;
+            const startDelay = idx * STAGGER_MS;
+
+            setTimeout(() => {
+                dieEl.classList.add('gb-reroll-die-spinning');
+                const interval = setInterval(() => {
+                    const face = _REROLL_FACES[tick % _REROLL_FACES.length];
+                    dieEl.textContent = `${_specialIcon(face)} ${_specialLabel(face)}`;
+                    tick++;
+                    if (tick >= CYCLES) {
+                        clearInterval(interval);
+                        dieEl.classList.remove('gb-reroll-die-spinning');
+                        const isNothing = result === null || result === undefined;
+                        dieEl.textContent = `${_specialIcon(result)} ${_specialLabel(result)}`;
+                        dieEl.classList.add(isNothing ? 'gb-reroll-die-nothing' : 'gb-reroll-die-result');
+                        slot.classList.add('gb-reroll-slot-done');
+                    }
+                }, CYCLE_MS);
+            }, startDelay);
+        });
+
+        const totalMs = (slots.length - 1) * STAGGER_MS + CYCLES * CYCLE_MS + 3000;
         setTimeout(resolve, totalMs);
     });
 }
@@ -2753,7 +2834,15 @@ async function submitStagingItems() {
             const d = await resp.json().catch(() => ({}));
             showError(d.error || 'Failed to take ingredients.');
         } else {
+            const data = await resp.json();
+            const taken = data.move?.taken || [];
+            const specialItems = taken.filter(t => t.disposition === 'special');
             closeStaging();
+            if (specialItems.length > 0) {
+                const chosen = specialItems.map(() => null); // no "from" label for fresh draws
+                const results = specialItems.map(t => t.special_type || null);
+                await showSpecialDrawAnimation(results);
+            }
             await refreshGame();
             await refreshHistory();
         }
@@ -3197,10 +3286,11 @@ function renderActionBar(game, gs, isReplay) {
     const displayCount = (gs.open_display || []).length;
     const totalAvail = bagCount + displayCount;
     const takeCount = myState.take_count || 3;
+    const takeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
 
     // Take: available if enough ingredients
     const takeBtn = el('gbActionTake');
-    takeBtn.disabled = totalAvail < takeCount;
+    takeBtn.disabled = totalAvail < takeCount && !takeInProgress;
     takeBtn.onclick = () => {
         document.querySelector('.gb-bar-inline')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
@@ -3215,21 +3305,21 @@ function renderActionBar(game, gs, isReplay) {
         .filter(c => c.card_type === 'specialist' && c.spirit_type)
         .map(c => c.spirit_type);
     const canSell = detectBestDrink(cup0, specials, hasDoubler0, specSpiritTypes) || detectBestDrink(cup1, specials, hasDoubler1, specSpiritTypes);
-    sellBtn.disabled = !canSell;
+    sellBtn.disabled = takeInProgress || !canSell;
     sellBtn.onclick = () => {
         el('gbMyCups')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
     // Drink: available if either cup is non-empty
     const drinkBtn = el('gbActionDrink');
-    drinkBtn.disabled = cup0.length === 0 && cup1.length === 0;
+    drinkBtn.disabled = takeInProgress || (cup0.length === 0 && cup1.length === 0);
     drinkBtn.onclick = () => {
         el('gbMyCups')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
-    // Wee: always available on your turn
+    // Wee: disabled if take in progress or bladder is empty
     const weeBtn = el('gbActionWee');
-    weeBtn.disabled = false;
+    weeBtn.disabled = takeInProgress || bladder.length === 0;
     weeBtn.onclick = () => {
         el('gbBladderWeeRow')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
@@ -3243,14 +3333,14 @@ function renderActionBar(game, gs, isReplay) {
         }
         if (canClaim) break;
     }
-    claimBtn.disabled = !canClaim;
+    claimBtn.disabled = takeInProgress || !canClaim;
     claimBtn.onclick = () => {
         el('gbCardRows')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
     // Reroll: available if player has at least 1 special
     const rerollBtn = el('gbActionReroll');
-    rerollBtn.disabled = specials.length < 1;
+    rerollBtn.disabled = takeInProgress || specials.length < 1;
     rerollBtn.onclick = () => {
         enterRerollMode();
         el('gbMySpecials')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
