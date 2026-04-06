@@ -1131,6 +1131,20 @@ def game_over(ctx):
     assert game["status"] == "ENDED", f"Expected ENDED, got {game['status']}"
 
 
+@then("the game should not be over")
+def game_not_over(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    assert game["status"] != "ENDED", f"Expected game still running, got {game['status']}"
+
+
+@then("the last round should be active")
+def last_round_active(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    assert game["game_state"]["last_round"] is True, (
+        f"Expected last_round=True, got {game['game_state'].get('last_round')}"
+    )
+
+
 @then(parsers.parse("player {n:d} should be the winner"))
 def player_is_winner(ctx, n):
     _, pid = _player(ctx, n)

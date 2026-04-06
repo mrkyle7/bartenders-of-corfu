@@ -41,6 +41,7 @@
                 <button class="gb-header-btn" onclick="openRules()" aria-label="View game rules">Rules</button>
             </div>
             <div id="gbTurnIndicator" class="gb-turn-indicator" aria-live="polite" aria-atomic="true">Loading…</div>
+            <div id="gbLastRoundBanner" class="gb-last-round-banner" role="status" aria-live="polite"></div>
             <div id="gbWinnerBanner" class="gb-winner-banner" role="status" aria-live="polite"></div>
             <div id="gbErrorBar" class="gb-error-bar" role="alert" aria-live="assertive"></div>
         </header>
@@ -274,7 +275,7 @@
         <div class="gb-modal gb-menu-modal">
             <button class="gb-modal-close" onclick="closeMenu()" aria-label="Close cocktail menu">&#x2715;</button>
             <div class="gb-modal-title" id="gbMenuModalTitle">Cocktail Menu &amp; Scoring</div>
-            <div class="gb-modal-step-label">First match wins &mdash; reach <strong>40 pts</strong> to win the game.</div>
+            <div class="gb-modal-step-label">First match wins &mdash; reach <strong>40 pts</strong> to trigger the last round.</div>
             <!-- Dynamic content rendered by JS -->
             <div id="gbMenuContent"></div>
         </div>
@@ -290,7 +291,8 @@
 
             <div class="gb-rules-section">
                 <div class="gb-rules-heading">Objective</div>
-                <p>Be the first to sell <strong>40&nbsp;pts</strong> worth of drinks &mdash; or claim <strong>3&nbsp;karaoke cards</strong> for an instant win.</p>
+                <p>Reach <strong>40&nbsp;pts</strong> to trigger the <strong>last round</strong> &mdash; or claim <strong>3&nbsp;karaoke cards</strong> for an instant win.</p>
+                <p>When a player reaches 40 points, the current round finishes so all players have an equal number of turns. The player with the <strong>most points</strong> at the end wins.</p>
             </div>
 
             <div class="gb-rules-section">

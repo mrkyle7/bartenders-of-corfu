@@ -259,6 +259,18 @@ function renderAll(game, replayState = null) {
     renderGameControls(game, isReplay);
 
     // Winner
+    // Last round banner
+    const lastRoundBanner = el('gbLastRoundBanner');
+    if (lastRoundBanner) {
+        if (gs.last_round && game.status === 'STARTED') {
+            lastRoundBanner.textContent = 'LAST ROUND \u2014 Finish this round to determine the winner!';
+            lastRoundBanner.classList.add('visible');
+        } else {
+            lastRoundBanner.classList.remove('visible');
+        }
+    }
+
+    // Winner
     const winnerBanner = el('gbWinnerBanner');
     const isCancelled = game.status === 'ENDED' && !gs.winner;
     if (isCancelled) {
@@ -268,13 +280,14 @@ function renderAll(game, replayState = null) {
         const ws = gs.player_states ? gs.player_states[gs.winner] : null;
         let reason = '';
         if (ws) {
-            if ((ws.points || 0) >= 40) reason = ' (40+ points)';
-            else if ((ws.karaoke_cards_claimed || 0) >= 3) reason = ' (3 karaoke cards)';
+            if ((ws.karaoke_cards_claimed || 0) >= 3) reason = ' (3 karaoke cards)';
             else {
                 // Last player standing — check if all others are eliminated
                 const others = Object.entries(gs.player_states || {}).filter(([id]) => id !== gs.winner);
                 if (others.length > 0 && others.every(([, ps]) => ps.status === 'hospitalised' || ps.status === 'wet' || ps.status === 'quit')) {
                     reason = ' (last one standing)';
+                } else {
+                    reason = ` (highest points \u2014 ${ws.points || 0} pts)`;
                 }
             }
         }
@@ -321,6 +334,14 @@ function renderAllStats(game, gs) {
         nameSpan.className = 'gb-stats-strip-name';
         nameSpan.textContent = playerName(pid);
         strip.appendChild(nameSpan);
+
+        if (gs.turn_order && gs.turn_order.length > 0 && pid === gs.turn_order[0]) {
+            const startTag = document.createElement('span');
+            startTag.className = 'gb-stats-strip-start-tag';
+            startTag.textContent = '1st';
+            startTag.title = 'Starting player';
+            strip.appendChild(startTag);
+        }
 
         if (isEliminated) {
             const tag = document.createElement('span');
@@ -383,6 +404,10 @@ function renderTurnIndicator(game, gs) {
         const name = playerName(currentPlayer);
         ind.textContent = `${name}'s turn  •  Turn ${turnDisplay}`;
         ind.className = 'gb-turn-indicator';
+    }
+    if (gs.last_round) {
+        ind.textContent += '  \u2022  LAST ROUND';
+        ind.className += ' gb-last-round';
     }
 }
 
@@ -874,6 +899,14 @@ function renderMySheet(game, gs, myState, isReplay) {
     stripName.className = 'gb-player-strip-name';
     stripName.textContent = (S.me && S.me.username) ? S.me.username : 'Me';
     strip.appendChild(stripName);
+
+    if (gs.turn_order && gs.turn_order.length > 0 && S.me && S.me.id === gs.turn_order[0]) {
+        const startTag = document.createElement('span');
+        startTag.className = 'gb-stats-strip-start-tag';
+        startTag.textContent = '1st';
+        startTag.title = 'Starting player';
+        strip.appendChild(startTag);
+    }
 
     if (isMyTurn && !gameEnded) {
         const tag = document.createElement('span');

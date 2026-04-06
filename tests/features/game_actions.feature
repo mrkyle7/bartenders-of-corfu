@@ -166,14 +166,66 @@ Feature: Game turn actions
     When player 2 tries to take an ingredient
     Then the action should be rejected with a 409 error
 
-  Scenario: Player wins by reaching 40 points
+  Scenario: Reaching 40 points triggers last round, not instant win
     Given it is player 1's turn
     And player 1 has 37 points
     And player 1's cup 0 contains 1 GIN, 1 VODKA, 1 TEQUILA, 1 RUM and 1 COLA
     And player 1 has "sugar" and "lemon" on their player mat
     When player 1 sells cup 0 declaring specials "sugar,lemon"
+    Then the last round should be active
+    And it should be player 2's turn
+    And the game should not be over
+
+  Scenario: Game ends after last round completes with equal turns
+    Given it is player 1's turn
+    And player 1 has 37 points
+    And player 1's cup 0 contains 1 GIN, 1 VODKA, 1 TEQUILA, 1 RUM and 1 COLA
+    And player 1 has "sugar" and "lemon" on their player mat
+    And player 2 has 1 ingredients in their bladder
+    When player 1 sells cup 0 declaring specials "sugar,lemon"
+    Then the last round should be active
+    When player 2 goes for a wee
     Then the game should be over
     And player 1 should be the winner
+
+  Scenario: Last player in turn order reaching 40 ends the game immediately
+    Given it is player 1's turn
+    And player 1 has 1 ingredients in their bladder
+    And player 2 has 37 points
+    And player 2's cup 0 contains 1 GIN, 1 VODKA, 1 TEQUILA, 1 RUM and 1 COLA
+    And player 2 has "sugar" and "lemon" on their player mat
+    When player 1 goes for a wee
+    And player 2 sells cup 0 declaring specials "sugar,lemon"
+    Then the game should be over
+    And player 2 should be the winner
+
+  Scenario: During last round another player scores higher and wins
+    Given it is player 1's turn
+    And player 1 has 37 points
+    And player 1's cup 0 contains 1 GIN, 1 VODKA, 1 TEQUILA, 1 RUM and 1 COLA
+    And player 1 has "sugar" and "lemon" on their player mat
+    And player 2 has 38 points
+    And player 2's cup 0 contains 1 GIN, 1 VODKA, 1 TEQUILA, 1 RUM and 1 COLA
+    And player 2 has "sugar" and "lemon" on their player mat
+    When player 1 sells cup 0 declaring specials "sugar,lemon"
+    Then the last round should be active
+    When player 2 sells cup 0 declaring specials "sugar,lemon"
+    Then the game should be over
+    And player 2 should be the winner
+
+  Scenario: Karaoke win during last round is instant
+    Given it is player 1's turn
+    And player 1 has 37 points
+    And player 1's cup 0 contains 1 GIN, 1 VODKA, 1 TEQUILA, 1 RUM and 1 COLA
+    And player 1 has "sugar" and "lemon" on their player mat
+    And player 2 has claimed 2 karaoke cards
+    And a karaoke card is available in row 1
+    And player 2 has 3 spirits in their bladder
+    When player 1 sells cup 0 declaring specials "sugar,lemon"
+    Then the last round should be active
+    When player 2 claims that card
+    Then the game should be over
+    And player 2 should be the winner
 
   Scenario: Last player standing wins when opponent is hospitalised
     Given it is player 1's turn

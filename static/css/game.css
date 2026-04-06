@@ -173,6 +173,20 @@
     white-space: nowrap;
 }
 
+/* Starting player indicator */
+.gb-stats-strip-start-tag {
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: var(--accent, #d4a060);
+    color: var(--bg-dark, #1a0e04);
+    padding: 1px 5px;
+    border-radius: 8px;
+    margin-left: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
 /* ---------- Board section (shared display + cards) — dark bar counter ---------- */
 .gb-board-section {
     padding: 12px;
@@ -1681,6 +1695,26 @@
 }
 
 .gb-winner-banner.visible { display: block; }
+
+/* ---------- Last round banner ---------- */
+.gb-last-round-banner {
+    display: none;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 6px 12px;
+    background: #c0392b;
+    color: #fff;
+    letter-spacing: 1px;
+}
+.gb-last-round-banner.visible {
+    display: block;
+}
+
+/* Last round pulse on turn indicator */
+.gb-turn-indicator.gb-last-round {
+    border-bottom: 2px solid #c0392b;
+}
 
 /* ---------- Header action buttons ---------- */
 .gb-header-btns {
