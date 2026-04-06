@@ -181,14 +181,55 @@ def _check_elimination(gs: GameState, player_id: UUID):
 
 
 def _check_victory(gs: GameState, player_id: UUID) -> bool:
-    """Mark the game as ended if the player meets a win condition. Returns True if won."""
+    """Check win conditions. Karaoke is instant win. Points >= 40 triggers last round.
+
+    Returns True only for an instant win (karaoke). Points victories are resolved
+    at the end of the round via _check_last_round_complete.
+    """
     ps = gs.player_states[player_id]
     if ps.status != "active":
         return False
-    if ps.points >= SCORE_TO_WIN or ps.karaoke_cards_claimed >= KARAOKE_CARDS_TO_WIN:
+    # Karaoke win — instant, overrides everything
+    if ps.karaoke_cards_claimed >= KARAOKE_CARDS_TO_WIN:
         gs.winner = player_id
         return True
+    # Points threshold — trigger last round (don't end game yet)
+    if ps.points >= SCORE_TO_WIN and not gs.last_round:
+        gs.last_round = True
     return False
+
+
+def _effective_round_start(gs: GameState) -> UUID | None:
+    """Return the first active (non-eliminated) player in turn_order."""
+    for pid in gs.turn_order:
+        ps = gs.player_states.get(pid)
+        if ps and not ps.is_eliminated:
+            return pid
+    return None
+
+
+def _check_last_round_complete(gs: GameState):
+    """After advancing the turn during a last round, end the game if the round wrapped.
+
+    The round is complete when the turn cycles back to the effective starting
+    player (first active player in turn_order). The winner is the active player
+    with the most points.
+    """
+    if not gs.last_round or gs.winner is not None:
+        return
+    round_start = _effective_round_start(gs)
+    if round_start is None:
+        return
+    if gs.player_turn == round_start:
+        # Round complete — winner is the player with the most points
+        best_pid = None
+        best_points = -1
+        for pid in gs.turn_order:
+            ps = gs.player_states.get(pid)
+            if ps and not ps.is_eliminated and ps.points > best_points:
+                best_points = ps.points
+                best_pid = pid
+        gs.winner = best_pid
 
 
 def _check_last_player_standing(gs: GameState) -> bool:
@@ -471,6 +512,7 @@ def take_ingredients(
         _advance_turn(
             gs
         )  # resets ingredients_taken_this_turn, drunk_ingredients_this_turn, taken_records_this_turn
+        _check_last_round_complete(gs)
 
     # Each batch is its own move record, so only emit this batch's records.
     payload = {"taken": taken_records, "turn_complete": turn_complete}
@@ -542,6 +584,7 @@ def sell_cup(
     _check_victory(gs, player_id)
     gs.turn_number += 1
     _advance_turn(gs)
+    _check_last_round_complete(gs)
 
     payload = {
         "cup_index": cup_index,
@@ -582,6 +625,7 @@ def drink_cup(
 
     gs.turn_number += 1
     _advance_turn(gs)
+    _check_last_round_complete(gs)
 
     payload = {
         "cup_index": cup_index,
@@ -619,6 +663,7 @@ def go_for_a_wee(
 
     gs.turn_number += 1
     _advance_turn(gs)
+    _check_last_round_complete(gs)
 
     payload = {"excreted": [i.name for i in excreted]}
     return gs, payload
@@ -763,6 +808,7 @@ def claim_card(
     _check_victory(gs, player_id)
     gs.turn_number += 1
     _advance_turn(gs)
+    _check_last_round_complete(gs)
 
     payload = {
         "card_id": card_id,
@@ -928,6 +974,7 @@ def reroll_specials(
 
     gs.turn_number += 1
     _advance_turn(gs)
+    _check_last_round_complete(gs)
 
     payload = {
         "chosen_specials": chosen_specials,
@@ -985,6 +1032,7 @@ def refresh_card_row(
 
     gs.turn_number += 1
     _advance_turn(gs)
+    _check_last_round_complete(gs)
 
     payload = {"row_position": row_position, "cards_removed": len(removed)}
     return gs, payload
@@ -1016,6 +1064,7 @@ def quit_game(
         gs.taken_records_this_turn = []
         gs.turn_number += 1
         _advance_turn(gs)
+        _check_last_round_complete(gs)
 
     _check_last_player_standing(gs)
 

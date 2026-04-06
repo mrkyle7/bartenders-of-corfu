@@ -40,6 +40,7 @@ class GameState:
         bag_draw_pending: list[Ingredient] | None = None,
         taken_records_this_turn: list[dict] | None = None,
         discard: list[dict] | None = None,
+        last_round: bool = False,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -77,6 +78,9 @@ class GameState:
         )
         # Discard pile — cards removed by refresh go here permanently (never reshuffled)
         self.discard: list[dict] = discard if discard is not None else []
+        # Last-round flag: set when a player reaches 40+ points.
+        # The game continues until the round completes (all players have equal turns).
+        self.last_round: bool = last_round
 
     @classmethod
     def new_game(cls, host: User) -> "GameState":
@@ -141,6 +145,7 @@ class GameState:
             "bag_draw_pending": [i.name for i in self.bag_draw_pending],
             "taken_records_this_turn": self.taken_records_this_turn,
             "discard": self.discard,
+            "last_round": self.last_round,
         }
 
     @classmethod
@@ -197,4 +202,5 @@ class GameState:
             ],
             taken_records_this_turn=state_data.get("taken_records_this_turn", []),
             discard=state_data.get("discard", []),
+            last_round=state_data.get("last_round", False),
         )
