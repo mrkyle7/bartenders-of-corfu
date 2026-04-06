@@ -1,0 +1,26 @@
+logging:
+  receivers:
+    k3s_container_logs:
+      type: files
+      include_paths:
+        - /var/log/pods/*/*/*.log
+      record_log_file_path: true
+  processors:
+    # CRI log format written by k3s/containerd:
+    #   2024-01-01T00:00:00.000000000Z stdout F {"severity":"INFO","message":"..."}
+    parse_cri:
+      type: parse_regex
+      field: message
+      regex: '^(?<time>\S+) (?<stream>stdout|stderr) [FP] (?<log>.*)$'
+      time_key: time
+      time_format: '%Y-%m-%dT%H:%M:%S.%L%z'
+    # Parse the JSON payload the app emits into top-level fields.
+    # Cloud Logging recognises `severity`, `message`, `timestamp`, etc.
+    parse_app_json:
+      type: parse_json
+      field: log
+  service:
+    pipelines:
+      k3s_pipeline:
+        receivers: [k3s_container_logs]
+        processors: [parse_cri, parse_app_json]

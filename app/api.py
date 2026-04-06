@@ -9,6 +9,7 @@ from app.gameManager import GameManager
 from app.game import GameException
 from app.UserManager import UserManager, UserManagerPermissionError
 from app.JWTHandler import JWTHandler
+from app.logging_config import setup_logging, CanonicalLogMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 import traceback
@@ -18,6 +19,7 @@ from typing import Optional, List
 
 _VALID_STATUSES = {"NEW", "STARTED", "ENDED"}
 
+setup_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -97,6 +99,7 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(HSTSMiddleware)
 app.add_middleware(NoCacheStaticMiddleware)
+app.add_middleware(CanonicalLogMiddleware)
 
 
 def _verify_token(request: Request) -> TokenUser | None:

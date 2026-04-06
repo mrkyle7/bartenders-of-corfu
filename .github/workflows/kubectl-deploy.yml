@@ -125,12 +125,14 @@ jobs:
         run: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
 
       - name: deploy bartenders
+        id: deploy
         env:
           KUBECONFIG: kubeconfig
         run: |
           kubectl apply -f k3s-rendered --prune -l 'app=bartenders,environment in (all,gcp)'
 
       - name: Verify deployment
+        id: verify
         env:
           KUBECONFIG: kubeconfig
         run: |
@@ -171,3 +173,16 @@ jobs:
           echo "Error: Timeout waiting for all pods to have the correct image"
           kubectl get pods
           exit 1
+
+      - name: Rollback on failure
+        if: failure() && (steps.deploy.outcome == 'failure' || steps.verify.outcome == 'failure')
+        env:
+          KUBECONFIG: kubeconfig
+        run: |
+          echo "Deploy or verify failed — rolling back to previous revision"
+          kubectl rollout undo deployment/bartenders
+          kubectl rollout status deployment/bartenders --timeout=120s
+          echo "Rollback complete. Current image:"
+          kubectl get deployment bartenders -o jsonpath='{.spec.template.spec.containers[0].image}'
+          echo ""
+          kubectl get pods -l app=bartenders

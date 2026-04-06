@@ -38,11 +38,11 @@ variable "bucket_name" {
 }
 
 resource "google_compute_disk" "k3s_disk" {
-  name = "k3s-disk"
+  name    = "k3s-disk"
   project = var.project_name
-  size = 15
-  type = "pd-standard"
-  zone = var.zone
+  size    = 15
+  type    = "pd-standard"
+  zone    = var.zone
 }
 
 resource "google_compute_instance" "k3s" {
@@ -73,10 +73,10 @@ resource "google_compute_instance" "k3s" {
   labels = {
     goog-ec-src           = "vm_add-tf"
     goog-ops-agent-policy = "v2-x86-template-1-4-0"
-    env       = var.env
-    region    = var.region
-    app       = var.app_name
-    sensitive = "false"
+    env                   = var.env
+    region                = var.region
+    app                   = var.app_name
+    sensitive             = "false"
   }
 
   machine_type = "e2-small"
@@ -138,7 +138,7 @@ resource "google_compute_firewall" "allow_http" {
 }
 
 resource "google_dns_record_set" "cheetahmoongames" {
-  project = var.project_name
+  project      = var.project_name
   name         = "cheetahmoongames.com."
   type         = "A"
   ttl          = 300
@@ -203,14 +203,83 @@ resource "google_storage_bucket" "k3s-storage" {
   }
 }
 
+resource "google_os_config_os_policy_assignment" "ops_agent_config" {
+  project  = var.project_name
+  location = var.zone
+  name     = "ops-agent-k3s-config"
+
+  instance_filter {
+    all = false
+    inclusion_labels {
+      labels = {
+        app = var.app_name
+      }
+    }
+  }
+
+  os_policies {
+    id   = "ops-agent-k3s-config"
+    mode = "ENFORCEMENT"
+
+    resource_groups {
+      # 1. Place the Ops Agent config file on the VM.
+      resources {
+        id = "ops-agent-config-file"
+        file {
+          path    = "/etc/google-cloud-ops-agent/config.yaml"
+          state   = "CONTENTS_MATCH"
+          content = file("${path.module}/files/ops-agent-config.yaml")
+        }
+      }
+
+      # 2. Restart the Ops Agent whenever the config file changes.
+      #    We track "last applied" via a marker file and use mtime comparison
+      #    so the restart only fires when the config has actually been updated.
+      resources {
+        id = "restart-ops-agent-on-change"
+        exec {
+          validate {
+            interpreter = "SHELL"
+            script      = <<-EOT
+              MARKER=/var/lib/google/ops-agent-config-applied
+              CONFIG=/etc/google-cloud-ops-agent/config.yaml
+              if [ ! -f "$MARKER" ] || [ "$CONFIG" -nt "$MARKER" ]; then
+                exit 100  # needs enforcement
+              fi
+              exit 101    # already in desired state
+            EOT
+          }
+          enforce {
+            interpreter = "SHELL"
+            script      = <<-EOT
+              mkdir -p /var/lib/google
+              systemctl restart google-cloud-ops-agent && \
+                touch /var/lib/google/ops-agent-config-applied && \
+                exit 100
+              exit 1
+            EOT
+          }
+        }
+      }
+    }
+  }
+
+  rollout {
+    disruption_budget {
+      fixed = 1
+    }
+    min_wait_duration = "60s"
+  }
+}
+
 module "ops_agent_policy" {
-  source          = "github.com/terraform-google-modules/terraform-google-cloud-operations/modules/ops-agent-policy"
-  project         = var.project_name
-  zone            = var.zone
-  assignment_id   = "goog-ops-agent-v2-x86-template-1-4-0-us-east1-d"
+  source        = "github.com/terraform-google-modules/terraform-google-cloud-operations/modules/ops-agent-policy"
+  project       = var.project_name
+  zone          = var.zone
+  assignment_id = "goog-ops-agent-v2-x86-template-1-4-0-us-east1-d"
   agents_rule = {
     package_state = "installed"
-    version = "latest"
+    version       = "latest"
   }
   instance_filter = {
     all = false
