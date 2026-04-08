@@ -458,6 +458,54 @@ Feature: Game turn actions
     And the game should be over
     And player 1 should be the winner
 
+  Scenario: Eliminated player's bladder, cups, and store card spirits return to the bag
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 has 1 ingredients in their bladder
+    And player 2 has a drunk level of 5
+    And player 2 has 0 ingredients in their bladder
+    And player 2's cup 0 contains 1 WHISKEY
+    And player 2's cup 1 contains 1 RUM and 1 COLA
+    And player 2 holds a VODKA store card with 2 stored spirits
+    And the current bag size is recorded
+    When player 1 goes for a wee
+    And player 2 drinks cup 0
+    Then player 2 should be eliminated
+    And player 2's bladder should be empty
+    And player 2's cup 0 should be empty
+    And player 2's cup 1 should be empty
+    And player 2's store card should have 0 stored spirits
+    And the bag should contain 6 more ingredients than before
+
+  Scenario: Ingredients return to the bag when a player is eliminated by bladder overflow
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 has 1 ingredients in their bladder
+    And player 2 has 8 ingredients in their bladder
+    And player 2's cup 0 contains 1 COLA and 1 SODA
+    And player 2's cup 1 contains 1 TONIC
+    And the current bag size is recorded
+    When player 1 goes for a wee
+    And player 2 drinks cup 0
+    Then player 2 should be eliminated
+    And player 2's bladder should be empty
+    And player 2's cup 0 should be empty
+    And player 2's cup 1 should be empty
+    And the bag should contain 12 more ingredients than before
+
+  Scenario: Ingredients return to the bag when a player quits
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 has 2 ingredients in their bladder
+    And player 1's cup 0 contains 1 GIN and 1 TONIC
+    And player 1 holds a VODKA store card with 1 stored spirit
+    And the current bag size is recorded
+    When player 1 quits the game
+    Then player 1's bladder should be empty
+    And player 1's cup 0 should be empty
+    And player 1's store card should have 0 stored spirits
+    And the bag should contain 5 more ingredients than before
+
   # ── Drink Stored Spirit ──────────────────────────────────────────────────────
 
   Scenario: Drink stored spirit increases drunk level and adds to bladder
