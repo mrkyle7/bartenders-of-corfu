@@ -249,6 +249,25 @@ rule CheckElimination {
     if player.bladder.count > player.bladder_capacity:
         ensures: player.status = wet
     -- Eliminated players take no further turns; the game continues for others.
+    -- On transition from active to eliminated, all ingredients the player
+    -- was holding (drunk in bladder, in cups, or stored on cards) are
+    -- returned to the bag so they can re-enter play for remaining players.
+    if player transitioned from active to (hospitalised or wet):
+        ensures: ReturnPlayerIngredientsToBag(player)
+}
+
+rule ReturnPlayerIngredientsToBag {
+    when: ReturnPlayerIngredientsToBag(player)
+    let bladder_ingredients = player.bladder
+    let cup_ingredients = flatten(cup.ingredients for cup in player.cups)
+    let stored_spirits = flatten(
+        card.stored_spirits for card in player.cards where card is StoreCard
+    )
+    ensures: board.bag_contents = board.bag_contents
+        + bladder_ingredients + cup_ingredients + stored_spirits
+    ensures: player.bladder = []
+    ensures: for each cup in player.cups: cup.ingredients = []
+    ensures: for each StoreCard card in player.cards: card.stored_spirits = []
 }
 
 rule SellCup {

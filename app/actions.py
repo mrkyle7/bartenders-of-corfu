@@ -172,12 +172,45 @@ def _replenish_display(gs: GameState):
         gs.open_display.extend(chosen)
 
 
+def _return_player_ingredients_to_bag(gs: GameState, ps: PlayerState) -> None:
+    """Return all ingredients a player is holding back to the bag.
+
+    Covers drunk ingredients (bladder), ingredients sitting in the player's
+    cups, and spirits currently stored on any of the player's Store cards.
+    Each source is cleared after being added to the bag. Called when a
+    player is eliminated so their ingredients re-enter play.
+    """
+    # Bladder — ingredients the player has drunk
+    if ps.bladder:
+        gs.bag_contents.extend(ps.bladder)
+        ps.bladder = []
+
+    # Cups — ingredients sitting in the player's cups
+    for cup in ps.cups:
+        if cup.ingredients:
+            gs.bag_contents.extend(cup.ingredients)
+            cup.ingredients = []
+
+    # Store cards — spirits stashed on ability cards
+    for card_dict in ps.cards:
+        if card_dict.get("card_type") == "store":
+            stored = card_dict.get("stored_spirits", [])
+            for spirit_name in stored:
+                gs.bag_contents.append(_spirit_ingredient(spirit_name))
+            card_dict["stored_spirits"] = []
+
+
 def _check_elimination(gs: GameState, player_id: UUID):
     ps = gs.player_states[player_id]
+    was_active = ps.status == "active"
     if ps.drunk_level > MAX_DRUNK_LEVEL:
         ps.status = "hospitalised"
     elif len(ps.bladder) > ps.bladder_capacity:
         ps.status = "wet"
+    # If the player just became eliminated, return their held ingredients
+    # to the bag so they re-enter play for the remaining players.
+    if was_active and ps.status in ("hospitalised", "wet"):
+        _return_player_ingredients_to_bag(gs, ps)
 
 
 def _check_victory(gs: GameState, player_id: UUID) -> bool:
@@ -617,11 +650,13 @@ def drink_cup(
     drunk_ingredients = list(cup.ingredients)
     for ingredient in drunk_ingredients:
         _drink_ingredient(gs, player_id, ingredient)
-    # Drunk cup ingredients go to the bladder (not the bag) — handled by _drink_ingredient
+    # Drunk cup ingredients go to the bladder (not the bag) — handled by _drink_ingredient.
+    # Clear the cup before applying the drunk modifier so that if the player
+    # is eliminated by this drink, the cup ingredients aren't double-returned
+    # to the bag (they are now tracked in the bladder).
+    cup.ingredients = []
     # Apply drunk modifier in one batch: only sober up if all ingredients are mixers
     _apply_drunk_modifier(gs, player_id, drunk_ingredients)
-
-    cup.ingredients = []
 
     gs.turn_number += 1
     _advance_turn(gs)
@@ -1055,6 +1090,9 @@ def quit_game(
     _require_active(ps)
 
     ps.status = "quit"
+    # Return any ingredients the quitting player was holding to the bag
+    # so they re-enter play for the remaining players.
+    _return_player_ingredients_to_bag(gs, ps)
 
     # If it was this player's turn, reset batch state and advance
     if gs.player_turn == player_id:

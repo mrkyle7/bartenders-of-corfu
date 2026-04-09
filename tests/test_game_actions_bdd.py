@@ -1134,7 +1134,9 @@ def game_over(ctx):
 @then("the game should not be over")
 def game_not_over(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
-    assert game["status"] != "ENDED", f"Expected game still running, got {game['status']}"
+    assert game["status"] != "ENDED", (
+        f"Expected game still running, got {game['status']}"
+    )
 
 
 @then("the last round should be active")
@@ -1552,3 +1554,33 @@ def bag_size_unchanged(ctx):
     assert bag_size_after == ctx["bag_size_before"], (
         f"Bag size changed: was {ctx['bag_size_before']}, now {bag_size_after}"
     )
+
+
+@given("the current bag size is recorded")
+def record_bag_size(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    ctx["bag_size_before"] = len(game["game_state"].get("bag_contents", []))
+
+
+@then(parsers.parse("the bag should contain {delta:d} more ingredient than before"))
+@then(parsers.parse("the bag should contain {delta:d} more ingredients than before"))
+def bag_grew_by(ctx, delta):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    bag_size_after = len(game["game_state"].get("bag_contents", []))
+    expected = ctx["bag_size_before"] + delta
+    assert bag_size_after == expected, (
+        f"Expected bag size {expected} (before={ctx['bag_size_before']} + {delta}), "
+        f"got {bag_size_after}"
+    )
+
+
+@when(parsers.parse("player {n:d} quits the game"))
+def player_quits(ctx, n):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/quit",
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+    assert resp.status_code == 200, resp.text
