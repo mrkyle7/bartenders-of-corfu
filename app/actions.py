@@ -321,11 +321,14 @@ def _drink_ingredient(gs: GameState, player_id: UUID, ingredient: Ingredient):
 
 
 def _replace_card(gs: GameState, row: CardRow):
-    """Draw one card from the deck into the row, if deck has cards."""
+    """Draw one random card from the deck into the row, if deck has cards."""
     if gs._deck_dicts:
+        import random
+
         from app.card import Card
 
-        card_dict = gs._deck_dicts.pop(0)
+        index = random.randrange(len(gs._deck_dicts))
+        card_dict = gs._deck_dicts.pop(index)
         row.cards.append(Card.from_dict(card_dict))
 
 
