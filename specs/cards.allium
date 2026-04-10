@@ -8,12 +8,13 @@
 --   ApplyDrunkModifier — Refresher cards modify drunk calculation
 --   SellCup           — CupDoubler and Specialist cards modify points calculation
 --
--- Deck composition (21 cards total):
+-- Deck composition (25 cards total):
 --   5 × KaraokeCard     (one per spirit type)
 --   5 × StoreCard       (one per spirit type)
 --   4 × RefresherCard   (one per mixer type)
 --   2 × CupDoublerCard  (Bendy Straw, Cocktail Umbrella)
 --   5 × SpecialistCard  (one per spirit type)
+--   4 × FreeActionCard  (one each for RUM, WHISKEY, VODKA, GIN)
 
 use "./game.allium" as game
 
@@ -22,7 +23,7 @@ use "./game.allium" as game
 
 entity Card {
     id: String
-    kind: Karaoke | Store | Refresher | CupDoubler | Specialist
+    kind: Karaoke | Store | Refresher | CupDoubler | Specialist | FreeAction
 }
 
 variant KaraokeCard : Card {
@@ -72,6 +73,25 @@ variant SpecialistCard : Card {
     -- cocktails are exempt from the specialist bonus (same exclusion as cup doubler)
 }
 
+variant FreeActionCard : Card {
+    spirit_type: RUM | WHISKEY | VODKA | GIN
+    name: String
+    free_action_type: take_ingredients | reroll_specials | sell_cup | go_for_a_wee
+    -- cost: 3 bladder spirits of this card's spirit_type
+    -- worth 2 points when claimed
+    -- ongoing: grants the player one free additional action of free_action_type per turn.
+    --   The free action does not consume the player's main action for the turn.
+    --   The player may use the free action before or after their main action.
+    --   The turn only advances once the main action has been taken AND either
+    --   all available free actions have been used or the player explicitly ends their turn.
+    --   Each free action card may be used at most once per turn.
+    -- Mapping:
+    --   RUM     → take_ingredients  (Greedy Bartender)
+    --   WHISKEY → reroll_specials   (Cocktail Shaker)
+    --   VODKA   → sell_cup          (Entrepreneur)
+    --   GIN     → go_for_a_wee      (Weak Bladder)
+}
+
 -- ─── Ingredient requirements ─────────────────────────────────────────────────
 -- Extends game/IngredientRequirement.
 -- spirit_type / mixer_type are set when a specific subtype is required;
@@ -112,6 +132,11 @@ default SpecialistCard tequila_specialist = { spirit_type: TEQUILA, name: "Tequi
 default SpecialistCard vodka_specialist   = { spirit_type: VODKA,   name: "Vodka Specialist" }
 default SpecialistCard whisky_specialist  = { spirit_type: WHISKEY, name: "Whisky Specialist" }
 
+default FreeActionCard greedy_bartender = { spirit_type: RUM,     name: "Greedy Bartender", free_action_type: take_ingredients }
+default FreeActionCard cocktail_shaker  = { spirit_type: WHISKEY, name: "Cocktail Shaker",  free_action_type: reroll_specials }
+default FreeActionCard entrepreneur     = { spirit_type: VODKA,   name: "Entrepreneur",     free_action_type: sell_cup }
+default FreeActionCard weak_bladder     = { spirit_type: GIN,     name: "Weak Bladder",     free_action_type: go_for_a_wee }
+
 -- ─── Config ───────────────────────────────────────────────────────────────────
 
 config {
@@ -121,6 +146,7 @@ config {
     cup_doubler_card_points: Integer = 2
     specialist_card_points:  Integer = 2
     specialist_sell_bonus:   Integer = 2    -- added to non-cocktail drink score per matching specialist
+    free_action_card_points: Integer = 2
 }
 
 -- ─── Cup amendment ────────────────────────────────────────────────────────────
@@ -229,6 +255,8 @@ rule ClaimCard {
         -- player declares spent_type at claim time
     requires card.kind = Specialist:
         player.bladder where spirit_type = card.spirit_type has count >= 2
+    requires card.kind = FreeAction:
+        player.bladder where spirit_type = card.spirit_type has count >= 3
     -- Costs are threshold checks only; no bladder ingredients are consumed on claim.
     -- Apply per-type effects.
     if card.kind = Karaoke:
@@ -248,6 +276,8 @@ rule ClaimCard {
         ensures: player.points = player.points + config.cup_doubler_card_points
     if card.kind = Specialist:
         ensures: player.points = player.points + config.specialist_card_points
+    if card.kind = FreeAction:
+        ensures: player.points = player.points + config.free_action_card_points
     ensures: player.cards = player.cards + [card]
     ensures: card removed from its CardRow
     ensures: ReplaceCardSlot(board, card's row)
@@ -340,7 +370,62 @@ rule ReRollSpecials {
         -- "nothing" → the special is lost; nothing is returned to the bag.
 }
 
-guarantee: ReRollSpecials consumes the player's one action for the turn
+guarantee: ReRollSpecials consumes the player's one action for the turn (unless used as a free action)
 guarantee: no ingredients are added to or removed from the bag during ReRollSpecials
 guarantee: "nothing" results produce no new special — the player simply loses that special
 guarantee: the player may re-roll any number of their specials (1 to all) in a single action
+
+-- ─── Free action turn rules ────────────────────────────────────────────────
+-- FreeActionCards modify the normal one-action-per-turn constraint.
+-- A player holding one or more FreeActionCards may take additional actions
+-- of the matching type without consuming their main action for the turn.
+
+amendment game/BoardState {
+    main_action_taken_this_turn: Boolean = false
+    free_actions_used_this_turn: List<String> = []
+}
+
+rule FreeActionTurnLogic {
+    -- When a player performs a turn action (TakeIngredients, SellCup, DrinkCup,
+    -- GoForAWee, ClaimCard, RefreshCardRow, ReRollSpecials):
+    --
+    -- 1. If the action type matches a FreeActionCard held by the player AND
+    --    that free action has not been used this turn:
+    --      → perform the action as a free action (does not set main_action_taken)
+    --      → mark the free action type as used in free_actions_used_this_turn
+    --
+    -- 2. Otherwise, if main_action_taken is false:
+    --      → perform the action as the main action
+    --      → set main_action_taken = true
+    --
+    -- 3. Otherwise:
+    --      → reject: "You have already taken your main action this turn"
+    --
+    -- After performing the action:
+    --   If main_action_taken is true AND no unused free actions remain:
+    --      → advance the turn to the next player
+    --   Otherwise:
+    --      → the turn stays with the current player
+    requires: true  -- applied inline in each action handler
+}
+
+rule EndTurn {
+    -- A player may explicitly end their turn, forfeiting any unused free actions.
+    -- This is only available after the main action has been taken.
+    when: EndTurn(player)
+    requires: player.status = active
+    requires: it is player's turn
+    requires: main_action_taken_this_turn = true
+    ensures: turn advances to next active player
+    ensures: main_action_taken_this_turn = false
+    ensures: free_actions_used_this_turn = []
+}
+
+guarantee: each FreeActionCard grants at most one free action per turn
+guarantee: free actions do not consume the player's main action
+guarantee: the turn only advances when main_action_taken AND no unused free actions remain, or the player explicitly ends the turn
+guarantee: free action cards cost 3 bladder spirits of the matching type (threshold check only)
+guarantee: free action card effects are permanent; the free action ability persists every turn after claiming
+guarantee: a player may use their free action(s) before or after their main action
+guarantee: existing free actions (DrinkStoredSpirit, UseStoredSpirit) are unaffected by FreeActionCard rules — they remain always-free
+guarantee: FreeActionCard free_action_type is visible to all players on the claimed card

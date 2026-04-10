@@ -123,13 +123,20 @@ def _require_started(gs: GameState):
     pass
 
 
-def _advance_turn(gs: GameState) -> GameState:
-    """Advance player_turn to the next active player in turn_order and reset per-turn batch state."""
-    # Reset batch tracking whenever the turn advances
+def _reset_take_batch_state(gs: GameState):
+    """Reset multi-batch TakeIngredients tracking. Called when a take action completes."""
     gs.ingredients_taken_this_turn = 0
     gs.drunk_ingredients_this_turn = []
     gs.bag_draw_pending = []
     gs.taken_records_this_turn = []
+
+
+def _advance_turn(gs: GameState) -> GameState:
+    """Advance player_turn to the next active player in turn_order and reset per-turn state."""
+    # Reset all per-turn tracking whenever the turn advances
+    _reset_take_batch_state(gs)
+    gs.main_action_taken_this_turn = False
+    gs.free_actions_used_this_turn = []
 
     if not gs.turn_order:
         return gs
@@ -149,6 +156,66 @@ def _advance_turn(gs: GameState) -> GameState:
 
     # All players eliminated — leave turn unchanged (game should be ended)
     return gs
+
+
+# ─── Free action card helpers ────────────────────────────────────────────────
+
+_FREE_ACTION_TYPE_MAP: dict[str, str] = {
+    "RUM": "take_ingredients",
+    "WHISKEY": "reroll_specials",
+    "VODKA": "sell_cup",
+    "GIN": "go_for_a_wee",
+}
+
+
+def _available_free_actions(ps: "PlayerState", used: list[str]) -> set[str]:
+    """Return the set of free action types available to the player this turn."""
+    actions = set()
+    for card_dict in ps.cards:
+        if card_dict.get("card_type") == "free_action":
+            spirit = card_dict.get("spirit_type")
+            action_type = _FREE_ACTION_TYPE_MAP.get(spirit) if spirit else None
+            if action_type and action_type not in used:
+                actions.add(action_type)
+    return actions
+
+
+def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> bool:
+    """Handle turn advancement after a turn action is performed.
+
+    Determines whether this action is a free action or the main action,
+    and advances the turn when appropriate.
+
+    Returns True if the action was used as a free action, False if it was the main action.
+    Raises GameException if the player has already taken their main action and
+    this isn't an available free action.
+    """
+    ps = gs.player_states[player_id]
+    available_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+
+    if action_type in available_free:
+        # Use as free action
+        gs.free_actions_used_this_turn.append(action_type)
+        is_free = True
+    elif not gs.main_action_taken_this_turn:
+        # Use as main action
+        gs.main_action_taken_this_turn = True
+        is_free = False
+    else:
+        raise GameException(
+            "You have already taken your main action this turn",
+            status_code=409,
+        )
+
+    # Advance turn only when main action is done AND no unused free actions remain
+    if gs.main_action_taken_this_turn:
+        remaining_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+        if len(remaining_free) == 0:
+            gs.turn_number += 1
+            _advance_turn(gs)
+            _check_last_round_complete(gs)
+
+    return is_free
 
 
 def _require_no_take_in_progress(gs: GameState):
@@ -539,19 +606,23 @@ def take_ingredients(
 
     turn_complete = gs.ingredients_taken_this_turn >= take_count
 
+    is_free = False
     if turn_complete:
         # Apply drunk modifier once across all ingredients drunk this whole turn
         if gs.drunk_ingredients_this_turn:
             _apply_drunk_modifier(gs, player_id, gs.drunk_ingredients_this_turn)
         _replenish_display(gs)
-        gs.turn_number += 1
-        _advance_turn(
-            gs
-        )  # resets ingredients_taken_this_turn, drunk_ingredients_this_turn, taken_records_this_turn
-        _check_last_round_complete(gs)
+        # Reset take batch state before handling turn action (since _advance_turn
+        # may or may not be called depending on free actions)
+        _reset_take_batch_state(gs)
+        is_free = _finish_turn_action(gs, player_id, "take_ingredients")
 
     # Each batch is its own move record, so only emit this batch's records.
-    payload = {"taken": taken_records, "turn_complete": turn_complete}
+    payload = {
+        "taken": taken_records,
+        "turn_complete": turn_complete,
+        "is_free_action": is_free,
+    }
     return gs, payload
 
 
@@ -618,15 +689,14 @@ def sell_cup(
 
     ps.points += pts
     _check_victory(gs, player_id)
-    gs.turn_number += 1
-    _advance_turn(gs)
-    _check_last_round_complete(gs)
+    is_free = _finish_turn_action(gs, player_id, "sell_cup")
 
     payload = {
         "cup_index": cup_index,
         "ingredients": [i.name for i in sold_ingredients],
         "declared_specials": declared_specials,
         "points_earned": pts,
+        "is_free_action": is_free,
     }
     return gs, payload
 
@@ -661,13 +731,12 @@ def drink_cup(
     # Apply drunk modifier in one batch: only sober up if all ingredients are mixers
     _apply_drunk_modifier(gs, player_id, drunk_ingredients)
 
-    gs.turn_number += 1
-    _advance_turn(gs)
-    _check_last_round_complete(gs)
+    is_free = _finish_turn_action(gs, player_id, "drink_cup")
 
     payload = {
         "cup_index": cup_index,
         "ingredients": [i.name for i in drunk_ingredients],
+        "is_free_action": is_free,
     }
     return gs, payload
 
@@ -699,11 +768,9 @@ def go_for_a_wee(
         ps.toilet_tokens -= 1
         ps.bladder_capacity = max(MIN_BLADDER_CAPACITY, ps.bladder_capacity - 1)
 
-    gs.turn_number += 1
-    _advance_turn(gs)
-    _check_last_round_complete(gs)
+    is_free = _finish_turn_action(gs, player_id, "go_for_a_wee")
 
-    payload = {"excreted": [i.name for i in excreted]}
+    payload = {"excreted": [i.name for i in excreted], "is_free_action": is_free}
     return gs, payload
 
 
@@ -807,6 +874,20 @@ def claim_card(
                 status_code=400,
             )
 
+    elif card_type == "free_action":
+        if target_card.spirit_type is None:
+            raise GameException(
+                "Free action card has no spirit type", status_code=500
+            )
+        # Spec: 3 bladder spirits of the matching type (threshold check only)
+        spirit_ing = _spirit_ingredient(target_card.spirit_type)
+        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
+        if bladder_count < 3:
+            raise GameException(
+                f"Need 3 {target_card.spirit_type} spirits in bladder; have {bladder_count}",
+                status_code=400,
+            )
+
     # Remove card from row
     target_row.cards.remove(target_card)
 
@@ -840,13 +921,15 @@ def claim_card(
         ps.cards.append(target_card.to_dict())
         ps.points += 2
 
+    elif card_type == "free_action":
+        ps.cards.append(target_card.to_dict())
+        ps.points += 2
+
     # Replace the claimed card's slot from the deck (if any cards remain)
     _replace_card(gs, target_row)
 
     _check_victory(gs, player_id)
-    gs.turn_number += 1
-    _advance_turn(gs)
-    _check_last_round_complete(gs)
+    is_free = _finish_turn_action(gs, player_id, "claim_card")
 
     payload = {
         "card_id": card_id,
@@ -854,6 +937,7 @@ def claim_card(
         "card_type": card_type,
         "is_karaoke": target_card.is_karaoke,
         "row_position": target_row.position,
+        "is_free_action": is_free,
     }
     return gs, payload
 
@@ -1010,13 +1094,12 @@ def reroll_specials(
         else:
             results.append(None)
 
-    gs.turn_number += 1
-    _advance_turn(gs)
-    _check_last_round_complete(gs)
+    is_free = _finish_turn_action(gs, player_id, "reroll_specials")
 
     payload = {
         "chosen_specials": chosen_specials,
         "results": results,
+        "is_free_action": is_free,
     }
     return gs, payload
 
@@ -1068,11 +1151,13 @@ def refresh_card_row(
     for _ in removed:
         _replace_card(gs, target_row)
 
-    gs.turn_number += 1
-    _advance_turn(gs)
-    _check_last_round_complete(gs)
+    is_free = _finish_turn_action(gs, player_id, "refresh_card_row")
 
-    payload = {"row_position": row_position, "cards_removed": len(removed)}
+    payload = {
+        "row_position": row_position,
+        "cards_removed": len(removed),
+        "is_free_action": is_free,
+    }
     return gs, payload
 
 
@@ -1099,10 +1184,7 @@ def quit_game(
 
     # If it was this player's turn, reset batch state and advance
     if gs.player_turn == player_id:
-        gs.ingredients_taken_this_turn = 0
-        gs.drunk_ingredients_this_turn = []
-        gs.bag_draw_pending = []
-        gs.taken_records_this_turn = []
+        _reset_take_batch_state(gs)
         gs.turn_number += 1
         _advance_turn(gs)
         _check_last_round_complete(gs)
@@ -1110,6 +1192,39 @@ def quit_game(
     _check_last_player_standing(gs)
 
     payload = {"player_id": str(player_id)}
+    return gs, payload
+
+
+def end_turn(
+    gs: GameState,
+    player_id: UUID,
+) -> tuple[GameState, dict]:
+    """EndTurn — player explicitly ends their turn, forfeiting unused free actions.
+
+    Only available after the main action has been taken but free actions remain.
+    """
+    gs = _deep_copy_state(gs)
+    _require_turn(gs, player_id)
+    ps = gs.player_states[player_id]
+    _require_active(ps)
+
+    if not gs.main_action_taken_this_turn:
+        raise GameException(
+            "You must take an action before ending your turn", status_code=409
+        )
+
+    remaining_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+    if len(remaining_free) == 0:
+        raise GameException(
+            "Your turn is already complete — no free actions to forfeit",
+            status_code=409,
+        )
+
+    gs.turn_number += 1
+    _advance_turn(gs)
+    _check_last_round_complete(gs)
+
+    payload = {"forfeited_free_actions": sorted(remaining_free)}
     return gs, payload
 
 

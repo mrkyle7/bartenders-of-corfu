@@ -1584,3 +1584,96 @@ def player_quits(ctx, n):
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
     assert resp.status_code == 200, resp.text
+
+
+# ── Free Action Card steps ──────────────────────────────────────────────────
+
+
+@given(
+    parsers.parse("a free action card for {spirit_type} is available in row {row:d}"),
+    target_fixture="available_card_id",
+)
+def free_action_card_in_row(ctx, spirit_type, row):
+    import uuid as _uuid
+
+    from app.card import Card as _Card
+
+    name_map = {
+        "RUM": "Greedy Bartender",
+        "WHISKEY": "Cocktail Shaker",
+        "VODKA": "Entrepreneur",
+        "GIN": "Weak Bladder",
+    }
+    new_card_id = str(_uuid.uuid4())
+
+    def patch(gs):
+        for r in gs.card_rows:
+            if r.position == row:
+                new_card = _Card(
+                    id=new_card_id,
+                    card_type="free_action",
+                    name=name_map.get(spirit_type.upper(), "Free Action"),
+                    spirit_type=spirit_type.upper(),
+                )
+                if r.cards:
+                    r.cards[0] = new_card
+                else:
+                    r.cards.append(new_card)
+                break
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+    ctx["target_card_id"] = new_card_id
+    return new_card_id
+
+
+@given(parsers.parse("player {n:d} holds a {spirit_type} free action card"))
+def player_holds_free_action_card(ctx, n, spirit_type):
+    import uuid as _uuid
+
+    from app.card import Card as _Card
+
+    _, pid = _player(ctx, n)
+    card = _Card(
+        id=str(_uuid.uuid4()),
+        card_type="free_action",
+        name=f"{spirit_type} Free Action",
+        spirit_type=spirit_type.upper(),
+    )
+
+    def patch(gs):
+        ps = gs.player_states[UUID(pid)]
+        ps.cards.append(card.to_dict())
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@when(parsers.parse("player {n:d} ends their turn"))
+def player_ends_turn(ctx, n):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/end-turn",
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(parsers.parse("player {n:d} tries to end their turn"))
+def player_tries_to_end_turn(ctx, n):
+    player_ends_turn(ctx, n)
+
+
+@then(
+    parsers.parse(
+        'player {n:d}\'s free action card should have free_action_type "{expected}"'
+    )
+)
+def player_free_action_card_type(ctx, n, expected):
+    ps = _player_state(ctx, n)
+    free_cards = [c for c in ps["cards"] if c["card_type"] == "free_action"]
+    assert free_cards, f"Player {n} has no free action cards"
+    assert free_cards[0].get("free_action_type") == expected, (
+        f"Expected free_action_type '{expected}', got {free_cards[0].get('free_action_type')}"
+    )
