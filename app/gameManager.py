@@ -275,6 +275,13 @@ class GameManager:
         self._apply_action(game, player_id, "refresh_card_row", new_state, payload)
         return new_state, payload
 
+    def end_turn(self, game: Game, player_id: UUID) -> tuple[GameState, dict]:
+        """Player explicitly ends their turn, forfeiting unused free actions."""
+        self._require_started(game)
+        new_state, payload = actions.end_turn(game.game_state, player_id)
+        self._apply_action(game, player_id, "end_turn", new_state, payload)
+        return new_state, payload
+
     def quit_game(self, game: Game, player_id: UUID) -> tuple[GameState, dict]:
         """A player voluntarily quits the game."""
         self._require_started(game)

@@ -755,6 +755,16 @@ function renderBoard(game, gs, isReplay) {
     });
 }
 
+function _freeActionDesc(actionType) {
+    const labels = {
+        take_ingredients: 'Free Take Ingredients each turn',
+        sell_cup: 'Free Sell Cup each turn',
+        go_for_a_wee: 'Free Wee each turn',
+        reroll_specials: 'Free Re-roll Specials each turn',
+    };
+    return labels[actionType] || 'Free action each turn';
+}
+
 function _cloneCardIcon(cardType) {
     const tmpl = document.getElementById(`tmplCardIcon-${cardType}`);
     return tmpl ? tmpl.content.cloneNode(true) : null;
@@ -766,7 +776,7 @@ function buildCardElement(card, bladder, canClaim, gs) {
     const cardEl = document.createElement('div');
     cardEl.className = `gb-card ${cardType}` + (affordable ? ' claimable' : '');
     cardEl.setAttribute('role', affordable ? 'button' : 'article');
-    const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' }[cardType] || cardType;
+    const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist', free_action: 'Free Action' }[cardType] || cardType;
     const costDesc = _cardCostDesc(card);
     cardEl.setAttribute('aria-label', `${card.name || typeLabel}. ${costDesc}`);
     if (affordable) {
@@ -781,7 +791,7 @@ function buildCardElement(card, bladder, canClaim, gs) {
 
     const ptsEl = document.createElement('span');
     ptsEl.className = 'gb-card-pts';
-    const cardPts = { karaoke: 5, store: 1, refresher: 1, cup_doubler: 2, specialist: 2 }[cardType] ?? 0;
+    const cardPts = { karaoke: 5, store: 1, refresher: 1, cup_doubler: 2, specialist: 2, free_action: 2 }[cardType] ?? 0;
     ptsEl.textContent = `${cardPts} pt${cardPts !== 1 ? 's' : ''}`;
     header.appendChild(ptsEl);
 
@@ -820,6 +830,7 @@ function buildCardElement(card, bladder, canClaim, gs) {
         refresher: 'Mixer always sobers, even with spirits',
         cup_doubler: 'Doubles non-cocktail cup points',
         specialist: '+2 pts on non-cocktail sells with this spirit',
+        free_action: _freeActionDesc(card.free_action_type),
     };
     descEl.textContent = descTexts[cardType] || '';
     cardEl.appendChild(descEl);
@@ -836,6 +847,7 @@ function _cardCostDesc(card) {
     if (cardType === 'refresher') return `Cost: 2 ${mixer}`;
     if (cardType === 'cup_doubler') return 'Cost: 3 of same spirit';
     if (cardType === 'specialist') return `Cost: 2 ${spirit}`;
+    if (cardType === 'free_action') return `Cost: 3 ${spirit}`;
     return '';
 }
 
@@ -876,6 +888,11 @@ function canAffordCard(card, bladder, gs) {
         // Spec: bladder only, 2 matching spirits
         if (!card.spirit_type) return false;
         return bladderCountOf(card.spirit_type) >= 2;
+    }
+    if (cardType === 'free_action') {
+        // Spec: bladder only, 3 matching spirits
+        if (!card.spirit_type) return false;
+        return bladderCountOf(card.spirit_type) >= 3;
     }
     return false;
 }
@@ -1083,7 +1100,7 @@ function renderBladderWeeRow(myState, isMyTurn, game, gs) {
             cardList.className = 'gb-claimable-list';
             claimable.forEach(card => {
                 const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
-                const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42', specialist: '\u2B50' };
+                const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42', specialist: '\u2B50', free_action: '\uD83C\uDFAF' };
                 const btn = document.createElement('button');
                 btn.className = `gb-claimable-btn ${cardType}`;
                 btn.textContent = `${typeIcons[cardType] || ''} ${card.name || cardType}`;
@@ -1109,19 +1126,27 @@ function renderClaimedCards(myState, isMyTurn, isReplay) {
         claimedEl.appendChild(claimedTitle);
         cards.forEach((c, cardIndex) => {
             const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
-            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' }[cardType] || cardType;
+            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist', free_action: 'Free Action' }[cardType] || cardType;
             const div = document.createElement('div');
             div.className = `gb-claimed-card ${cardType}`;
 
             // Card type icon + name (no ID)
             const headerSpan = document.createElement('span');
             headerSpan.className = 'gb-claimed-card-header';
-            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂', specialist: '⭐' };
+            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂', specialist: '⭐', free_action: '🎯' };
             headerSpan.textContent = `${typeIcons[cardType] || ''} ${typeLabel}: ${c.name || typeLabel}`;
             div.appendChild(headerSpan);
 
+            // Free action card: show the free action ability as a label
+            if (cardType === 'free_action' && c.free_action_type) {
+                const faBadge = document.createElement('span');
+                faBadge.className = 'gb-free-action-badge';
+                faBadge.textContent = _freeActionDesc(c.free_action_type);
+                div.appendChild(faBadge);
+            }
+
             // Show required ingredient type as a token badge
-            if (c.spirit_type && cardType !== 'store') {
+            if (c.spirit_type && cardType !== 'store' && cardType !== 'free_action') {
                 div.appendChild(document.createTextNode(' '));
                 div.appendChild(makeIngredientBadge(c.spirit_type));
             } else if (c.mixer_type) {
@@ -1643,8 +1668,8 @@ function buildOtherSheet(pid, pState, gs) {
         body.appendChild(claimedTitle);
         cards.forEach(c => {
             const cardType = c.card_type || (c.is_karaoke ? 'karaoke' : 'store');
-            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' }[cardType] || cardType;
-            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂', specialist: '⭐' };
+            const typeLabel = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist', free_action: 'Free Action' }[cardType] || cardType;
+            const typeIcons = { karaoke: '🎤', store: '📦', refresher: '💧', cup_doubler: '🥂', specialist: '⭐', free_action: '🎯' };
             const cardEl = document.createElement('div');
             cardEl.className = `gb-claimed-card ${cardType}`;
 
@@ -1652,7 +1677,12 @@ function buildOtherSheet(pid, pState, gs) {
             headerSpan.textContent = `${typeIcons[cardType] || ''} ${typeLabel}: ${c.name || typeLabel}`;
             cardEl.appendChild(headerSpan);
 
-            if (c.spirit_type) {
+            if (cardType === 'free_action' && c.free_action_type) {
+                const faBadge = document.createElement('span');
+                faBadge.className = 'gb-free-action-badge';
+                faBadge.textContent = _freeActionDesc(c.free_action_type);
+                cardEl.appendChild(faBadge);
+            } else if (c.spirit_type) {
                 cardEl.appendChild(document.createTextNode(' '));
                 cardEl.appendChild(makeIngredientBadge(c.spirit_type));
             } else if (c.mixer_type) {
@@ -1854,6 +1884,7 @@ function formatAction(move) {
         case 'draw_from_bag':    return 'Drew from bag';
         case 'quit_game':        return 'Quit the game';
         case 'cancel_game':      return 'Cancelled the game';
+        case 'end_turn':         return 'Ended turn';
         default:                 return a.type || '?';
     }
 }
@@ -1872,6 +1903,7 @@ function formatActionDetail(move) {
         case 'draw_from_bag':    return _frag(h('em', null, `Drew ${(a.drawn || []).length} item(s) from the bag`));
         case 'quit_game':        return _frag(h('em', null, 'Player quit the game'));
         case 'cancel_game':      return _frag(h('em', null, 'Game cancelled by host'));
+        case 'end_turn':         return _frag(h('em', null, `Ended turn (forfeited: ${(a.forfeited_free_actions || []).join(', ') || 'none'})`));
         default:                 return _frag(h('em', null, 'No details available'));
     }
 }
@@ -1955,7 +1987,7 @@ function _detailGoForAWee(a) {
 
 function _detailClaimCard(a) {
     const typeIcons = { karaoke: '\uD83C\uDFA4', store: '\uD83D\uDCE6', refresher: '\uD83D\uDCA7', cup_doubler: '\uD83E\uDD42', specialist: '\u2B50' };
-    const typeLabels = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist' };
+    const typeLabels = { karaoke: 'Karaoke', store: 'Store', refresher: 'Refresher', cup_doubler: 'Cup Doubler', specialist: 'Specialist', free_action: 'Free Action' };
     const icon = typeIcons[a.card_type] || '';
     const typeLabel = typeLabels[a.card_type] || a.card_type || '';
     const cardName = a.card_name || 'Unknown';
@@ -3253,6 +3285,25 @@ function renderGameControls(game, isReplay) {
     section.appendChild(btns);
 }
 
+async function doEndTurn(btn) {
+    setButtonBusy(btn, true, 'Ending turn…');
+    clearError();
+    try {
+        const resp = await gameAction('end-turn', {});
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.detail || d.error || 'Cannot end turn right now.');
+        } else {
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
+    } finally {
+        setButtonBusy(btn, false);
+    }
+}
+
 async function doQuitGame(btn) {
     if (!confirm('Are you sure you want to quit? You will be eliminated from the game.')) return;
     setButtonBusy(btn, true, 'Quitting…');
@@ -3378,6 +3429,45 @@ function renderActionBar(game, gs, isReplay) {
         enterRerollMode();
         el('gbMySpecials')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
+
+    // Free action awareness: when main action is taken but free actions remain,
+    // only matching free action types should be enabled (plus End Turn).
+    const mainTaken = !!gs.main_action_taken_this_turn;
+    const freeUsed = gs.free_actions_used_this_turn || [];
+    const myFreeActions = (myState.cards || [])
+        .filter(c => c.card_type === 'free_action' && c.free_action_type)
+        .map(c => c.free_action_type)
+        .filter(a => !freeUsed.includes(a));
+
+    if (mainTaken && !takeInProgress) {
+        // Only free actions are available; disable non-matching actions
+        if (!myFreeActions.includes('take_ingredients')) takeBtn.disabled = true;
+        if (!myFreeActions.includes('sell_cup')) sellBtn.disabled = true;
+        // drink_cup has no free action card, always disabled after main action
+        drinkBtn.disabled = true;
+        if (!myFreeActions.includes('go_for_a_wee')) weeBtn.disabled = true;
+        // claim_card has no free action card
+        claimBtn.disabled = true;
+        if (!myFreeActions.includes('reroll_specials')) rerollBtn.disabled = true;
+    }
+
+    // End Turn button: show when main action is taken and free actions remain
+    let endTurnBtn = el('gbActionEndTurn');
+    if (!endTurnBtn) {
+        endTurnBtn = document.createElement('button');
+        endTurnBtn.id = 'gbActionEndTurn';
+        endTurnBtn.className = 'gb-action-btn gb-action-end-turn';
+        endTurnBtn.textContent = 'End Turn';
+        bar.appendChild(endTurnBtn);
+    }
+    if (mainTaken && myFreeActions.length > 0 && !takeInProgress) {
+        endTurnBtn.classList.remove('hidden');
+        endTurnBtn.disabled = false;
+        endTurnBtn.onclick = () => doEndTurn(endTurnBtn);
+    } else {
+        endTurnBtn.classList.add('hidden');
+        endTurnBtn.disabled = true;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
