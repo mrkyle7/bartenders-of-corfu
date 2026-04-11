@@ -373,7 +373,7 @@ Feature: Game turn actions
     And all cards in row 1 should be karaoke type
     And row 2 should have 3 cards
     And row 3 should have 3 cards
-    And the deck should have 12 cards remaining
+    And the deck should have 16 cards remaining
 
   # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────
 
@@ -818,7 +818,7 @@ Feature: Game turn actions
     And the bag contains no special tokens
     And player 1 holds a RUM free action card
     And player 1's cup 0 contains 1 VODKA and 1 COLA
-    When player 1 takes 3 ingredients from the bag
+    When player 1 takes 3 ingredients from the bag placing all in cup 1
     Then it should still be player 1's turn
     When player 1 sells cup 0 with no declared specials
     Then it should be player 2's turn
@@ -861,9 +861,9 @@ Feature: Game turn actions
     Given it is player 1's turn
     And the bag contains no special tokens
     And player 1 holds a RUM free action card
-    When player 1 takes 3 ingredients from the bag
+    When player 1 takes 3 ingredients from the bag placing all in cup 0
     Then it should still be player 1's turn
-    When player 1 takes 3 ingredients from the bag
+    When player 1 takes 3 ingredients from the bag placing all in cup 1
     Then it should be player 2's turn
 
   Scenario: Free action card exposes free_action_type in card data

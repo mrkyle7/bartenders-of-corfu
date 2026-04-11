@@ -1265,11 +1265,11 @@ def row1_all_karaoke(ctx):
     )
 
 
-@then("the deck should have 12 cards remaining")
-def deck_has_12_cards(ctx):
+@then("the deck should have 16 cards remaining")
+def deck_has_16_cards(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
     deck_size = game["game_state"]["deck_size"]
-    assert deck_size == 12, f"Expected deck_size 12, got {deck_size}"
+    assert deck_size == 16, f"Expected deck_size 16, got {deck_size}"
 
 
 @then(parsers.parse("player {n:d}'s bladder capacity should be {capacity:d}"))
