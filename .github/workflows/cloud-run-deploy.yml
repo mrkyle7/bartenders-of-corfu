@@ -1,0 +1,126 @@
+name: Cloud Run Deploy
+
+on:
+  workflow_run:
+    workflows: [Build and Push to Artifact Registry]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_ID: bartenders-464918
+      REGION: us-east1
+      REPOSITORY: docker-us
+      IMAGE_NAME: bartenders
+      SERVICE_NAME: bartenders
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/987774112216/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-terraform@bartenders-464918.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Push Supabase DB migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          supabase link --project-ref $SUPABASE_PROJECT_ID
+          supabase db push --linked
+
+      - name: Sync Supabase secrets to Secret Manager
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          # Add a new Secret Manager version only when the GitHub secret has
+          # actually changed — avoids version churn on every deploy.
+          sync_secret() {
+            local name="$1"
+            local value="$2"
+            local current
+            current=$(gcloud secrets versions access latest \
+              --secret="$name" \
+              --project="$PROJECT_ID" 2>/dev/null || echo "")
+            if [ "$current" != "$value" ]; then
+              echo "Updating $name (value changed)"
+              printf '%s' "$value" | gcloud secrets versions add "$name" \
+                --data-file=- \
+                --project="$PROJECT_ID"
+            else
+              echo "$name unchanged, skipping"
+            fi
+          }
+          sync_secret supabase-url "$SUPABASE_URL"
+          sync_secret supabase-key "$SUPABASE_KEY"
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        run: |
+          IMAGE_URI=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:${{ github.sha }}
+          echo "Deploying $IMAGE_URI"
+          gcloud run deploy $SERVICE_NAME \
+            --image="$IMAGE_URI" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --quiet
+
+      - name: Verify deployment
+        run: |
+          EXPECTED="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:${{ github.sha }}"
+          ACTIVE=$(gcloud run services describe $SERVICE_NAME \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --format='value(spec.template.spec.containers[0].image)')
+          echo "Expected: $EXPECTED"
+          echo "Active:   $ACTIVE"
+          if [ "$ACTIVE" != "$EXPECTED" ]; then
+            echo "ERROR: Active image does not match expected"
+            exit 1
+          fi
+          echo "Deployment verified."
+
+      - name: Rollback on failure
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: |
+          echo "Deploy failed — rolling back traffic to the previous healthy revision"
+          # Find the most recent "Ready" revision that is NOT the one we just tried
+          FAILED_REV=$(gcloud run services describe $SERVICE_NAME \
+            --region="$REGION" --project="$PROJECT_ID" \
+            --format='value(status.latestCreatedRevisionName)')
+          PREV_REV=$(gcloud run revisions list \
+            --service="$SERVICE_NAME" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --filter="status.conditions.type:Ready AND status.conditions.status:True AND metadata.name!=$FAILED_REV" \
+            --sort-by="~metadata.creationTimestamp" \
+            --limit=1 \
+            --format='value(metadata.name)')
+          if [ -z "$PREV_REV" ]; then
+            echo "No previous healthy revision found — cannot rollback"
+            exit 1
+          fi
+          echo "Rolling back to $PREV_REV"
+          gcloud run services update-traffic $SERVICE_NAME \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --to-revisions="$PREV_REV=100"

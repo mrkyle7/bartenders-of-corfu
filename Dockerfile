@@ -27,11 +27,15 @@ COPY app ./app
 COPY static ./static
 COPY playtesting ./playtesting
 
-EXPOSE 8000
+EXPOSE 8080
 
 RUN useradd app
 USER app
 
 ENV PATH="/app/.venv/bin:$PATH"
+# Cloud Run injects PORT=8080. Fall back to 8080 for local runs too so the
+# Dockerfile is portable across Cloud Run and k3s/docker-compose.
+ENV PORT=8080
 
-CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "log_conf.yaml"]
+# Shell form so ${PORT} is expanded at container start
+CMD uvicorn app.api:app --host 0.0.0.0 --port ${PORT} --log-config log_conf.yaml

@@ -1,0 +1,1769 @@
+{
+  "version": 4,
+  "terraform_version": "1.14.5",
+  "serial": 51,
+  "lineage": "e4734d9b-6b17-05aa-9409-985671b7fc94",
+  "outputs": {},
+  "resources": [
+    {
+      "mode": "managed",
+      "type": "google_artifact_registry_repository",
+      "name": "docker_us",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "cleanup_policies": [
+              {
+                "action": "DELETE",
+                "condition": [
+                  {
+                    "newer_than": "",
+                    "older_than": "2592000s",
+                    "package_name_prefixes": [],
+                    "tag_prefixes": [],
+                    "tag_state": "TAGGED",
+                    "version_name_prefixes": []
+                  }
+                ],
+                "id": "delete-old-tagged",
+                "most_recent_versions": []
+              },
+              {
+                "action": "DELETE",
+                "condition": [
+                  {
+                    "newer_than": "",
+                    "older_than": "604800s",
+                    "package_name_prefixes": [],
+                    "tag_prefixes": [],
+                    "tag_state": "UNTAGGED",
+                    "version_name_prefixes": []
+                  }
+                ],
+                "id": "delete-untagged",
+                "most_recent_versions": []
+              },
+              {
+                "action": "KEEP",
+                "condition": [],
+                "id": "keep-recent",
+                "most_recent_versions": [
+                  {
+                    "keep_count": 10,
+                    "package_name_prefixes": []
+                  }
+                ]
+              }
+            ],
+            "cleanup_policy_dry_run": false,
+            "create_time": "2025-08-24T14:03:10.907104Z",
+            "description": "Docker images for bartenders",
+            "docker_config": [],
+            "effective_labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "region": "us-east1"
+            },
+            "format": "DOCKER",
+            "id": "projects/bartenders-464918/locations/us-east1/repositories/docker-us",
+            "kms_key_name": "",
+            "labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "region": "us-east1"
+            },
+            "location": "us-east1",
+            "maven_config": [],
+            "mode": "STANDARD_REPOSITORY",
+            "name": "docker-us",
+            "project": "bartenders-464918",
+            "remote_repository_config": [],
+            "repository_id": "docker-us",
+            "terraform_labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "region": "us-east1"
+            },
+            "timeouts": null,
+            "update_time": "2026-04-06T22:22:22.763914Z",
+            "virtual_repository_config": [],
+            "vulnerability_scanning_config": [
+              {
+                "enablement_config": "DISABLED",
+                "enablement_state": "SCANNING_DISABLED",
+                "enablement_state_reason": "API containerscanning.googleapis.com is not enabled."
+              }
+            ]
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_disk",
+      "name": "k3s_disk",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "access_mode": "",
+            "architecture": null,
+            "async_primary_disk": [],
+            "create_snapshot_before_destroy": false,
+            "create_snapshot_before_destroy_prefix": null,
+            "creation_timestamp": "2025-08-28T12:47:24.086-07:00",
+            "description": "",
+            "disk_encryption_key": [],
+            "disk_id": "1844449020850539684",
+            "effective_labels": {
+              "goog-terraform-provisioned": "true"
+            },
+            "enable_confidential_compute": false,
+            "guest_os_features": [],
+            "id": "projects/bartenders-464918/zones/us-east1-d/disks/k3s-disk",
+            "image": "",
+            "label_fingerprint": "vezUS-42LLM=",
+            "labels": {},
+            "last_attach_timestamp": "2025-12-29T07:13:18.334-08:00",
+            "last_detach_timestamp": "2025-12-29T07:08:27.909-08:00",
+            "licenses": [],
+            "name": "k3s-disk",
+            "params": [],
+            "physical_block_size_bytes": 4096,
+            "project": "bartenders-464918",
+            "provisioned_iops": 0,
+            "provisioned_throughput": 0,
+            "self_link": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/zones/us-east1-d/disks/k3s-disk",
+            "size": 15,
+            "snapshot": "",
+            "source_disk": "",
+            "source_disk_id": "",
+            "source_image_encryption_key": [],
+            "source_image_id": "",
+            "source_instant_snapshot": "",
+            "source_instant_snapshot_id": "",
+            "source_snapshot_encryption_key": [],
+            "source_snapshot_id": "",
+            "source_storage_object": null,
+            "storage_pool": "",
+            "terraform_labels": {
+              "goog-terraform-provisioned": "true"
+            },
+            "timeouts": null,
+            "type": "pd-standard",
+            "users": [
+              "https://www.googleapis.com/compute/v1/projects/bartenders-464918/zones/us-east1-d/instances/k3s-vm-1"
+            ],
+            "zone": "us-east1-d"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_firewall",
+      "name": "allow_http",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 1,
+          "attributes": {
+            "allow": [
+              {
+                "ports": [
+                  "80",
+                  "443",
+                  "30080"
+                ],
+                "protocol": "tcp"
+              }
+            ],
+            "creation_timestamp": "2025-08-28T12:47:23.408-07:00",
+            "deny": [],
+            "description": "",
+            "destination_ranges": [],
+            "direction": "INGRESS",
+            "disabled": false,
+            "enable_logging": null,
+            "id": "projects/bartenders-464918/global/firewalls/allow-http",
+            "log_config": [],
+            "name": "allow-http",
+            "network": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/global/networks/default",
+            "params": [],
+            "priority": 1000,
+            "project": "bartenders-464918",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/global/firewalls/allow-http",
+            "source_ranges": [
+              "0.0.0.0/0"
+            ],
+            "source_service_accounts": [],
+            "source_tags": [],
+            "target_service_accounts": [],
+            "target_tags": [
+              "web"
+            ],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH0sInNjaGVtYV92ZXJzaW9uIjoiMSJ9"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_instance",
+      "name": "k3s",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 6,
+          "attributes": {
+            "advanced_machine_features": [],
+            "allow_stopping_for_update": true,
+            "attached_disk": [
+              {
+                "device_name": "k3s-disk",
+                "disk_encryption_key_raw": "",
+                "disk_encryption_key_rsa": "",
+                "disk_encryption_key_sha256": "",
+                "disk_encryption_service_account": "",
+                "force_attach": false,
+                "kms_key_self_link": "",
+                "mode": "READ_WRITE",
+                "source": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/zones/us-east1-d/disks/k3s-disk"
+              }
+            ],
+            "boot_disk": [
+              {
+                "auto_delete": true,
+                "device_name": "k3s",
+                "disk_encryption_key_raw": "",
+                "disk_encryption_key_rsa": "",
+                "disk_encryption_key_sha256": "",
+                "disk_encryption_service_account": "",
+                "force_attach": false,
+                "guest_os_features": [
+                  "UEFI_COMPATIBLE",
+                  "VIRTIO_SCSI_MULTIQUEUE",
+                  "GVNIC",
+                  "SEV_CAPABLE",
+                  "SEV_LIVE_MIGRATABLE_V2"
+                ],
+                "initialize_params": [
+                  {
+                    "architecture": "X86_64",
+                    "enable_confidential_compute": false,
+                    "image": "https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/debian-12-bookworm-v20250812",
+                    "labels": {},
+                    "provisioned_iops": 0,
+                    "provisioned_throughput": 0,
+                    "resource_manager_tags": {},
+                    "resource_policies": [],
+                    "size": 10,
+                    "snapshot": "",
+                    "source_image_encryption_key": [],
+                    "source_snapshot_encryption_key": [],
+                    "storage_pool": "",
+                    "type": "pd-balanced"
+                  }
+                ],
+                "interface": "",
+                "kms_key_self_link": "",
+                "mode": "READ_WRITE",
+                "source": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/zones/us-east1-d/disks/k3s-vm-1"
+              }
+            ],
+            "can_ip_forward": false,
+            "confidential_instance_config": [],
+            "cpu_platform": "Intel Broadwell",
+            "creation_timestamp": "2025-12-29T07:13:17.139-08:00",
+            "current_status": "RUNNING",
+            "deletion_protection": false,
+            "description": "",
+            "desired_status": null,
+            "effective_labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "goog-ec-src": "vm_add-tf",
+              "goog-ops-agent-policy": "v2-x86-template-1-4-0",
+              "goog-terraform-provisioned": "true",
+              "region": "us-east1",
+              "sensitive": "false"
+            },
+            "enable_display": false,
+            "guest_accelerator": [],
+            "hostname": "",
+            "id": "projects/bartenders-464918/zones/us-east1-d/instances/k3s-vm-1",
+            "instance_encryption_key": [],
+            "instance_id": "6772088566068487267",
+            "key_revocation_action_type": "",
+            "label_fingerprint": "AKVAK-AHu3I=",
+            "labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "goog-ec-src": "vm_add-tf",
+              "goog-ops-agent-policy": "v2-x86-template-1-4-0",
+              "region": "us-east1",
+              "sensitive": "false"
+            },
+            "machine_type": "e2-small",
+            "metadata": {
+              "enable-osconfig": "TRUE"
+            },
+            "metadata_fingerprint": "9mPeTo-961Q=",
+            "metadata_startup_script": "#!/bin/bash\n\n# Format the disk if not already formatted\nif ! lsblk | grep -q \"/mnt/disks/k3s\"; then\n    mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-k3s-disk\n    mkdir -p /mnt/disks/k3s\n    mount -o discard,defaults /dev/disk/by-id/google-k3s-disk /mnt/disks/k3s\n    chmod a+w /mnt/disks/k3s\nfi\n\n# ensure only run once\nif [[ -f /etc/startup_was_launched ]]; then exit 0; fi\ntouch /etc/startup_was_launched\n\n# apt install\napt update\napt install -y ncdu htop\n\n# helm install\ncurl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3\nchmod 700 get_helm.sh\n/bin/bash get_helm.sh\n\n# bashrc config\nrc=/root/.bashrc\necho \"alias l='ls -lah'\" \u003e\u003e $rc\necho \"alias ll='ls -lh'\" \u003e\u003e $rc\necho \"alias k=kubectl\" \u003e\u003e $rc\necho \"export dry='--dry-run=client'\" \u003e\u003e $rc\necho \"export o='-oyaml'\" \u003e\u003e $rc\necho \"export KUBECONFIG=/etc/rancher/k3s/k3s.yaml\" \u003e\u003e $rc\n\n# Get the external IP of this VM\nEXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H \"Metadata-Flavor: Google\")\n\n# Install k3s and configure it to use the persistent disk for data storage\ncurl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--data-dir /mnt/disks/k3s --tls-san ${EXTERNAL_IP} --bind-address 0.0.0.0\" sh -",
+            "min_cpu_platform": "",
+            "name": "k3s-vm-1",
+            "network_interface": [
+              {
+                "access_config": [
+                  {
+                    "nat_ip": "34.138.47.157",
+                    "network_tier": "PREMIUM",
+                    "public_ptr_domain_name": ""
+                  }
+                ],
+                "alias_ip_range": [],
+                "internal_ipv6_prefix_length": 0,
+                "ipv6_access_config": [],
+                "ipv6_access_type": "",
+                "ipv6_address": "",
+                "name": "nic0",
+                "network": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/global/networks/default",
+                "network_attachment": "",
+                "network_ip": "10.142.0.9",
+                "nic_type": "",
+                "queue_count": 0,
+                "stack_type": "IPV4_ONLY",
+                "subnetwork": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/regions/us-east1/subnetworks/default",
+                "subnetwork_project": "bartenders-464918"
+              }
+            ],
+            "network_performance_config": [],
+            "params": [],
+            "project": "bartenders-464918",
+            "reservation_affinity": [],
+            "resource_policies": [],
+            "scheduling": [
+              {
+                "automatic_restart": true,
+                "availability_domain": 0,
+                "instance_termination_action": "",
+                "local_ssd_recovery_timeout": [],
+                "max_run_duration": [],
+                "min_node_cpus": 0,
+                "node_affinities": [],
+                "on_host_maintenance": "MIGRATE",
+                "on_instance_stop_action": [],
+                "preemptible": false,
+                "provisioning_model": "STANDARD",
+                "termination_time": ""
+              }
+            ],
+            "scratch_disk": [],
+            "self_link": "https://www.googleapis.com/compute/v1/projects/bartenders-464918/zones/us-east1-d/instances/k3s-vm-1",
+            "service_account": [
+              {
+                "email": "987774112216-compute@developer.gserviceaccount.com",
+                "scopes": [
+                  "https://www.googleapis.com/auth/devstorage.read_only",
+                  "https://www.googleapis.com/auth/logging.write",
+                  "https://www.googleapis.com/auth/monitoring.write",
+                  "https://www.googleapis.com/auth/service.management.readonly",
+                  "https://www.googleapis.com/auth/servicecontrol",
+                  "https://www.googleapis.com/auth/trace.append"
+                ]
+              }
+            ],
+            "shielded_instance_config": [
+              {
+                "enable_integrity_monitoring": true,
+                "enable_secure_boot": false,
+                "enable_vtpm": true
+              }
+            ],
+            "tags": [
+              "http-server",
+              "https-server",
+              "web"
+            ],
+            "tags_fingerprint": "qDJr34SzkqE=",
+            "terraform_labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "goog-ec-src": "vm_add-tf",
+              "goog-ops-agent-policy": "v2-x86-template-1-4-0",
+              "goog-terraform-provisioned": "true",
+              "region": "us-east1",
+              "sensitive": "false"
+            },
+            "timeouts": null,
+            "zone": "us-east1-d"
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "attached_disk"
+              },
+              {
+                "type": "index",
+                "value": {
+                  "value": 0,
+                  "type": "number"
+                }
+              },
+              {
+                "type": "get_attr",
+                "value": "disk_encryption_key_raw"
+              }
+            ],
+            [
+              {
+                "type": "get_attr",
+                "value": "attached_disk"
+              },
+              {
+                "type": "index",
+                "value": {
+                  "value": 0,
+                  "type": "number"
+                }
+              },
+              {
+                "type": "get_attr",
+                "value": "disk_encryption_key_rsa"
+              }
+            ],
+            [
+              {
+                "type": "get_attr",
+                "value": "boot_disk"
+              },
+              {
+                "type": "index",
+                "value": {
+                  "value": 0,
+                  "type": "number"
+                }
+              },
+              {
+                "type": "get_attr",
+                "value": "disk_encryption_key_raw"
+              }
+            ],
+            [
+              {
+                "type": "get_attr",
+                "value": "boot_disk"
+              },
+              {
+                "type": "index",
+                "value": {
+                  "value": 0,
+                  "type": "number"
+                }
+              },
+              {
+                "type": "get_attr",
+                "value": "disk_encryption_key_rsa"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH0sInNjaGVtYV92ZXJzaW9uIjoiNiJ9"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_dns_record_set",
+      "name": "cheetahmoongames_a",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "projects/bartenders-464918/managedZones/cheetahmoongames-com/rrsets/cheetahmoongames.com./A",
+            "managed_zone": "cheetahmoongames-com",
+            "name": "cheetahmoongames.com.",
+            "project": "bartenders-464918",
+            "routing_policy": [],
+            "rrdatas": [
+              "34.138.47.157"
+            ],
+            "ttl": 300,
+            "type": "A"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_os_config_os_policy_assignment",
+      "name": "ops_agent_config",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "baseline": true,
+            "deleted": false,
+            "description": "",
+            "etag": "f9777f63-45f9-4973-812c-08d72f7d9037",
+            "id": "projects/bartenders-464918/locations/us-east1-d/osPolicyAssignments/ops-agent-k3s-config",
+            "instance_filter": [
+              {
+                "all": false,
+                "exclusion_labels": [],
+                "inclusion_labels": [
+                  {
+                    "labels": {
+                      "app": "bartenders"
+                    }
+                  }
+                ],
+                "inventories": []
+              }
+            ],
+            "location": "us-east1-d",
+            "name": "ops-agent-k3s-config",
+            "os_policies": [
+              {
+                "allow_no_resource_group_match": false,
+                "description": "",
+                "id": "ops-agent-k3s-config",
+                "mode": "ENFORCEMENT",
+                "resource_groups": [
+                  {
+                    "inventory_filters": [],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [
+                          {
+                            "content": "logging:\n  receivers:\n    k3s_container_logs:\n      type: files\n      include_paths:\n        - /var/log/pods/*/*/*.log\n      record_log_file_path: true\n  processors:\n    # CRI log format written by k3s/containerd:\n    #   2024-01-01T00:00:00.000000000Z stdout F {\"severity\":\"INFO\",\"message\":\"...\"}\n    parse_cri:\n      type: parse_regex\n      field: message\n      regex: '^(?\u003ctime\u003e\\S+) (?\u003cstream\u003estdout|stderr) [FP] (?\u003clog\u003e.*)$'\n      time_key: time\n      time_format: '%Y-%m-%dT%H:%M:%S.%L%z'\n    # Parse the JSON payload the app emits into top-level fields.\n    # Cloud Logging recognises `severity`, `message`, `timestamp`, etc.\n    parse_app_json:\n      type: parse_json\n      field: log\n  service:\n    pipelines:\n      k3s_pipeline:\n        receivers: [k3s_container_logs]\n        processors: [parse_cri, parse_app_json]\n",
+                            "file": [],
+                            "path": "/etc/google-cloud-ops-agent/config.yaml",
+                            "permissions": "",
+                            "state": "CONTENTS_MATCH"
+                          }
+                        ],
+                        "id": "ops-agent-config-file",
+                        "pkg": [],
+                        "repository": []
+                      },
+                      {
+                        "exec": [
+                          {
+                            "enforce": [
+                              {
+                                "args": null,
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "mkdir -p /var/lib/google\nsystemctl restart google-cloud-ops-agent \u0026\u0026 \\\n  touch /var/lib/google/ops-agent-config-applied \u0026\u0026 \\\n  exit 100\nexit 1\n"
+                              }
+                            ],
+                            "validate": [
+                              {
+                                "args": null,
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "MARKER=/var/lib/google/ops-agent-config-applied\nCONFIG=/etc/google-cloud-ops-agent/config.yaml\nif [ ! -f \"$MARKER\" ] || [ \"$CONFIG\" -nt \"$MARKER\" ]; then\n  exit 100  # needs enforcement\nfi\nexit 101    # already in desired state\n"
+                              }
+                            ]
+                          }
+                        ],
+                        "file": [],
+                        "id": "restart-ops-agent-on-change",
+                        "pkg": [],
+                        "repository": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "project": "bartenders-464918",
+            "reconciling": false,
+            "revision_create_time": "2026-04-06T22:38:18.828857Z",
+            "revision_id": "ad3e67be-86f6-46d2-b68e-ee0c0be2a7ae",
+            "rollout": [
+              {
+                "disruption_budget": [
+                  {
+                    "fixed": 1,
+                    "percent": 0
+                  }
+                ],
+                "min_wait_duration": "60s"
+              }
+            ],
+            "rollout_state": "SUCCEEDED",
+            "skip_await_rollout": false,
+            "timeouts": null,
+            "uid": "f4da344c-310d-431f-b96a-4c13b79b4d2a"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_storage_bucket",
+      "name": "k3s-storage",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 3,
+          "attributes": {
+            "autoclass": [],
+            "cors": [],
+            "custom_placement_config": [],
+            "default_event_based_hold": false,
+            "effective_labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "goog-terraform-provisioned": "true",
+              "region": "us-east1",
+              "sensitive": "false"
+            },
+            "enable_object_retention": false,
+            "encryption": [],
+            "force_destroy": false,
+            "hierarchical_namespace": [
+              {
+                "enabled": false
+              }
+            ],
+            "id": "bartenders-data",
+            "ip_filter": [],
+            "labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "region": "us-east1",
+              "sensitive": "false"
+            },
+            "lifecycle_rule": [],
+            "location": "US-EAST1",
+            "logging": [],
+            "name": "bartenders-data",
+            "project": "bartenders-464918",
+            "project_number": 987774112216,
+            "public_access_prevention": "inherited",
+            "requester_pays": false,
+            "retention_policy": [],
+            "rpo": null,
+            "self_link": "https://www.googleapis.com/storage/v1/b/bartenders-data",
+            "soft_delete_policy": [
+              {
+                "effective_time": "2025-08-28T19:51:25.051Z",
+                "retention_duration_seconds": 604800
+              }
+            ],
+            "storage_class": "STANDARD",
+            "terraform_labels": {
+              "app": "bartenders",
+              "env": "prod",
+              "goog-terraform-provisioned": "true",
+              "region": "us-east1",
+              "sensitive": "false"
+            },
+            "time_created": "2025-08-28T19:51:25.051Z",
+            "timeouts": null,
+            "uniform_bucket_level_access": false,
+            "updated": "2025-08-28T19:51:25.051Z",
+            "url": "gs://bartenders-data",
+            "versioning": [],
+            "website": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsInJlYWQiOjI0MDAwMDAwMDAwMCwidXBkYXRlIjoyNDAwMDAwMDAwMDB9LCJzY2hlbWFfdmVyc2lvbiI6IjMifQ=="
+        }
+      ]
+    },
+    {
+      "module": "module.ops_agent_policy[0]",
+      "mode": "managed",
+      "type": "google_os_config_os_policy_assignment",
+      "name": "ops_agent_policy",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "baseline": true,
+            "deleted": false,
+            "description": "Cloud Ops Policy Assignment via Terraform",
+            "etag": "a467c7ac-95dc-4da3-bd83-77e32f954640",
+            "id": "projects/bartenders-464918/locations/us-east1-d/osPolicyAssignments/goog-ops-agent-v2-x86-template-1-4-0-us-east1-d",
+            "instance_filter": [
+              {
+                "all": false,
+                "exclusion_labels": [],
+                "inclusion_labels": [
+                  {
+                    "labels": {
+                      "goog-ops-agent-policy": "v2-x86-template-1-4-0"
+                    }
+                  }
+                ],
+                "inventories": []
+              }
+            ],
+            "location": "us-east1-d",
+            "name": "goog-ops-agent-v2-x86-template-1-4-0-us-east1-d",
+            "os_policies": [
+              {
+                "allow_no_resource_group_match": true,
+                "description": "AUTO-GENERATED VALUE, DO NOT EDIT! | {\"packageState\":\"installed\",\"version\":\"latest\"}",
+                "id": "goog-ops-agent-policy",
+                "mode": "ENFORCEMENT",
+                "resource_groups": [
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "centos",
+                        "os_version": "7"
+                      },
+                      {
+                        "os_short_name": "rhel",
+                        "os_version": "7.*"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [],
+                            "goo": [],
+                            "yum": [
+                              {
+                                "base_url": "https://packages.cloud.google.com/yum/repos/google-cloud-ops-agent-el7-x86_64-all",
+                                "display_name": "Google Cloud Ops Agent Repository",
+                                "gpg_keys": [
+                                  "https://packages.cloud.google.com/yum/doc/yum-key.gpg",
+                                  "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+                                ],
+                                "id": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "centos",
+                        "os_version": "8"
+                      },
+                      {
+                        "os_short_name": "rocky",
+                        "os_version": "8.*"
+                      },
+                      {
+                        "os_short_name": "rhel",
+                        "os_version": "8.*"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [],
+                            "goo": [],
+                            "yum": [
+                              {
+                                "base_url": "https://packages.cloud.google.com/yum/repos/google-cloud-ops-agent-el8-x86_64-all",
+                                "display_name": "Google Cloud Ops Agent Repository",
+                                "gpg_keys": [
+                                  "https://packages.cloud.google.com/yum/doc/yum-key.gpg",
+                                  "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+                                ],
+                                "id": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "rocky",
+                        "os_version": "9.*"
+                      },
+                      {
+                        "os_short_name": "rhel",
+                        "os_version": "9.*"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [],
+                            "goo": [],
+                            "yum": [
+                              {
+                                "base_url": "https://packages.cloud.google.com/yum/repos/google-cloud-ops-agent-el9-x86_64-all",
+                                "display_name": "Google Cloud Ops Agent Repository",
+                                "gpg_keys": [
+                                  "https://packages.cloud.google.com/yum/doc/yum-key.gpg",
+                                  "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+                                ],
+                                "id": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "sles",
+                        "os_version": "12.*"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": [
+                              {
+                                "base_url": "https://packages.cloud.google.com/yum/repos/google-cloud-ops-agent-sles12-x86_64-all",
+                                "display_name": "Google Cloud Ops Agent Repository",
+                                "gpg_keys": [
+                                  "https://packages.cloud.google.com/yum/doc/yum-key.gpg",
+                                  "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+                                ],
+                                "id": "google-cloud-ops-agent"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [
+                          {
+                            "enforce": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "echo hello"
+                              }
+                            ],
+                            "validate": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "rpm --import https://packages.cloud.google.com/yum/doc/yum-key.gpg; rpm --import https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg; exit 100;"
+                              }
+                            ]
+                          }
+                        ],
+                        "file": [],
+                        "id": "import-key",
+                        "pkg": [],
+                        "repository": []
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ]
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "sles",
+                        "os_version": "15.*"
+                      },
+                      {
+                        "os_short_name": "opensuse-leap",
+                        "os_version": "15.*"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": [
+                              {
+                                "base_url": "https://packages.cloud.google.com/yum/repos/google-cloud-ops-agent-sles15-x86_64-all",
+                                "display_name": "Google Cloud Ops Agent Repository",
+                                "gpg_keys": [
+                                  "https://packages.cloud.google.com/yum/doc/yum-key.gpg",
+                                  "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+                                ],
+                                "id": "google-cloud-ops-agent"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ]
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "debian",
+                        "os_version": "10"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-buster-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "debian",
+                        "os_version": "11"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-bullseye-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "debian",
+                        "os_version": "12"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-bookworm-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "ubuntu",
+                        "os_version": "18.04"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [
+                          {
+                            "enforce": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "echo hello"
+                              }
+                            ],
+                            "validate": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "cloud-init status --wait; exit 100;"
+                              }
+                            ]
+                          }
+                        ],
+                        "file": [],
+                        "id": "wait-for-cloud-init",
+                        "pkg": [],
+                        "repository": []
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-bionic-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "ubuntu",
+                        "os_version": "20.04"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [
+                          {
+                            "enforce": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "echo hello"
+                              }
+                            ],
+                            "validate": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "cloud-init status --wait; exit 100;"
+                              }
+                            ]
+                          }
+                        ],
+                        "file": [],
+                        "id": "wait-for-cloud-init",
+                        "pkg": [],
+                        "repository": []
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-focal-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "ubuntu",
+                        "os_version": "22.04"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [
+                          {
+                            "enforce": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "echo hello"
+                              }
+                            ],
+                            "validate": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "cloud-init status --wait; exit 100;"
+                              }
+                            ]
+                          }
+                        ],
+                        "file": [],
+                        "id": "wait-for-cloud-init",
+                        "pkg": [],
+                        "repository": []
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-jammy-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "ubuntu",
+                        "os_version": "23.10"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [
+                          {
+                            "enforce": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "echo hello"
+                              }
+                            ],
+                            "validate": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "cloud-init status --wait; exit 100;"
+                              }
+                            ]
+                          }
+                        ],
+                        "file": [],
+                        "id": "wait-for-cloud-init",
+                        "pkg": [],
+                        "repository": []
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-mantic-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "ubuntu",
+                        "os_version": "24.04"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [
+                          {
+                            "enforce": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "echo hello"
+                              }
+                            ],
+                            "validate": [
+                              {
+                                "args": [],
+                                "file": [],
+                                "interpreter": "SHELL",
+                                "output_file_path": "",
+                                "script": "cloud-init status --wait; exit 100;"
+                              }
+                            ]
+                          }
+                        ],
+                        "file": [],
+                        "id": "wait-for-cloud-init",
+                        "pkg": [],
+                        "repository": []
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [
+                              {
+                                "archive_type": "DEB",
+                                "components": [
+                                  "main"
+                                ],
+                                "distribution": "google-cloud-ops-agent-noble-all",
+                                "gpg_key": "https://packages.cloud.google.com/apt/doc/apt-key.gpg",
+                                "uri": "https://packages.cloud.google.com/apt"
+                              }
+                            ],
+                            "goo": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  },
+                  {
+                    "inventory_filters": [
+                      {
+                        "os_short_name": "windows",
+                        "os_version": "10.*"
+                      },
+                      {
+                        "os_short_name": "windows",
+                        "os_version": "6.*"
+                      }
+                    ],
+                    "resources": [
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "add-repo",
+                        "pkg": [],
+                        "repository": [
+                          {
+                            "apt": [],
+                            "goo": [
+                              {
+                                "name": "Google Cloud Ops Agent",
+                                "url": "https://packages.cloud.google.com/yuck/repos/google-cloud-ops-agent-windows-all"
+                              }
+                            ],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ]
+                      },
+                      {
+                        "exec": [],
+                        "file": [],
+                        "id": "install-pkg",
+                        "pkg": [
+                          {
+                            "apt": [],
+                            "deb": [],
+                            "desired_state": "INSTALLED",
+                            "googet": [
+                              {
+                                "name": "google-cloud-ops-agent"
+                              }
+                            ],
+                            "msi": [],
+                            "rpm": [],
+                            "yum": [],
+                            "zypper": []
+                          }
+                        ],
+                        "repository": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "project": "bartenders-464918",
+            "reconciling": false,
+            "revision_create_time": "2025-08-28T19:52:23.524791Z",
+            "revision_id": "2b9d252f-d649-48fb-b86e-6a6c11afda31",
+            "rollout": [
+              {
+                "disruption_budget": [
+                  {
+                    "fixed": 0,
+                    "percent": 100
+                  }
+                ],
+                "min_wait_duration": "0s"
+              }
+            ],
+            "rollout_state": "SUCCEEDED",
+            "skip_await_rollout": true,
+            "timeouts": null,
+            "uid": "95d55813-f331-426d-8367-39928288ec93"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    }
+  ],
+  "check_results": [
+    {
+      "object_kind": "var",
+      "config_addr": "module.ops_agent_policy.var.agents_rule",
+      "status": "pass",
+      "objects": [
+        {
+          "object_addr": "module.ops_agent_policy.var.agents_rule",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "object_kind": "var",
+      "config_addr": "module.ops_agent_policy.var.zone",
+      "status": "pass",
+      "objects": [
+        {
+          "object_addr": "module.ops_agent_policy.var.zone",
+          "status": "pass"
+        }
+      ]
+    }
+  ]
+}
