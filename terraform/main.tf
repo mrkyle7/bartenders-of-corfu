@@ -43,6 +43,12 @@ variable "ci_service_account" {
   description = "GitHub Actions service account used by CI. Granted permission to add Secret Manager versions and deploy Cloud Run."
 }
 
+variable "github_repo" {
+  type        = string
+  default     = "mrkyle7/bartenders-of-corfu"
+  description = "GitHub repository (owner/repo) allowed to authenticate via Workload Identity Federation."
+}
+
 # ---------------------------------------------------------------------------
 # APIs
 # ---------------------------------------------------------------------------
@@ -60,6 +66,39 @@ resource "google_project_service" "cloudrun" {
 }
 
 # ---------------------------------------------------------------------------
+# Workload Identity Federation — lets GitHub Actions authenticate as the
+# CI service account via OIDC (no long-lived keys).
+# ---------------------------------------------------------------------------
+
+resource "google_iam_workload_identity_pool" "github" {
+  project                   = var.project_name
+  workload_identity_pool_id = "github-pool"
+  display_name              = "GitHub Actions Pool"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  project                            = var.project_name
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-provider"
+  display_name                       = "GitHub Actions OIDC Provider"
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+  }
+  attribute_condition = "attribute.repository == '${var.github_repo}'"
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+# Let GitHub Actions assume the CI service account via WIF
+resource "google_service_account_iam_member" "wif_github_terraform" {
+  service_account_id = "projects/${var.project_name}/serviceAccounts/${var.ci_service_account}"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}
+
+# ---------------------------------------------------------------------------
 # CI service account permissions
 # ---------------------------------------------------------------------------
 
@@ -67,6 +106,20 @@ resource "google_project_iam_member" "ci_run_developer" {
   project = var.project_name
   role    = "roles/run.developer"
   member  = "serviceAccount:${var.ci_service_account}"
+}
+
+resource "google_project_iam_member" "ci_storage_admin" {
+  project = var.project_name
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${var.ci_service_account}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "ci_pushes_images" {
+  project    = var.project_name
+  location   = google_artifact_registry_repository.docker_us.location
+  repository = google_artifact_registry_repository.docker_us.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${var.ci_service_account}"
 }
 
 # ---------------------------------------------------------------------------

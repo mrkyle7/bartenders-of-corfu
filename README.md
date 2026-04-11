@@ -4,7 +4,7 @@
 
 [![Build and Push to Artifact Registry](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/build-and-push.yml)
 
-[![Kubernetes Deployment](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/kubectl-deploy.yml/badge.svg)](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/kubectl-deploy.yml)
+[![Cloud Run Deploy](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/cloud-run-deploy.yml/badge.svg)](https://github.com/mrkyle7/bartenders-of-corfu/actions/workflows/cloud-run-deploy.yml)
 
 Python implementation of the best game ever made (about making cocktails and getting drunk and also winning through spectacular kareoke).
 
@@ -17,43 +17,23 @@ supabase start --network-id k3s-net
 ./run-local.sh
 ```
 
-access on http://localhost:8000
+access on http://localhost:8080
 
-# local k3s
-
-To test locally how this is run on GCP...
-
-First run supabase locally using the [supabase cli](https://supabase.com/docs/guides/local-development/cli/getting-started)
+# Supabase
 
 ```
 supabase start --network-id k3s-net
 ```
 
-To add migrations 
+To add migrations: `supabase migration new ...`
 
-`supabase migration new ...`
+Apply migrations: `supabase migration up`
 
-Apply migrations
+Reset all data: `supabase db reset --network-id k3s-net`
 
-`supabase migration up`
+# Infrastructure
 
-reset all data
-
-```
-supabase db reset --network-id k3s-net
-```
-
-Copy .env_example to .env with the supabase secret key
-
-Run `k-apply.sh` to build and push changes to local k3s
-
-Note: you need docker installed first. 
-
-Note2: only tested on Mac, YMMV.
-
-access on https://localhost
-
-# creating the GCP stuff with terraform
+All GCP resources are managed in `terraform/`. This includes the Cloud Run service, Artifact Registry, Secret Manager, DNS, Workload Identity Federation, and all IAM bindings.
 
 ```
 cd terraform
@@ -62,61 +42,8 @@ terraform plan
 terraform apply
 ```
 
+The only manual prerequisite is creating the `github-terraform` service account itself and verifying domain ownership (`gcloud domains verify cheetahmoongames.com`). Everything else is declared in terraform.
+
 # Testing
 
 Run `./run-tests.sh`
-
-# manual setup commands
-
-Set up github auth
-
-```
-gcloud iam workload-identity-pools create "github-pool" \
-  --location="global" \
-  --display-name="GitHub Actions Pool"
-
-gcloud iam workload-identity-pools providers create-oidc github-provider \
-  --location="global" \
-  --workload-identity-pool="github-pool" \
-  --display-name="GitHub Actions OIDC Provider" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --attribute-condition="attribute.repository == 'mrkyle7/bartenders-of-corfu'" \
-  --issuer-uri="https://token.actions.githubusercontent.com"
-
-gcloud iam service-accounts add-iam-policy-binding github-terraform@bartenders-464918.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/987774112216/locations/global/workloadIdentityPools/github-pool/attribute.repository/mrkyle7/bartenders-of-corfu"
-
-gcloud projects add-iam-policy-binding bartenders-464918 \                                                                                  
-  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
-  --role="roles/storage.admin"
-
-gcloud artifacts repositories add-iam-policy-binding docker \
-  --location=us-east1 \
-  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-
-gcloud projects add-iam-policy-binding bartenders-464918 \     
-  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
-  --role="roles/compute.instanceAdmin.v1"
-
-gcloud projects add-iam-policy-binding bartenders-464918 \
-  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-gcloud iam service-accounts add-iam-policy-binding k3s-server@bartenders-464918.iam.gserviceaccount.com \
-  --project=bartenders-464918 \
-  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-gcloud projects add-iam-policy-binding bartenders-464918 \
-  --member="serviceAccount:github-terraform@bartenders-464918.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountKeyAdmin"
-```
-
-
-# Useful docker/k3s stuff
-
-Shell in k3s for testing stuff
-
-`kubectl run dns-test --image=busybox --restart=Never --rm -it -- sh`
