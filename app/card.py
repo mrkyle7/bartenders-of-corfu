@@ -24,11 +24,24 @@ class IngredientRequirement:
 @dataclass
 class Card:
     id: str  # UUID as string
-    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler" | "specialist"
+    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler" | "specialist" | "free_action"
     name: str = ""
     spirit_type: str | None = None  # "WHISKEY" | "RUM" | "VODKA" | "GIN" | "TEQUILA"
     mixer_type: str | None = None  # "COLA" | "SODA" | "TONIC" | "CRANBERRY"
     stored_spirits: list[str] = field(default_factory=list)
+
+    @property
+    def free_action_type(self) -> str | None:
+        """For free_action cards, the action type granted as a free action."""
+        if self.card_type != "free_action":
+            return None
+        mapping = {
+            "RUM": "take_ingredients",
+            "WHISKEY": "reroll_specials",
+            "VODKA": "sell_cup",
+            "GIN": "go_for_a_wee",
+        }
+        return mapping.get(self.spirit_type)
 
     @property
     def is_karaoke(self) -> bool:
@@ -47,10 +60,12 @@ class Card:
             return [IngredientRequirement(kind="spirit", count=3)]
         elif self.card_type == "specialist":
             return [IngredientRequirement(kind="spirit", count=2)]
+        elif self.card_type == "free_action":
+            return [IngredientRequirement(kind="spirit", count=3)]
         return []
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "id": self.id,
             "card_type": self.card_type,
             "is_karaoke": self.is_karaoke,
@@ -60,6 +75,9 @@ class Card:
             "stored_spirits": list(self.stored_spirits),
             "cost": [r.to_dict() for r in self.cost],
         }
+        if self.free_action_type:
+            d["free_action_type"] = self.free_action_type
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Card":
@@ -95,11 +113,11 @@ class CardRow:
 
 
 def build_deck() -> list[Card]:
-    """Build the 21-card deck per cards.allium spec (unshuffled).
+    """Build the 25-card deck per cards.allium spec (unshuffled).
 
     5 KaraokeCards (one per spirit), 5 StoreCards (one per spirit),
     4 RefresherCards (one per mixer), 2 CupDoublerCards,
-    5 SpecialistCards (one per spirit).
+    5 SpecialistCards (one per spirit), 4 FreeActionCards (RUM, WHISKEY, VODKA, GIN).
     """
     cards: list[Card] = []
 
@@ -154,6 +172,17 @@ def build_deck() -> list[Card]:
     ]:
         cards.append(
             Card(id=str(uuid4()), card_type="specialist", name=name, spirit_type=spirit)
+        )
+
+    # 4 FreeActionCards — one each for RUM, WHISKEY, VODKA, GIN
+    for name, spirit in [
+        ("Greedy Bartender", "RUM"),
+        ("Cocktail Shaker", "WHISKEY"),
+        ("Entrepreneur", "VODKA"),
+        ("Weak Bladder", "GIN"),
+    ]:
+        cards.append(
+            Card(id=str(uuid4()), card_type="free_action", name=name, spirit_type=spirit)
         )
 
     return cards

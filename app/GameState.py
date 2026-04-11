@@ -41,6 +41,8 @@ class GameState:
         taken_records_this_turn: list[dict] | None = None,
         discard: list[dict] | None = None,
         last_round: bool = False,
+        main_action_taken_this_turn: bool = False,
+        free_actions_used_this_turn: list[str] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -81,6 +83,14 @@ class GameState:
         # Last-round flag: set when a player reaches 40+ points.
         # The game continues until the round completes (all players have equal turns).
         self.last_round: bool = last_round
+        # Free action tracking: has the player taken their main (non-free) action this turn?
+        self.main_action_taken_this_turn: bool = main_action_taken_this_turn
+        # Which free action types have been used this turn (e.g. ["sell_cup", "go_for_a_wee"])
+        self.free_actions_used_this_turn: list[str] = (
+            free_actions_used_this_turn
+            if free_actions_used_this_turn is not None
+            else []
+        )
 
     @classmethod
     def new_game(cls, host: User) -> "GameState":
@@ -146,6 +156,8 @@ class GameState:
             "taken_records_this_turn": self.taken_records_this_turn,
             "discard": self.discard,
             "last_round": self.last_round,
+            "main_action_taken_this_turn": self.main_action_taken_this_turn,
+            "free_actions_used_this_turn": list(self.free_actions_used_this_turn),
         }
 
     @classmethod
@@ -203,4 +215,10 @@ class GameState:
             taken_records_this_turn=state_data.get("taken_records_this_turn", []),
             discard=state_data.get("discard", []),
             last_round=state_data.get("last_round", False),
+            main_action_taken_this_turn=state_data.get(
+                "main_action_taken_this_turn", False
+            ),
+            free_actions_used_this_turn=state_data.get(
+                "free_actions_used_this_turn", []
+            ),
         )

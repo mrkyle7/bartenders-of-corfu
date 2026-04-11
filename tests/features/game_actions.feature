@@ -373,7 +373,7 @@ Feature: Game turn actions
     And all cards in row 1 should be karaoke type
     And row 2 should have 3 cards
     And row 3 should have 3 cards
-    And the deck should have 12 cards remaining
+    And the deck should have 16 cards remaining
 
   # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────
 
@@ -765,3 +765,110 @@ Feature: Game turn actions
     And player 1 has "sugar" on their player mat
     When player 1 re-rolls specials "sugar" and rolls "nothing"
     Then the bag size should be unchanged
+
+  # ── Free Action Cards: Claiming ──────────────────────────────────────────────
+
+  Scenario: Claiming a free action card awards 2 points
+    Given it is player 1's turn
+    And a free action card for RUM is available in row 2
+    And player 1's bladder has 3 RUM spirits
+    When player 1 claims that card
+    Then player 1 should have 2 points
+    And player 1 should have 1 card
+    And a move record should be created for the game
+
+  Scenario: Claiming a free action card does not consume bladder spirits
+    Given it is player 1's turn
+    And a free action card for VODKA is available in row 2
+    And player 1's bladder has 3 VODKA spirits
+    When player 1 claims that card
+    Then player 1's bladder should contain 3 ingredients
+
+  Scenario: Cannot claim free action card with fewer than 3 matching bladder spirits
+    Given it is player 1's turn
+    And a free action card for GIN is available in row 2
+    And player 1's bladder has 2 GIN spirits
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  # ── Free Action Cards: Turn Logic ───────────────────────────────────────────
+
+  Scenario: Free action sell_cup then main action take_ingredients
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a VODKA free action card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 takes 3 ingredients from the bag
+    Then it should be player 2's turn
+
+  Scenario: Free action go_for_a_wee then main action sell_cup
+    Given it is player 1's turn
+    And player 1 holds a GIN free action card
+    And player 1 has 3 ingredients in their bladder
+    And player 1's cup 0 contains 1 WHISKEY and 1 COLA
+    When player 1 goes for a wee
+    Then it should still be player 1's turn
+    When player 1 sells cup 0 with no declared specials
+    Then it should be player 2's turn
+
+  Scenario: Free action take_ingredients then main action sell_cup
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a RUM free action card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 takes 3 ingredients from the bag placing all in cup 1
+    Then it should still be player 1's turn
+    When player 1 sells cup 0 with no declared specials
+    Then it should be player 2's turn
+
+  Scenario: Free action reroll_specials then main action sell_cup
+    Given it is player 1's turn
+    And player 1 holds a WHISKEY free action card
+    And player 1 has "sugar" on their player mat
+    And player 1's cup 0 contains 1 GIN and 1 TONIC
+    When player 1 re-rolls specials "sugar" and rolls "lemon"
+    Then it should still be player 1's turn
+    When player 1 sells cup 0 with no declared specials
+    Then it should be player 2's turn
+
+  Scenario: After main action with unused free actions turn stays with player
+    Given it is player 1's turn
+    And player 1 holds a GIN free action card
+    And player 1 has 3 ingredients in their bladder
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+
+  Scenario: End turn forfeits unused free actions
+    Given it is player 1's turn
+    And player 1 holds a GIN free action card
+    And player 1 has 3 ingredients in their bladder
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 ends their turn
+    Then it should be player 2's turn
+
+  Scenario: Cannot end turn before taking main action
+    Given it is player 1's turn
+    And player 1 holds a GIN free action card
+    When player 1 tries to end their turn
+    Then the action should be rejected with a 409 error
+
+  Scenario: Second action of same type after free action counts as main action
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a RUM free action card
+    When player 1 takes 3 ingredients from the bag placing all in cup 0
+    Then it should still be player 1's turn
+    When player 1 takes 3 ingredients from the bag placing all in cup 1
+    Then it should be player 2's turn
+
+  Scenario: Free action card exposes free_action_type in card data
+    Given it is player 1's turn
+    And a free action card for VODKA is available in row 2
+    And player 1's bladder has 3 VODKA spirits
+    When player 1 claims that card
+    Then player 1's free action card should have free_action_type "sell_cup"
