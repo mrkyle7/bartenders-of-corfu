@@ -972,6 +972,646 @@ class SpecialistBuilder(Strategy):
         return _smart_pending_assignments(ps, drawn, cups)
 
 
+class Mastermind(Strategy):
+    """Weighted-evaluation strategy with bag probability analysis.
+
+    Scores every valid action on a common scale considering:
+    - Immediate point value and sell bonuses
+    - Card synergies (specialist, doubler, store, karaoke)
+    - Bag composition (probability of drawing useful vs harmful ingredients)
+    - Survival costs (drunk risk, bladder pressure)
+    - Opponent threat level (scoring pressure, elimination likelihood)
+
+    Key advantages over rule-based strategies:
+    1. Naturally adapts sell timing to risk — holds for 3-pt sells when safe,
+       dumps at 1 pt when drunk is high.
+    2. Claims specialist/doubler for 6-8 pt sells, prioritised by synergy value.
+    3. Skips negative-value display items; draws from bag when expected value is
+       higher (avoids forced spirit drinking).
+    4. Pre-wee claim bonus: claims cards before weeing flushes bladder spirits.
+    5. Spirit accumulation emerges from display item scoring — no brittle mode
+       switching.
+    """
+
+    name = "Mastermind"
+
+    # ------------------------------------------------------------------
+    #  Focus spirit selection
+    # ------------------------------------------------------------------
+
+    def _focus_spirit(self, gs: GameState, ps: PlayerState) -> str:
+        """Pick the best spirit type to build around."""
+        for c in ps.cards:
+            if c.get("card_type") == "specialist" and c.get("spirit_type"):
+                return c["spirit_type"]
+
+        best, best_score = "VODKA", -1
+        for name, ing in _SPIRIT_MAP.items():
+            score = len(VALID_PAIRINGS.get(ing, set())) * 10
+            for cup in ps.cups:
+                score += sum(12 for i in cup.ingredients if i == ing)
+            score += sum(5 for i in ps.bladder if i == ing)
+            score += sum(3 for i in gs.open_display if i == ing)
+            for row in gs.card_rows:
+                for card in row.cards:
+                    if card.card_type == "specialist" and card.spirit_type == name:
+                        score += 20
+                    if card.card_type == "store" and card.spirit_type == name:
+                        score += 5
+            if score > best_score:
+                best, best_score = name, score
+        return best
+
+    # ------------------------------------------------------------------
+    #  State queries
+    # ------------------------------------------------------------------
+
+    def _has_specialist(self, ps: PlayerState, focus: str) -> bool:
+        return any(
+            c.get("card_type") == "specialist" and c.get("spirit_type") == focus
+            for c in ps.cards
+        )
+
+    def _has_doubler(self, ps: PlayerState) -> bool:
+        return any(cup.has_cup_doubler for cup in ps.cups)
+
+    def _max_opp_pts(self, gs: GameState, pid) -> int:
+        return max(
+            (p.points for k, p in gs.player_states.items()
+             if k != pid and not p.is_eliminated),
+            default=0,
+        )
+
+    def _opp_might_die(self, gs: GameState, pid) -> bool:
+        return any(
+            p.drunk_level >= 4
+            for k, p in gs.player_states.items()
+            if k != pid and not p.is_eliminated
+        )
+
+    # ------------------------------------------------------------------
+    #  Bag probability helpers
+    # ------------------------------------------------------------------
+
+    def _bag_spirit_frac(self, gs: GameState) -> float:
+        if not gs.bag_contents:
+            return 0.0
+        return sum(1 for i in gs.bag_contents if i in _SPIRITS) / len(gs.bag_contents)
+
+    # ------------------------------------------------------------------
+    #  Spirit accumulation value (for card claims via bladder)
+    # ------------------------------------------------------------------
+
+    def _spirit_accum_value(
+        self, gs: GameState, ps: PlayerState, spirit_ing: Ingredient, focus: str
+    ) -> float:
+        """Value of having one more of this spirit in bladder for claims."""
+        name = spirit_ing.name
+        current = sum(1 for i in ps.bladder if i == spirit_ing)
+        after = current + 1
+        value = 0.0
+        for row in gs.card_rows:
+            for card in row.cards:
+                if card.card_type == "specialist" and card.spirit_type == name:
+                    if current < 2 <= after and not self._has_specialist(ps, focus):
+                        value += 30
+                if card.card_type == "cup_doubler":
+                    if current < 3 <= after and not self._has_doubler(ps):
+                        value += 35
+                if card.card_type == "karaoke" and card.spirit_type == name:
+                    if current < 3 <= after:
+                        kc = ps.karaoke_cards_claimed
+                        value += 100 if kc >= 2 else (25 if kc >= 1 else 10)
+                if card.card_type == "store" and card.spirit_type == name:
+                    if current < 1 <= after:
+                        value += 8
+        # Discount by drunk risk: drinking a spirit is far worse when already drunk
+        drunk_discount = max(0.1, 1.0 - ps.drunk_level * 0.3)
+        return value * drunk_discount
+
+    # ------------------------------------------------------------------
+    #  Urgency from opponent state
+    # ------------------------------------------------------------------
+
+    def _urgency(self, gs: GameState, pid) -> float:
+        """0.0 = relaxed, 1.0 = desperate."""
+        max_pts = self._max_opp_pts(gs, pid)
+        u = 0.0
+        if max_pts >= 35:
+            u = 0.8
+        elif max_pts >= 28:
+            u = 0.5
+        elif max_pts >= 20:
+            u = 0.2
+        opp_karaoke = max(
+            (p.karaoke_cards_claimed for k, p in gs.player_states.items()
+             if k != pid and not p.is_eliminated),
+            default=0,
+        )
+        if opp_karaoke >= 2:
+            u = max(u, 0.7)
+        if self._opp_might_die(gs, pid):
+            u = max(0.0, u - 0.2)
+        return u
+
+    # ------------------------------------------------------------------
+    #  Action scoring (common scale 0-200)
+    # ------------------------------------------------------------------
+
+    def _score_sell(
+        self, gs: GameState, ps: PlayerState, action: Action, focus: str, pid
+    ) -> float:
+        pts = action.params.get("points", 0)
+        drunk = ps.drunk_level
+        score = pts * 10.0
+
+        # Urgency: score faster when opponent is ahead
+        score += self._urgency(gs, pid) * 15
+
+        # Relative score gap: sell faster when falling behind
+        score_gap = self._max_opp_pts(gs, pid) - ps.points
+        if score_gap > 5:
+            score += min(score_gap, 15)
+
+        # Drunk pressure: sell faster to avoid taking when drunk
+        if drunk >= 4:
+            score += 30
+        elif drunk >= 3:
+            score += 15
+        elif drunk >= 2:
+            score += 8
+
+        # Need cup space: bonus when both cups occupied
+        if not ps.cups[0].is_empty and not ps.cups[1].is_empty:
+            score += 10
+
+        # Bladder pressure: selling frees cups, reducing future forced drinking
+        bladder_fill = len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
+        if bladder_fill >= 0.75:
+            score += 5
+
+        # Dead-end cup: no matching spirits left in bag/display → sell now
+        ci = action.params.get("cup_index")
+        if ci is not None and pts <= 1:
+            from app.actions import _SPIRITS as _SP
+            cup_spirit = next(
+                (ing for ing in ps.cups[ci].ingredients if ing in _SP), None
+            )
+            if cup_spirit:
+                remaining = gs.bag_contents.count(cup_spirit) + gs.open_display.count(cup_spirit)
+                if remaining == 0:
+                    score += 12  # No matching spirits exist — sell immediately
+
+        return score
+
+    def _score_take(
+        self, gs: GameState, ps: PlayerState, focus_ing: Ingredient | None, pid
+    ) -> float:
+        cups = CupTracker(ps)
+        drunk = ps.drunk_level
+
+        # Count spirit slots available across both cups
+        spirit_slots = 0
+        for i in (0, 1):
+            if cups.can_add(i) and cups.spirit_counts[i] < 2:
+                spirit_slots += 2 - cups.spirit_counts[i]
+
+        score = 15.0  # Baseline — taking is the default action
+        score += min(spirit_slots, 3) * 2.0  # Bonus for cup headroom
+
+        # Risk penalty when cups can't absorb spirits
+        if spirit_slots == 0:
+            score -= 3.0 + drunk * 3.0
+        elif drunk >= 3:
+            score -= 3.0
+
+        # Display quality bonus/penalty (rough estimate)
+        for ing in gs.open_display:
+            if ing in _SPIRITS:
+                if cups.best_cup_for_spirit(ing) is not None:
+                    score += 1.5  # Can cup it
+                else:
+                    score -= 1.0 + drunk * 0.5  # Forced to drink
+            elif ing in _MIXERS:
+                score += 0.5
+
+        # Bag risk when spirit slots are exhausted
+        if spirit_slots == 0:
+            bag_draws = max(0, ps.take_count - len(gs.open_display))
+            score -= bag_draws * self._bag_spirit_frac(gs) * (2.0 + drunk * 1.5)
+
+        # Bladder overflow risk: taking adds items to bladder via drinking
+        bladder_room = ps.bladder_capacity - len(ps.bladder)
+        cup_room = sum(MAX_CUP_INGREDIENTS - cups.fill[i] for i in (0, 1))
+        est_drunk = max(0, ps.take_count - cup_room)
+        if est_drunk > bladder_room:
+            score -= (est_drunk - bladder_room) * 8  # Wet risk
+
+        return score
+
+    def _score_claim(
+        self, gs: GameState, ps: PlayerState, action: Action, focus: str, pid
+    ) -> float:
+        desc = action.description.lower()
+        params = action.params
+        has_spec = self._has_specialist(ps, focus)
+        has_dbl = self._has_doubler(ps)
+
+        score = 0.0
+        if "cup doubler" in desc:
+            score = 65.0
+            if has_spec:
+                score += 20  # Specialist + doubler combo → 8-pt sells
+            ci = params.get("cup_index", 0)
+            focus_ing = _SPIRIT_MAP.get(focus)
+            if focus_ing and any(i == focus_ing for i in ps.cups[ci].ingredients):
+                score += 10  # Place on focus cup
+        elif "specialist" in desc:
+            score = 55.0
+            if has_dbl:
+                score += 15
+            if focus.lower() in desc:
+                score += 15  # Matches focus spirit
+        elif "karaoke" in desc:
+            kc = ps.karaoke_cards_claimed
+            if kc >= 2:
+                return 200.0  # Instant win — always take this
+            score = 50.0 + self._urgency(gs, pid) * 20 if kc == 1 else 25.0
+        elif "store" in desc:
+            card_id = params.get("card_id")
+            is_focus = any(
+                card.spirit_type == focus
+                for row in gs.card_rows
+                for card in row.cards
+                if card.id == card_id
+            )
+            score = 40.0 if is_focus else (18.0 if ps.drunk_level < 3 else 8.0)
+        elif "refresher" in desc:
+            score = 22.0
+            if ps.drunk_level >= 2:
+                score += 8
+        else:
+            score = 10.0
+
+        # Pre-wee bonus: claim before weeing flushes bladder spirits
+        overflow = len(ps.bladder) + ps.take_count - ps.bladder_capacity
+        if overflow > 0:
+            score += min(overflow * 5, 20)
+
+        return score
+
+    def _score_wee(self, ps: PlayerState) -> float:
+        overflow = len(ps.bladder) + ps.take_count - ps.bladder_capacity
+        bladder_fill = len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
+
+        if overflow >= 3:
+            score = 80.0
+        elif overflow >= 1:
+            score = 55.0
+        elif overflow == 0:
+            score = 38.0
+        elif overflow == -1:
+            score = 22.0
+        elif bladder_fill >= 0.75:
+            score = 12.0  # Proactive wee
+        else:
+            score = 3.0
+
+        # Conserve last toilet token — only wee in true emergencies
+        if ps.toilet_tokens <= 1 and overflow < 2:
+            score -= 15
+
+        return score
+
+    def _score_drink_cup(self, ps: PlayerState, action: Action) -> float:
+        """Score drinking a cup.
+
+        Two scenarios where this is valuable:
+        1. Mixer-only cup at high drunk → sobers us (delta < 0)
+        2. Stuck cup (unsellable) at high drunk → controlled delta is safer
+           than a random take, AND fills bladder so we can wee next turn
+        """
+        ci = action.params.get("cup_index", 0)
+        cup = ps.cups[ci]
+        cup_spirits = sum(1 for i in cup.ingredients if i in _SPIRITS)
+        cup_size = len(cup.ingredients)
+
+        # Check bladder can handle the extra items
+        if len(ps.bladder) + cup_size > ps.bladder_capacity:
+            return -50.0  # Would cause wet elimination!
+
+        hot = _hot_mixer_types(ps)
+        cup_hot = sum(1 for i in cup.ingredients if i in _MIXERS and i.name in hot)
+
+        if cup_spirits > 0:
+            delta = cup_spirits - cup_hot
+        else:
+            cup_plain = sum(
+                1 for i in cup.ingredients if i in _MIXERS and i.name not in hot
+            )
+            delta = -(cup_plain + cup_hot)
+
+        # Mixer-only cup: great for sobering
+        if cup_spirits == 0 and ps.drunk_level >= 2 and delta < 0:
+            score = abs(delta) * (3.0 + ps.drunk_level * 2.0) + cup_size * 1.5
+            if ps.drunk_level < 2:
+                score -= 10.0
+            return score
+
+        # Stuck cup (has spirit, unsellable or low-value) at high drunk:
+        # known delta is safer than random take, and fills bladder for wee
+        if ps.drunk_level >= 3 and delta <= 1:
+            score = 5.0 - delta * 3.0  # delta=0→5, delta=1→2, delta=-1→8
+            if not ps.bladder:
+                score += 5.0  # Fills empty bladder → enables wee next turn
+            return score
+
+        return -20.0
+
+    # ------------------------------------------------------------------
+    #  Main action selection — pick highest-scoring action
+    # ------------------------------------------------------------------
+
+    def choose_action(
+        self, gs: GameState, player_id, valid_actions: list[Action]
+    ) -> Action:
+        ps = gs.player_states[player_id]
+        focus = self._focus_spirit(gs, ps)
+        focus_ing = _SPIRIT_MAP.get(focus)
+
+        best_score, best_action = float("-inf"), valid_actions[0]
+        for action in valid_actions:
+            t = action.action_type
+            if t == "sell_cup":
+                s = self._score_sell(gs, ps, action, focus, player_id)
+            elif t == "take_ingredients":
+                s = self._score_take(gs, ps, focus_ing, player_id)
+            elif t == "claim_card":
+                s = self._score_claim(gs, ps, action, focus, player_id)
+            elif t == "go_for_a_wee":
+                s = self._score_wee(ps)
+            elif t == "drink_cup":
+                s = self._score_drink_cup(ps, action)
+            elif t == "refresh_card_row":
+                s = 2.0  # Very low priority
+            else:
+                s = 0.0
+            if s > best_score:
+                best_score, best_action = s, action
+
+        return best_action
+
+    # ------------------------------------------------------------------
+    #  Free actions — scored use_stored_spirit selection
+    # ------------------------------------------------------------------
+
+    def choose_free_action(
+        self, gs: GameState, player_id, free_actions: list[Action]
+    ) -> Action | None:
+        ps = gs.player_states[player_id]
+        focus = self._focus_spirit(gs, ps)
+        cups = CupTracker(ps)
+        best_score, best_action = -1.0, None
+
+        for fa in free_actions:
+            if fa.action_type == "use_stored_spirit":
+                ci = fa.params["cup_index"]
+                idx = fa.params["store_card_index"]
+                card = ps.cards[idx]
+                spirit_ing = _SPIRIT_MAP.get(card.get("spirit_type", ""))
+                if spirit_ing and cups._can_add_spirit(ci, spirit_ing):
+                    score = 10.0
+                    # 2nd spirit → enables 3-pt double-spirit sell
+                    if cups.spirit_counts[ci] == 1 and cups.spirit_type[ci] == spirit_ing:
+                        score += 5
+                    # Cup already has a mixer → closer to sellable
+                    if cups.mixer_count[ci] > 0:
+                        score += 3
+                    if score > best_score:
+                        best_score, best_action = score, fa
+
+            elif fa.action_type == "drink_stored_spirit":
+                # Drink stored spirits to unlock high-value card claims.
+                # Only worth it if: (a) enables a claim threshold, (b) drunk
+                # stays manageable, (c) claim value exceeds drunk cost.
+                count = fa.params["count"]
+                if ps.drunk_level + count > 3:
+                    continue  # Too risky
+                idx = fa.params["store_card_index"]
+                card = ps.cards[idx]
+                spirit_name = card.get("spirit_type", "")
+                spirit_ing = _SPIRIT_MAP.get(spirit_name)
+                if not spirit_ing:
+                    continue
+                cur = sum(1 for i in ps.bladder if i == spirit_ing)
+                after = cur + count
+                claim_val = self._claim_unlock_value(
+                    gs, ps, spirit_name, cur, after, focus
+                )
+                if claim_val > 0:
+                    drunk_cost = count * (5 + ps.drunk_level * 3)
+                    score = claim_val - drunk_cost
+                    if score > best_score:
+                        best_score, best_action = score, fa
+
+        return best_action
+
+    def _claim_unlock_value(
+        self, gs: GameState, ps: PlayerState,
+        spirit_name: str, before: int, after: int, focus: str,
+    ) -> float:
+        """Value of a card claim that drinking stored spirits would unlock."""
+        value = 0.0
+        for row in gs.card_rows:
+            for card in row.cards:
+                if card.card_type == "specialist" and card.spirit_type == spirit_name:
+                    if before < 2 <= after and not self._has_specialist(ps, focus):
+                        v = 55.0 if spirit_name == focus else 40.0
+                        value = max(value, v)
+                if card.card_type == "cup_doubler":
+                    if before < 3 <= after and not self._has_doubler(ps):
+                        value = max(value, 65.0)
+                if card.card_type == "karaoke" and card.spirit_type == spirit_name:
+                    if before < 3 <= after:
+                        kc = ps.karaoke_cards_claimed
+                        v = 200.0 if kc >= 2 else (50.0 if kc >= 1 else 25.0)
+                        value = max(value, v)
+        return value
+
+    # ------------------------------------------------------------------
+    #  Take assignments — weighted display selection vs bag EV
+    # ------------------------------------------------------------------
+
+    def choose_take_assignments(
+        self, gs: GameState, player_id, count: int
+    ) -> list[dict]:
+        ps = gs.player_states[player_id]
+        focus = self._focus_spirit(gs, ps)
+        focus_ing = _SPIRIT_MAP.get(focus)
+        cups = CupTracker(ps)
+        hot = _hot_mixer_types(ps)
+        bag_ev = self._bag_draw_ev(gs, ps, cups, focus_ing)
+        # Prefer display certainty over bag variance: accept display items
+        # slightly below average bag EV (known > random)
+        # Prefer display certainty more as drunk rises — bag variance is deadlier
+        display_premium = 1.0 + max(0, ps.drunk_level - 1) * 1.25
+
+        display = list(gs.open_display)
+        assignments: list[dict] = []
+        used: set[int] = set()
+
+        for _ in range(count):
+            # Greedily pick the best remaining display item (re-evaluated
+            # after each pick so cup state stays accurate).
+            best_val, best_idx = bag_ev - display_premium, -1
+            best_disp, best_ci = "drink", None
+            for idx, ing in enumerate(display):
+                if idx in used:
+                    continue
+                val, disp, ci = self._eval_display_item(
+                    gs, ps, ing, cups, focus_ing, focus, hot,
+                )
+                if val > best_val:
+                    best_val, best_idx, best_disp, best_ci = val, idx, disp, ci
+
+            if best_idx < 0:
+                break  # All remaining display items are worse than bag draws
+
+            ing = display[best_idx]
+            used.add(best_idx)
+            entry: dict = {
+                "ingredient": ing.name,
+                "source": "display",
+                "disposition": best_disp,
+            }
+            if best_disp == "cup" and best_ci is not None:
+                entry["cup_index"] = best_ci
+                if ing in _SPIRITS:
+                    cups.add_spirit(best_ci, ing)
+                else:
+                    cups.add_mixer(best_ci, ing)
+            assignments.append(entry)
+
+        return assignments
+
+    def _eval_display_item(self, gs, ps, ing, cups, focus_ing, focus, hot):
+        """Score a single display ingredient.
+
+        Returns (value, disposition, cup_index).
+        """
+        if ing in _SPIRITS:
+            ci = cups.best_cup_for_spirit(ing)
+            if ci is not None:
+                return (8.0 if ing == focus_ing else 5.0, "cup", ci)
+            # Can't cup → must drink — weigh accumulation value against drunk cost
+            penalty = 3.0 + ps.drunk_level * 2.0
+            accum = self._spirit_accum_value(gs, ps, ing, focus)
+            if accum > penalty and ps.drunk_level <= 1:
+                return (accum - penalty, "drink", None)
+            return (-penalty, "drink", None)
+
+        if ing in _MIXERS:
+            ci = cups.best_cup_for_mixer(ing)
+            if ci is not None and cups.spirit_type[ci] is not None:
+                return (6.0, "cup", ci)
+            return (3.0 if ing.name in hot else 1.5, "drink", None)
+
+        # SPECIAL token
+        return (0.5, "drink", None)
+
+    def _bag_draw_ev(self, gs, ps, cups, focus_ing):
+        """Expected value of a single random bag draw given current cup state."""
+        if not gs.bag_contents:
+            return -5.0
+        total = len(gs.bag_contents)
+        ev = 0.0
+        for ing in set(gs.bag_contents):
+            frac = gs.bag_contents.count(ing) / total
+            if ing in _SPIRITS:
+                ci = cups.best_cup_for_spirit(ing)
+                ev += frac * (5.0 if ci is not None else -(2.0 + ps.drunk_level * 1.5))
+            elif ing in _MIXERS:
+                ci = cups.best_cup_for_mixer(ing)
+                ev += frac * (4.0 if (ci is not None and cups.spirit_type[ci] is not None) else 1.5)
+            else:
+                ev += frac * 0.5
+        return ev
+
+    # ------------------------------------------------------------------
+    #  Pending assignments (bag draws — standard optimal)
+    # ------------------------------------------------------------------
+
+    def choose_pending_assignments(
+        self, gs: GameState, player_id, drawn: list[Ingredient]
+    ) -> list[dict]:
+        ps = gs.player_states[player_id]
+        focus = self._focus_spirit(gs, ps)
+        focus_ing = _SPIRIT_MAP.get(focus)
+        cups = CupTracker(ps)
+        hot = _hot_mixer_types(ps)
+
+        assignments: list[dict] = []
+        spirits = [i for i in drawn if i in _SPIRITS]
+        mixers = [i for i in drawn if i in _MIXERS]
+        others = [i for i in drawn if i not in _SPIRITS and i not in _MIXERS]
+
+        # Cup spirits (focus first), drink what can't be cupped
+        spirits.sort(key=lambda s: (0 if s == focus_ing else 1))
+        spirits_drunk_this_batch = 0
+        for spirit in spirits:
+            ci = cups.best_cup_for_spirit(spirit)
+            if ci is not None:
+                cups.add_spirit(ci, spirit)
+                assignments.append(
+                    {"source": "pending", "disposition": "cup", "cup_index": ci}
+                )
+            else:
+                spirits_drunk_this_batch += 1
+                assignments.append({"source": "pending", "disposition": "drink"})
+
+        # Check total spirits drunk this turn (display + this batch)
+        prev_spirits_drunk = sum(
+            1 for i in gs.drunk_ingredients_this_turn if i in _SPIRITS
+        )
+        total_spirits_drunk = prev_spirits_drunk + spirits_drunk_this_batch
+
+        # Cup mixers that pair with cup spirits, drink the rest.
+        # Two sobering optimisations:
+        #   1. Hot mixers always subtract from drunk delta (even with spirits).
+        #      At drunk ≥ 3, drinking them is better than cupping.
+        #   2. Plain mixers sober only when no spirits are drunk this turn.
+        #      At drunk ≥ 2, drink redundant ones (cup already sellable).
+        for mixer in mixers:
+            ci = cups.best_cup_for_mixer(mixer)
+            if ci is not None and cups.spirit_type[ci] is not None:
+                already_sellable = (
+                    cups.spirit_counts[ci] >= 1 and cups.mixer_count[ci] >= 1
+                )
+                # Hot mixers: drink at high drunk for guaranteed -1 to delta
+                if mixer.name in hot and ps.drunk_level >= 3:
+                    assignments.append({"source": "pending", "disposition": "drink"})
+                # Plain mixers: drink when no spirits drunk & cup already sellable
+                elif (
+                    mixer.name not in hot
+                    and total_spirits_drunk == 0
+                    and ps.drunk_level >= 2
+                    and already_sellable
+                ):
+                    assignments.append({"source": "pending", "disposition": "drink"})
+                else:
+                    cups.add_mixer(ci, mixer)
+                    assignments.append(
+                        {"source": "pending", "disposition": "cup", "cup_index": ci}
+                    )
+            else:
+                assignments.append({"source": "pending", "disposition": "drink"})
+
+        for _ in others:
+            assignments.append({"source": "pending", "disposition": "drink"})
+
+        return assignments
+
+
 # Registry for CLI lookup
 STRATEGY_CLASSES: dict[str, type[Strategy]] = {
     "random": RandomStrategy,
@@ -980,4 +1620,5 @@ STRATEGY_CLASSES: dict[str, type[Strategy]] = {
     "safe": SafeSeller,
     "aggressive": AggressiveDrinker,
     "specialist": SpecialistBuilder,
+    "mastermind": Mastermind,
 }
