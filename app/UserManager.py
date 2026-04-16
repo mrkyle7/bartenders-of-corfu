@@ -113,6 +113,7 @@ class UserManager:
         "safe",
         "aggressive",
         "specialist",
+        "mastermind",
     }
 
     _BOT_DISPLAY_NAMES = {
@@ -122,6 +123,7 @@ class UserManager:
         "safe": "Safe Sally",
         "aggressive": "Aggressive Andy",
         "specialist": "Specialist Sam",
+        "mastermind": "Mastermind Mia",
     }
 
     def get_or_create_bot(self, strategy: str) -> User:
