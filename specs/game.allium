@@ -143,13 +143,15 @@ value IngredientRequirement {
 -- 1. Long Island Iced Tea  exact recipe match (4 spirits allowed)    → 15 pts
 -- 2. Any other cocktail    exact recipe match                        → 10 pts
 -- 3. Tequila Slammer       exactly 2×tequila, no mixers, no specials →  3 pts
--- 4. Double spirit drink   2 spirits (same type), ≥1 valid mixer,
---                          all mixers valid for that spirit type      →  3 pts
--- 5. Single spirit drink   1 spirit, ≥1 valid mixer,
---                          all mixers valid for that spirit type      →  1 pt
+-- 4. Double spirit drink   2 spirits (same type), ≥1 mixer of exactly one type,
+--                          that mixer type valid for the spirit type    →  3 pts
+-- 5. Single spirit drink   1 spirit, ≥1 mixer of exactly one type,
+--                          that mixer type valid for the spirit type    →  1 pt
 --
 -- A cup with 0 spirits, or with any mixer incompatible with its spirit, is not sellable.
 -- Non-cocktail drinks may not contain more than 2 spirit ingredients.
+-- Non-cocktail drinks may contain only one type of mixer: mixing e.g. COLA and
+-- TONIC in the same cup is not sellable (only cocktail recipes may combine mixers).
 -- Cocktails are exempt from the 2-spirit cap.
 -- Exact match for cocktails: no extra spirits, mixers, or specials beyond the recipe.
 --
