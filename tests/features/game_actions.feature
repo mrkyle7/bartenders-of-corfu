@@ -400,6 +400,18 @@ Feature: Game turn actions
     When player 1 sells cup 0 with no declared specials
     Then the action should be rejected with a 400 error
 
+  Scenario: Non-cocktail drink with two mixer types is rejected
+    Given it is player 1's turn
+    And player 1's cup 0 contains 1 VODKA and 1 COLA and 1 TONIC
+    When player 1 sells cup 0 with no declared specials
+    Then the action should be rejected with a 400 error
+
+  Scenario: Double spirit drink with two mixer types is rejected
+    Given it is player 1's turn
+    And player 1's cup 0 contains 2 VODKA and 1 COLA and 1 TONIC
+    When player 1 sells cup 0 with no declared specials
+    Then the action should be rejected with a 400 error
+
   # ── Priority 5: Edge cases ────────────────────────────────────────────────────
 
   Scenario: GoForAWee with no toilet tokens remaining still clears bladder and sobers up

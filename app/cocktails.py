@@ -203,6 +203,10 @@ def drink_points(
     spirit_type = next(iter(spirits_count))
     valid_mixers = VALID_PAIRINGS.get(spirit_type, set())
 
+    # Non-cocktail drinks may contain only one mixer type
+    if len(mixers_count) != 1:
+        return None
+
     # Every mixer in the cup must be valid for this spirit
     if not all(m in valid_mixers for m in cup_mixers):
         return None
