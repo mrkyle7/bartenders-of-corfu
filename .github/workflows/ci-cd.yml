@@ -1,18 +1,79 @@
-name: Cloud Run Deploy
+name: CI/CD
 
 on:
-  workflow_run:
-    workflows: [Build and Push to Artifact Registry]
-    types:
-      - completed
+  push:
+    branches: [ main ]
+  pull_request:
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: supabase/setup-cli@v1
+      with:
+        version: latest
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.14'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Install dependencies
+      run: |
+        uv sync
+        uv run playwright install chromium
+        uv run playwright install-deps chromium
+
+    - name: Run tests
+      run: |
+        supabase start
+        supabase status
+        ./run-tests.sh
+
+  build-and-push:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_ID: bartenders-464918
+      REGION: us-east1
+      REPOSITORY: docker-us
+      IMAGE_NAME: bartenders
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/987774112216/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-terraform@bartenders-464918.iam.gserviceaccount.com
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+
+      - name: Build and Push Docker Image
+        run: |
+          IMAGE_URI=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:${{ github.sha }}
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
   deploy:
-    if: github.event.workflow_run.conclusion == 'success'
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     env:
