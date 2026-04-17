@@ -463,10 +463,22 @@ function renderLobby(game) {
         list.appendChild(entry);
     });
 
-    // Add Bot + Start Game buttons — host only
+    // Add Bot + Start Game buttons — host only; Join button for non-members
     const section = el('gbStartGameSection');
     if (!section) return;
     section.replaceChildren();
+    const isMember = S.me && (game.players || []).includes(S.me.id);
+    if (S.me && !isMember) {
+        const isFull = (game.players || []).length >= 4;
+        const joinBtn = document.createElement('button');
+        joinBtn.id = 'gbBtnJoinGame';
+        joinBtn.className = 'gb-action-btn';
+        joinBtn.textContent = isFull ? 'Game is full' : 'Join Game';
+        joinBtn.setAttribute('aria-label', isFull ? 'Game is full' : 'Join this game');
+        joinBtn.disabled = isFull;
+        joinBtn.onclick = joinGame;
+        section.appendChild(joinBtn);
+    }
     if (isHost) {
         // Add Bot controls
         const isFull = (game.players || []).length >= 4;
@@ -556,6 +568,25 @@ async function startGame() {
     } catch (e) {
         setButtonBusy(btn, false);
         showError('Network error starting game');
+    }
+}
+
+async function joinGame() {
+    const btn = el('gbBtnJoinGame');
+    setButtonBusy(btn, true, 'Joining…');
+    clearError();
+    try {
+        const resp = await fetch(`/v1/games/${S.gameId}/join`, { method: 'POST' });
+        if (resp.ok) {
+            await refreshGame();
+        } else {
+            setButtonBusy(btn, false);
+            const d = await resp.json().catch(() => ({}));
+            showError(d.error || 'Failed to join game');
+        }
+    } catch (e) {
+        setButtonBusy(btn, false);
+        showError('Network error joining game');
     }
 }
 
