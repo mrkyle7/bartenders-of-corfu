@@ -37,6 +37,7 @@
                    aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span
                    class="notif-badge">0</span></a>
                 <a class="gb-header-btn" href="/profile" aria-label="Your profile">Profile</a>
+                <button class="gb-header-btn" onclick="shareGame(this)" aria-label="Share this game link">Share</button>
                 <button class="gb-header-btn" onclick="openMenu()" aria-label="View cocktail menu and scoring">Menu</button>
                 <button class="gb-header-btn" onclick="openRules()" aria-label="View game rules">Rules</button>
             </div>
@@ -237,6 +238,29 @@
 
         </div><!-- /.gb-scroll-area -->
     </div><!-- /.gb-page -->
+
+    <!-- ===== SHARE FALLBACK MODAL ===== -->
+    <div class="gb-modal-overlay hidden" id="gbShareModal"
+         role="dialog" aria-modal="true" aria-labelledby="gbShareModalTitle"
+         tabindex="-1" onclick="if(event.target===this)closeShareModal()">
+        <div class="gb-modal">
+            <button class="gb-modal-close" onclick="closeShareModal()" aria-label="Close share dialog">&#x2715;</button>
+            <div class="gb-modal-title" id="gbShareModalTitle">Share this game</div>
+            <div class="gb-modal-step-label">Copy the link below and send it to anyone you want to invite.</div>
+            <div class="gb-modal-content gb-modal-content-col">
+                <input type="text" id="gbShareModalUrl" class="gb-share-url-input"
+                       readonly aria-label="Game link">
+            </div>
+            <div class="gb-modal-actions">
+                <button class="gb-modal-btn cancel" onclick="closeShareModal()">Close</button>
+                <button class="gb-modal-btn confirm" id="gbShareModalCopyBtn"
+                        onclick="copyShareModalUrl(this)">Copy link</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TOAST ===== -->
+    <div id="gbToast" class="gb-toast" role="status" aria-live="polite"></div>
 
     <!-- ===== CUP DOUBLER MODAL (kept — needs cup + spirit selection) ===== -->
     <div class="gb-modal-overlay hidden" id="gbCupDoublerModal"
