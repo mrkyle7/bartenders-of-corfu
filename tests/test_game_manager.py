@@ -264,7 +264,6 @@ class TestStartGame(GameManagerTestCase):
 
         return host_token, host_id, game_id, player_token, player_id
 
-        
     def _setup_game_with_four_players(self):
         """Create a game and add a second player. Returns (host_token, host_id, game_id, player_token, player_id)."""
         host = _unique("host")
@@ -289,7 +288,15 @@ class TestStartGame(GameManagerTestCase):
         self._join_game(player_token3, game_id)
         self._join_game(player_token4, game_id)
 
-        return host_token, host_id, game_id, player_token, player_id, player_id3, player_id4
+        return (
+            host_token,
+            host_id,
+            game_id,
+            player_token,
+            player_id,
+            player_id3,
+            player_id4,
+        )
 
     def test_host_can_start_game_with_two_players(self):
         host_token, _, game_id, _, _ = self._setup_game_with_two_players()
@@ -320,7 +327,9 @@ class TestStartGame(GameManagerTestCase):
 
     def test_start_game_initialises_game_state_4_player(self):
         """Started game should have bag, open_display (5 items), and player states."""
-        host_token, host_id, game_id, _, player_id, player_id3, player_id4= self._setup_game_with_four_players()
+        host_token, host_id, game_id, _, player_id, player_id3, player_id4 = (
+            self._setup_game_with_four_players()
+        )
         self._start_game(host_token, game_id)
         game_resp = self.client.get(
             f"/v1/games/{game_id}", cookies=self._auth(host_token)
@@ -392,6 +401,51 @@ class TestStartGame(GameManagerTestCase):
         newcomer_reg = self._register(newcomer, f"{newcomer}@example.com")
         resp = self._join_game(self._token(newcomer_reg), game_id)
         self.assertEqual(resp.status_code, 409)
+
+
+class TestGetGameAccess(GameManagerTestCase):
+    """Access control for GET /v1/games/{game_id}.
+
+    Non-members may view a game that has not started yet so they can join from
+    the lobby. Once the game has started or ended, only members may view it.
+    """
+
+    def test_non_member_can_view_new_game(self):
+        host = _unique("host")
+        host_reg = self._register(host, f"{host}@example.com")
+        host_token = self._token(host_reg)
+        game_id = self._new_game(host_token)
+
+        outsider = _unique("outsider")
+        outsider_reg = self._register(outsider, f"{outsider}@example.com")
+        outsider_token = self._token(outsider_reg)
+
+        resp = self.client.get(
+            f"/v1/games/{game_id}", cookies=self._auth(outsider_token)
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "NEW")
+
+    def test_non_member_cannot_view_started_game(self):
+        host = _unique("host")
+        host_reg = self._register(host, f"{host}@example.com")
+        host_token = self._token(host_reg)
+        game_id = self._new_game(host_token)
+
+        player = _unique("player")
+        player_reg = self._register(player, f"{player}@example.com")
+        self._join_game(self._token(player_reg), game_id)
+        start_resp = self._start_game(host_token, game_id)
+        self.assertEqual(start_resp.status_code, 200)
+
+        outsider = _unique("outsider")
+        outsider_reg = self._register(outsider, f"{outsider}@example.com")
+        outsider_token = self._token(outsider_reg)
+
+        resp = self.client.get(
+            f"/v1/games/{game_id}", cookies=self._auth(outsider_token)
+        )
+        self.assertEqual(resp.status_code, 403)
 
 
 if __name__ == "__main__":

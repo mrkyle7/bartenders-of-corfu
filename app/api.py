@@ -6,7 +6,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from app.gameManager import GameManager
-from app.game import GameException
+from app.game import GameException, Status
 from app.UserManager import UserManager, UserManagerPermissionError
 from app.JWTHandler import JWTHandler
 from app.logging_config import setup_logging, CanonicalLogMiddleware
@@ -281,7 +281,11 @@ async def get_game(game_id: str, request: Request):
         return err
     try:
         game = gameManager.get_game_by_id(UUID(game_id))
-        if token_user.id not in game.players:
+        if game is None:
+            return JSONResponse(status_code=404, content={"error": "Game not found"})
+        # Non-members may view a game that has not yet started so they can join
+        # from the lobby. Once started or ended, only members may view it.
+        if token_user.id not in game.players and game.status != Status.NEW:
             return JSONResponse(
                 status_code=403,
                 content={"error": "User is not a member of this game"},

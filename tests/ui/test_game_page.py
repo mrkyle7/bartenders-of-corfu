@@ -3,7 +3,7 @@ UI tests for the GamePage surface (specs/ui-frontend.allium § GamePage).
 
 Covers:
   - unauthenticated redirect to /
-  - non-member redirect to /
+  - non-member sees lobby with a Join Game button while game is NEW
   - player usernames rendered in #playerList
   - host sees .remove-player-btn next to non-host players
   - non-host sees no .remove-player-btn
@@ -39,16 +39,29 @@ def test_unauthenticated_redirected(page, base_url, other_user_and_jwt):
     assert page.url == base_url + "/"
 
 
-def test_non_member_redirected(page, base_url, new_user, other_user_and_jwt):
-    """Authenticated user who is not a game member is redirected to /."""
+def test_non_member_sees_join_button(page, base_url, new_user, other_user_and_jwt):
+    """Authenticated non-member sees the lobby with a Join Game button while the
+    game is still NEW, so they can join from a direct link."""
     game = _api_post(base_url, "/v1/games", other_user_and_jwt["jwt"])
     game_id = game["id"]
 
     # new_user is authenticated but NOT a member of other_user's game
-    page.on("dialog", lambda d: d.accept())  # accept the alert
     page.goto(_game_url(base_url, game_id))
-    page.wait_for_url(base_url + "/", timeout=5000)
-    assert page.url == base_url + "/"
+    page.locator("#playerList").wait_for(state="visible", timeout=5000)
+
+    join_btn = page.locator("#gbBtnJoinGame")
+    join_btn.wait_for(state="visible", timeout=5000)
+    assert join_btn.is_enabled()
+    # Non-member is not the host — no Start Game button
+    assert page.locator("#gbBtnStartGame").count() == 0
+
+    join_btn.click()
+    # After joining the Join button disappears and the host's name is in the list
+    page.wait_for_function(
+        "document.getElementById('gbBtnJoinGame') === null",
+        timeout=5000,
+    )
+    assert new_user["username"] in page.locator("#playerList").inner_text()
 
 
 # ---------------------------------------------------------------------------
