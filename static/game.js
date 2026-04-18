@@ -3134,6 +3134,95 @@ function openRules() { openModal('gbRulesModal'); }
 function closeRules() { closeModal('gbRulesModal'); }
 
 // ─────────────────────────────────────────────────────────────
+// Share game link
+// ─────────────────────────────────────────────────────────────
+function showToast(msg, durationMs = 2200) {
+    const t = el('gbToast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('visible');
+    clearTimeout(t._hideTimer);
+    t._hideTimer = setTimeout(() => t.classList.remove('visible'), durationMs);
+}
+
+function openShareFallbackModal(url) {
+    const input = el('gbShareModalUrl');
+    if (input) input.value = url;
+    openModal('gbShareModal');
+    setTimeout(() => {
+        if (input) { input.focus(); input.select(); }
+    }, 50);
+}
+
+function closeShareModal() { closeModal('gbShareModal'); }
+
+async function copyToClipboard(url) {
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(url);
+            return true;
+        } catch { /* fall through */ }
+    }
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+    } catch {
+        return false;
+    }
+}
+
+async function copyShareModalUrl(btn) {
+    const input = el('gbShareModalUrl');
+    const url = input ? input.value : window.location.href;
+    const ok = await copyToClipboard(url);
+    if (ok) {
+        showToast('Link copied');
+        if (btn) {
+            const orig = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = orig; }, 1500);
+        }
+    } else if (input) {
+        input.focus();
+        input.select();
+        showToast('Press Ctrl/Cmd+C to copy');
+    }
+}
+
+async function shareGame(btn) {
+    const url = window.location.href;
+    const title = document.title || 'Bartenders of Corfu';
+    const text = 'Join my game of Bartenders of Corfu';
+
+    if (navigator.share) {
+        try {
+            await navigator.share({ title, text, url });
+            return;
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;
+            // Any other error: fall through to clipboard fallback
+        }
+    }
+
+    const ok = await copyToClipboard(url);
+    if (ok) {
+        showToast('Link copied to clipboard');
+    } else {
+        openShareFallbackModal(url);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Inline Sell Cup (no modal — auto-detects drink, single click)
 // ─────────────────────────────────────────────────────────────
 async function doSellCup(cupIndex, declaredSpecials, btn) {
@@ -3506,6 +3595,7 @@ function renderActionBar(game, gs, isReplay) {
 // ─────────────────────────────────────────────────────────────
 Object.assign(window, {
     openMenu, closeMenu, openRules, closeRules,
+    shareGame, closeShareModal, copyShareModalUrl,
     switchTab, replayGo, exitReplay,
     closeCupDoublerModal, confirmCupDoubler,
     showGameError: showError, clearGameError: clearError,
