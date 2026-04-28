@@ -29,13 +29,14 @@ mixers, max 2 spirits per cup.
 
 import random
 from abc import ABC, abstractmethod
+from collections import Counter
 from uuid import UUID
 
 from app.GameState import GameState
-from app.Ingredient import Ingredient
+from app.Ingredient import Ingredient, SpecialType
 from app.PlayerState import MAX_CUP_INGREDIENTS, PlayerState
 from app.actions import _MIXERS, _SPIRITS
-from app.cocktails import VALID_PAIRINGS
+from app.cocktails import VALID_PAIRINGS, _RECIPES
 
 from playtesting.valid_actions import Action
 
@@ -45,6 +46,13 @@ _SPIRIT_MAP: dict[str, Ingredient] = {
     "RUM": Ingredient.RUM,
     "TEQUILA": Ingredient.TEQUILA,
     "VODKA": Ingredient.VODKA,
+}
+
+_MIXER_MAP: dict[str, Ingredient] = {
+    "COLA": Ingredient.COLA,
+    "SODA": Ingredient.SODA,
+    "TONIC": Ingredient.TONIC,
+    "CRANBERRY": Ingredient.CRANBERRY,
 }
 
 BASE_TAKE_COUNT = 3
@@ -192,6 +200,109 @@ def _is_in_danger(ps: PlayerState) -> bool:
     return ps.drunk_level >= 4 or len(ps.bladder) >= ps.bladder_capacity - 1
 
 
+def _opponent_threats(gs: GameState, ps: PlayerState) -> dict[Ingredient, float]:
+    """Score each ingredient by how much taking it would deny opponents.
+
+    Higher score = more strategic to deny. Used as a tie-breaker when picking
+    from the open display, so the bot prefers ingredients opponents need.
+
+    Signals (visible state per app/PlayerState.to_dict):
+      - Specialist/store cards held → opponent wants that spirit
+      - Refresher card held → opponent wants that mixer (especially close to claim)
+      - Specials on opponent mat → infer cocktail recipe → spirits/mixers needed
+      - Karaoke cards in market + opponent's bladder progress → close to claim
+      - Partial drink in opponent's cup → wants matching spirit / valid mixer
+    """
+    threats: dict[Ingredient, float] = {}
+
+    def bump(ing: Ingredient | None, delta: float) -> None:
+        if ing is None or delta <= 0:
+            return
+        threats[ing] = threats.get(ing, 0.0) + delta
+
+    # Karaoke spirit types currently claimable from the market
+    karaoke_spirits: set[str] = set()
+    for row in gs.card_rows:
+        for card in row.cards:
+            if card.card_type == "karaoke" and card.spirit_type:
+                karaoke_spirits.add(card.spirit_type.upper())
+
+    for opp_id, opp in gs.player_states.items():
+        if opp_id == ps.player_id or opp.is_eliminated:
+            continue
+
+        # 1. Cards held → ingredient ambitions
+        for cd in opp.cards:
+            ctype = cd.get("card_type")
+            st_name = (cd.get("spirit_type") or "").upper()
+            mt_name = (cd.get("mixer_type") or "").upper()
+            if ctype == "specialist":
+                # +2 pts per matching spirit when selling — they will hoard this spirit
+                bump(_SPIRIT_MAP.get(st_name), 0.6)
+            elif ctype == "store":
+                bump(_SPIRIT_MAP.get(st_name), 0.4)
+            elif ctype == "cup_doubler":
+                # No specific ingredient ambition (no spirit_type)
+                pass
+            elif ctype == "refresher":
+                mixer = _MIXER_MAP.get(mt_name)
+                if mixer is not None:
+                    in_bladder = sum(1 for i in opp.bladder if i == mixer)
+                    # Only block while they still need more (cap at threshold of 2)
+                    needed = max(0, 2 - in_bladder)
+                    bump(mixer, 0.4 * needed)
+
+        # 2. Specials on opponent's mat → cocktail recipe candidates
+        opp_specials: list[SpecialType] = []
+        for s in opp.special_ingredients:
+            try:
+                st = SpecialType(s)
+            except ValueError:
+                continue
+            if st != SpecialType.NOTHING:
+                opp_specials.append(st)
+        if opp_specials:
+            opp_special_counter = Counter(opp_specials)
+            for r_spirits, r_mixers, r_specials, _pts, _name in _RECIPES:
+                # Recipe is a candidate if opponent has all required specials
+                if all(
+                    opp_special_counter.get(sp, 0) >= n
+                    for sp, n in r_specials.items()
+                ):
+                    for ing, n in r_spirits.items():
+                        bump(ing, 0.7 * n)
+                    for ing, n in r_mixers.items():
+                        bump(ing, 0.4 * n)
+
+        # 3. Karaoke progress — opponent close to claiming
+        for spirit_name in karaoke_spirits:
+            spirit = _SPIRIT_MAP.get(spirit_name)
+            if spirit is None:
+                continue
+            in_bladder = sum(1 for i in opp.bladder if i == spirit)
+            if 1 <= in_bladder <= 2:
+                # Closer to 3 → stronger threat
+                bump(spirit, 0.4 * in_bladder)
+
+        # 4. Partial drinks in opponent's cups
+        for cup in opp.cups:
+            spirits_in = [i for i in cup.ingredients if i in _SPIRITS]
+            mixers_in = [i for i in cup.ingredients if i in _MIXERS]
+            if not spirits_in or len(cup.ingredients) >= MAX_CUP_INGREDIENTS:
+                continue
+            # Most-common spirit they're committed to
+            main_spirit = Counter(spirits_in).most_common(1)[0][0]
+            bump(main_spirit, 0.3)
+            if mixers_in:
+                # They've committed to a mixer type — only that one helps them
+                bump(mixers_in[0], 0.3)
+            else:
+                for mx in VALID_PAIRINGS.get(main_spirit, set()):
+                    bump(mx, 0.15)
+
+    return threats
+
+
 def _smart_take_assignments(
     gs: GameState,
     ps: PlayerState,
@@ -212,23 +323,30 @@ def _smart_take_assignments(
     2. Paired mixers → cups (only valid pairings)
     3. Other mixers → drink (sobering effect when no spirits drunk)
     4. Stops when display is exhausted (remaining come from bag)
+
+    Within each priority class, ingredients opponents need are picked
+    first as a denial play (see `_opponent_threats`).
     """
     assignments: list[dict] = []
     display_available = list(gs.open_display)
     hot = _hot_mixer_types(ps)
+    threats = _opponent_threats(gs, ps)
 
     # Pre-sort display: spirits we can cup first, then paired mixers,
-    # then hot mixers (great to drink), then plain mixers, then specials
-    def _display_priority(ing: Ingredient) -> int:
+    # then hot mixers (great to drink), then plain mixers, then specials.
+    # Tie-breaker: higher opponent threat picked first.
+    def _display_priority(ing: Ingredient) -> tuple[int, float]:
         if prefer_spirit and ing == prefer_spirit:
-            return 0
-        if ing in _SPIRITS:
-            return 1
-        if ing in _MIXERS and ing.name in hot:
-            return 2
-        if ing in _MIXERS:
-            return 3
-        return 4
+            base = 0
+        elif ing in _SPIRITS:
+            base = 1
+        elif ing in _MIXERS and ing.name in hot:
+            base = 2
+        elif ing in _MIXERS:
+            base = 3
+        else:
+            base = 4
+        return (base, -threats.get(ing, 0.0))
 
     display_available.sort(key=_display_priority)
 
@@ -1450,6 +1568,7 @@ class Mastermind(Strategy):
         focus_ing = _SPIRIT_MAP.get(focus)
         cups = CupTracker(ps)
         hot = _hot_mixer_types(ps)
+        threats = _opponent_threats(gs, ps)
         bag_ev = self._bag_draw_ev(gs, ps, cups, focus_ing)
         # Prefer display certainty over bag variance: accept display items
         # slightly below average bag EV (known > random)
@@ -1469,7 +1588,7 @@ class Mastermind(Strategy):
                 if idx in used:
                     continue
                 val, disp, ci = self._eval_display_item(
-                    gs, ps, ing, cups, focus_ing, focus, hot,
+                    gs, ps, ing, cups, focus_ing, focus, hot, threats,
                 )
                 if val > best_val:
                     best_val, best_idx, best_disp, best_ci = val, idx, disp, ci
@@ -1494,30 +1613,43 @@ class Mastermind(Strategy):
 
         return assignments
 
-    def _eval_display_item(self, gs, ps, ing, cups, focus_ing, focus, hot):
+    def _eval_display_item(
+        self, gs, ps, ing, cups, focus_ing, focus, hot, threats=None,
+    ):
         """Score a single display ingredient.
 
         Returns (value, disposition, cup_index).
+
+        `threats` (dict[Ingredient, float]) adds a denial bonus for items
+        opponents need. The bonus is suppressed when the only disposition
+        would be a dangerous drink (e.g. drinking a spirit while drunk_level
+        is high), so blocking never causes self-elimination.
         """
+        threat = (threats or {}).get(ing, 0.0)
+
         if ing in _SPIRITS:
             ci = cups.best_cup_for_spirit(ing)
             if ci is not None:
-                return (8.0 if ing == focus_ing else 5.0, "cup", ci)
-            # Can't cup → must drink — weigh accumulation value against drunk cost
+                base = 8.0 if ing == focus_ing else 5.0
+                return (base + threat * 1.5, "cup", ci)
+            # Can't cup → must drink — weigh accumulation value against drunk cost.
+            # Only allow a denial bonus when drinking is safe.
             penalty = 3.0 + ps.drunk_level * 2.0
             accum = self._spirit_accum_value(gs, ps, ing, focus)
+            denial_bonus = threat * 0.5 if ps.drunk_level <= 1 else 0.0
             if accum > penalty and ps.drunk_level <= 1:
-                return (accum - penalty, "drink", None)
-            return (-penalty, "drink", None)
+                return (accum - penalty + denial_bonus, "drink", None)
+            return (-penalty + denial_bonus, "drink", None)
 
         if ing in _MIXERS:
             ci = cups.best_cup_for_mixer(ing)
             if ci is not None and cups.spirit_type[ci] is not None:
-                return (6.0, "cup", ci)
-            return (3.0 if ing.name in hot else 1.5, "drink", None)
+                return (6.0 + threat * 1.5, "cup", ci)
+            base = 3.0 if ing.name in hot else 1.5
+            return (base + threat * 0.8, "drink", None)
 
         # SPECIAL token
-        return (0.5, "drink", None)
+        return (0.5 + threat * 0.5, "drink", None)
 
     def _bag_draw_ev(self, gs, ps, cups, focus_ing):
         """Expected value of a single random bag draw given current cup state."""
