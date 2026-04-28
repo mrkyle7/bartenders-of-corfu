@@ -21,10 +21,11 @@ Non-cocktail drinks (the main scoring path) require:
   - Max 2 spirits of the SAME type
   - At least 1 valid mixer for that spirit type
   - All mixers must be valid for that spirit type
+  - Only ONE mixer type (e.g. all COLA, not COLA + SODA)
   - No mixed spirit types
 
 So CupTracker must be strict: never mix spirit types, never put invalid
-mixers, max 2 spirits per cup.
+mixers, never mix mixer types, max 2 spirits per cup.
 """
 
 import random
@@ -61,6 +62,7 @@ class CupTracker:
     Enforces sellability rules:
     - Max 2 spirits per cup, all same type
     - Only valid mixer pairings for the cup's spirit type
+    - Only one mixer type per cup (non-cocktail rule)
     """
 
     def __init__(self, ps: PlayerState):
@@ -68,6 +70,7 @@ class CupTracker:
         self.spirit_counts: list[int] = [0, 0]
         self.spirit_type: list[Ingredient | None] = [None, None]
         self.mixer_count: list[int] = [0, 0]
+        self.mixer_types: list[set[Ingredient]] = [set(), set()]
 
         for ci in (0, 1):
             for ing in ps.cups[ci].ingredients:
@@ -80,6 +83,7 @@ class CupTracker:
                         self.spirit_type[ci] = ing  # just track latest
                 elif ing in _MIXERS:
                     self.mixer_count[ci] += 1
+                    self.mixer_types[ci].add(ing)
 
     def can_add(self, cup_idx: int) -> bool:
         return self.fill[cup_idx] < MAX_CUP_INGREDIENTS
@@ -101,6 +105,10 @@ class CupTracker:
         """Can this mixer be added without ruining the cup's sellability?"""
         if not self.can_add(cup_idx):
             return False
+        # Non-cocktail drinks may only contain a single mixer type
+        existing = self.mixer_types[cup_idx]
+        if existing and mixer not in existing:
+            return False
         st = self.spirit_type[cup_idx]
         if st is None:
             return True  # empty cup, mixer can go in (spirit comes later)
@@ -115,6 +123,7 @@ class CupTracker:
     def add_mixer(self, cup_idx: int, mixer: Ingredient):
         self.fill[cup_idx] += 1
         self.mixer_count[cup_idx] += 1
+        self.mixer_types[cup_idx].add(mixer)
 
     def any_open(self) -> int | None:
         for i in (0, 1):
