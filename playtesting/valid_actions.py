@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from uuid import UUID
 
+from app.game_modes import GameMode
 from app.GameState import GameState
 from app.Ingredient import Ingredient
 from app.PlayerState import PlayerState
@@ -118,6 +119,8 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
     else:
         _add_take_ingredients(gs, ps, result, mid_batch=False)
         _add_sell_cup(ps, result)
+        if gs.has_mode(GameMode.SELL_BOTH_CUPS.value):
+            _add_sell_both_cups(ps, result)
         _add_drink_cup(ps, result)
         _add_go_for_a_wee(ps, result)
         _add_claim_card(gs, ps, result)
@@ -237,6 +240,81 @@ def _add_sell_cup(ps: PlayerState, result: list[Action]):
                                 description=f"Sell cup {cup_idx} for {pts}pts with {combo_list}",
                             )
                         )
+
+
+def _cup_sell_options(ps: PlayerState, cup_idx: int) -> list[tuple[list[str], int]]:
+    """Enumerate (declared_specials, points) options for selling a single cup.
+
+    Returns an empty list when the cup is empty or no combination is sellable.
+    """
+    cup = ps.cups[cup_idx]
+    if cup.is_empty:
+        return []
+    options: list[tuple[list[str], int]] = []
+    pts = _full_sell_points(ps, cup_idx, [])
+    if pts is not None:
+        options.append(([], pts))
+    specials = ps.special_ingredients
+    if specials:
+        seen: set[tuple[str, ...]] = set()
+        for r in range(1, len(specials) + 1):
+            for combo in combinations(specials, r):
+                key = tuple(sorted(combo))
+                if key in seen:
+                    continue
+                seen.add(key)
+                combo_list = list(combo)
+                pts = _full_sell_points(ps, cup_idx, combo_list)
+                if pts is not None:
+                    options.append((combo_list, pts))
+    return options
+
+
+def _specials_fit_mat(mat: list[str], used_a: list[str], used_b: list[str]) -> bool:
+    """Return True if combined specials usage is a sub-multiset of the mat."""
+    remaining = list(mat)
+    for s in (*used_a, *used_b):
+        if s not in remaining:
+            return False
+        remaining.remove(s)
+    return True
+
+
+def _add_sell_both_cups(ps: PlayerState, result: list[Action]):
+    """Emit combined sell_cup actions covering both cups in one turn action.
+
+    Only invoked when the sell_both_cups game mode is active. Each combined
+    option pairs a sellable cup-0 option with a sellable cup-1 option and
+    verifies the player's mat has enough specials for both declarations.
+    """
+    cup0_opts = _cup_sell_options(ps, 0)
+    cup1_opts = _cup_sell_options(ps, 1)
+    if not cup0_opts or not cup1_opts:
+        return  # Need both cups sellable to combine
+
+    mat = list(ps.special_ingredients)
+    for ds0, pts0 in cup0_opts:
+        for ds1, pts1 in cup1_opts:
+            if not _specials_fit_mat(mat, ds0, ds1):
+                continue
+            total = pts0 + pts1
+            result.append(
+                Action(
+                    action_type="sell_cup",
+                    params={
+                        "cup_index": 0,
+                        "declared_specials": list(ds0),
+                        "additional_cups": [
+                            {"cup_index": 1, "declared_specials": list(ds1)}
+                        ],
+                        "points": total,
+                    },
+                    description=(
+                        f"Sell both cups for {total}pts "
+                        f"(cup 0 {pts0}pts, cup 1 {pts1}pts)"
+                    ),
+                )
+            )
 
 
 def _add_drink_cup(ps: PlayerState, result: list[Action]):

@@ -9,18 +9,21 @@ from app.user import User
 
 OPEN_DISPLAY_SIZE = 5
 
+
 def create_initial_bag(num_players: int) -> list[Ingredient]:
     multiplier = num_players + 3
-    return ([Ingredient.WHISKEY] * multiplier
-    + [Ingredient.GIN] * multiplier
-    + [Ingredient.RUM] * multiplier
-    + [Ingredient.TEQUILA] * multiplier
-    + [Ingredient.VODKA] * multiplier
-    + [Ingredient.COLA] * multiplier
-    + [Ingredient.SODA] * multiplier
-    + [Ingredient.TONIC] * multiplier
-    + [Ingredient.CRANBERRY] * multiplier
-    + [Ingredient.SPECIAL] * multiplier)
+    return (
+        [Ingredient.WHISKEY] * multiplier
+        + [Ingredient.GIN] * multiplier
+        + [Ingredient.RUM] * multiplier
+        + [Ingredient.TEQUILA] * multiplier
+        + [Ingredient.VODKA] * multiplier
+        + [Ingredient.COLA] * multiplier
+        + [Ingredient.SODA] * multiplier
+        + [Ingredient.TONIC] * multiplier
+        + [Ingredient.CRANBERRY] * multiplier
+        + [Ingredient.SPECIAL] * multiplier
+    )
 
 
 class GameState:
@@ -43,6 +46,7 @@ class GameState:
         last_round: bool = False,
         main_action_taken_this_turn: bool = False,
         free_actions_used_this_turn: list[str] | None = None,
+        game_modes: list[str] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -91,13 +95,22 @@ class GameState:
             if free_actions_used_this_turn is not None
             else []
         )
+        # Optional rule variations selected in the lobby (immutable after start).
+        # See app/game_modes.py for valid values.
+        self.game_modes: list[str] = list(game_modes) if game_modes else []
+
+    def has_mode(self, mode: str) -> bool:
+        """Return True if the given optional rule variation is enabled."""
+        return mode in self.game_modes
 
     @classmethod
     def new_game(cls, host: User) -> "GameState":
         return cls(None, [], {host: PlayerState.new_player(host)}, None)
 
     @classmethod
-    def start_game(cls, players: list[UUID]) -> "GameState":
+    def start_game(
+        cls, players: list[UUID], game_modes: list[str] | None = None
+    ) -> "GameState":
         """Build the initial game state when a game is started."""
         bag = list(create_initial_bag(len(players)))
         random.shuffle(bag)
@@ -131,6 +144,7 @@ class GameState:
             turn_order=turn_order,
             turn_number=0,
             discard=[],
+            game_modes=list(game_modes) if game_modes else [],
         )
 
     def to_dict(self) -> dict:
@@ -158,6 +172,7 @@ class GameState:
             "last_round": self.last_round,
             "main_action_taken_this_turn": self.main_action_taken_this_turn,
             "free_actions_used_this_turn": list(self.free_actions_used_this_turn),
+            "game_modes": list(self.game_modes),
         }
 
     @classmethod
@@ -221,4 +236,5 @@ class GameState:
             free_actions_used_this_turn=state_data.get(
                 "free_actions_used_this_turn", []
             ),
+            game_modes=state_data.get("game_modes", []),
         )

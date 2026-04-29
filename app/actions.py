@@ -626,19 +626,21 @@ def take_ingredients(
     return gs, payload
 
 
-def sell_cup(
+def _sell_one_cup(
+    ps: PlayerState,
     gs: GameState,
-    player_id: UUID,
     cup_index: int,
     declared_specials: list[str],
-) -> tuple[GameState, dict]:
-    """SellCup action."""
-    gs = _deep_copy_state(gs)
-    _require_turn(gs, player_id)
-    ps = gs.player_states[player_id]
-    _require_active(ps)
-    _require_no_take_in_progress(gs)
+    mat_remaining: list[str],
+) -> dict:
+    """Validate and resolve a single cup sale.
 
+    ``mat_remaining`` is mutated to reflect specials consumed by this sale —
+    callers selling multiple cups in one action share the same list so the
+    same special token cannot be declared twice.
+    Mutates ``ps`` (cup, points, specials) and ``gs.bag_contents``.
+    Raises GameException on validation failure.
+    """
     if cup_index not in (0, 1):
         raise GameException("cup_index must be 0 or 1", status_code=400)
 
@@ -646,14 +648,13 @@ def sell_cup(
     if cup.is_empty:
         raise GameException("Cup is empty", status_code=400)
 
-    # Validate declared specials are on the player's mat
-    mat = list(ps.special_ingredients)
+    # Validate declared specials against the shared remaining-mat budget
     for s in declared_specials:
-        if s not in mat:
+        if s not in mat_remaining:
             raise GameException(
                 f"Special '{s}' is not on your player mat", status_code=400
             )
-        mat.remove(s)
+        mat_remaining.remove(s)
 
     pts = drink_points(cup.ingredients, declared_specials)
     if pts is None:
@@ -678,26 +679,91 @@ def sell_cup(
         pts += len(matching) * 2
 
     sold_ingredients = list(cup.ingredients)
-    # Return sold ingredients + declared specials to the bag
     gs.bag_contents.extend(sold_ingredients)
     for s in declared_specials:
-        # Specials are returned as SPECIAL tokens to the bag
         gs.bag_contents.append(Ingredient.SPECIAL)
         ps.special_ingredients.remove(s)
 
     cup.ingredients = []
-
     ps.points += pts
+
+    return {
+        "cup_index": cup_index,
+        "ingredients": [i.name for i in sold_ingredients],
+        "declared_specials": list(declared_specials),
+        "points_earned": pts,
+    }
+
+
+def sell_cup(
+    gs: GameState,
+    player_id: UUID,
+    cup_index: int,
+    declared_specials: list[str],
+    additional_cups: list[dict] | None = None,
+) -> tuple[GameState, dict]:
+    """SellCup action.
+
+    When ``additional_cups`` is provided the action sells multiple cups in a
+    single turn action. This is only permitted when the ``sell_both_cups``
+    game mode is active. Each cup is validated and scored independently;
+    points stack and a single ``_finish_turn_action`` call advances the turn.
+    """
+    gs = _deep_copy_state(gs)
+    _require_turn(gs, player_id)
+    ps = gs.player_states[player_id]
+    _require_active(ps)
+    _require_no_take_in_progress(gs)
+
+    if additional_cups:
+        from app.game_modes import GameMode
+
+        if not gs.has_mode(GameMode.SELL_BOTH_CUPS.value):
+            raise GameException(
+                "Selling multiple cups requires the sell_both_cups game mode",
+                status_code=400,
+            )
+
+    # Build the full list of (cup_index, declared_specials) to sell, in order.
+    sales: list[tuple[int, list[str]]] = [(cup_index, list(declared_specials))]
+    for extra in additional_cups or []:
+        ci = extra.get("cup_index")
+        if ci is None:
+            raise GameException(
+                "Each additional cup must specify cup_index", status_code=400
+            )
+        ds = extra.get("declared_specials", []) or []
+        sales.append((ci, list(ds)))
+
+    seen_indices: set[int] = set()
+    for ci, _ in sales:
+        if ci in seen_indices:
+            raise GameException(
+                "Cannot sell the same cup twice in one action", status_code=400
+            )
+        seen_indices.add(ci)
+
+    mat_remaining = list(ps.special_ingredients)
+    sold: list[dict] = []
+    total_points = 0
+    for ci, ds in sales:
+        result = _sell_one_cup(ps, gs, ci, ds, mat_remaining)
+        sold.append(result)
+        total_points += result["points_earned"]
+
     _check_victory(gs, player_id)
     is_free = _finish_turn_action(gs, player_id, "sell_cup")
 
+    primary = sold[0]
     payload = {
-        "cup_index": cup_index,
-        "ingredients": [i.name for i in sold_ingredients],
-        "declared_specials": declared_specials,
-        "points_earned": pts,
+        "cup_index": primary["cup_index"],
+        "ingredients": primary["ingredients"],
+        "declared_specials": primary["declared_specials"],
+        "points_earned": total_points,
         "is_free_action": is_free,
     }
+    if len(sold) > 1:
+        payload["sold_cups"] = sold
     return gs, payload
 
 
@@ -876,9 +942,7 @@ def claim_card(
 
     elif card_type == "free_action":
         if target_card.spirit_type is None:
-            raise GameException(
-                "Free action card has no spirit type", status_code=500
-            )
+            raise GameException("Free action card has no spirit type", status_code=500)
         # Spec: 3 bladder spirits of the matching type (threshold check only)
         spirit_ing = _spirit_ingredient(target_card.spirit_type)
         bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)

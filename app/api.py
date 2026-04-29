@@ -362,6 +362,45 @@ async def list_bot_strategies():
     return JSONResponse(content={"strategies": strategies})
 
 
+@app.get("/v1/game-modes")
+async def list_game_modes():
+    """Return the set of optional rule variations the lobby can toggle."""
+    from app.game_modes import VALID_GAME_MODES
+
+    return JSONResponse(content={"modes": sorted(VALID_GAME_MODES)})
+
+
+class SetGameModesRequest(BaseModel):
+    game_modes: List[str]
+
+
+@app.patch("/v1/games/{game_id}/modes")
+async def set_game_modes(game_id: str, body: SetGameModesRequest, request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    try:
+        modes = gameManager.set_game_modes(
+            token_user.id, UUID(game_id), body.game_modes
+        )
+        logger.info(
+            "%s set game modes %s on game %s",
+            token_user.username,
+            modes,
+            game_id,
+        )
+        return JSONResponse(content={"game_modes": modes})
+    except GameException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": str(e)})
+    except ValueError:
+        return JSONResponse(status_code=400, content={"error": "Invalid game ID"})
+    except Exception:
+        logger.exception("Error updating game modes for game %s", game_id)
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to update game modes"}
+        )
+
+
 @app.post("/v1/games/{game_id}/start")
 async def start_game(game_id: str, request: Request):
     token_user, err = _require_auth(request)
@@ -770,6 +809,9 @@ async def action_take_ingredients(
 class SellCupRequest(BaseModel):
     cup_index: int
     declared_specials: List[str] = []
+    # Optional. Only valid when the sell_both_cups game mode is active.
+    # Each entry: {"cup_index": int, "declared_specials": List[str]}.
+    additional_cups: Optional[List[dict]] = None
 
 
 @app.post("/v1/games/{game_id}/actions/sell-cup")
@@ -779,7 +821,11 @@ async def action_sell_cup(game_id: str, body: SellCupRequest, request: Request):
         return err
     try:
         new_state, payload = gameManager.sell_cup(
-            game, token_user.id, body.cup_index, body.declared_specials
+            game,
+            token_user.id,
+            body.cup_index,
+            body.declared_specials,
+            additional_cups=body.additional_cups,
         )
         logger.info("%s sold cup in game %s", token_user.username, game_id)
         return JSONResponse(

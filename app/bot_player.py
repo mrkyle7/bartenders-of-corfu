@@ -156,7 +156,11 @@ def _execute_action(
         _execute_take(game_manager, game, player_id, strategy)
     elif t == "sell_cup":
         game_manager.sell_cup(
-            game, player_id, p["cup_index"], p.get("declared_specials", [])
+            game,
+            player_id,
+            p["cup_index"],
+            p.get("declared_specials", []),
+            additional_cups=p.get("additional_cups"),
         )
     elif t == "drink_cup":
         game_manager.drink_cup(game, player_id, p["cup_index"])

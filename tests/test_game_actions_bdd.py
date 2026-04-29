@@ -28,6 +28,7 @@ from unittest.mock import patch
 
 scenarios("features/game_actions.feature")
 scenarios("features/undo.feature")
+scenarios("features/game_modes.feature")
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1677,3 +1678,243 @@ def player_free_action_card_type(ctx, n, expected):
     assert free_cards[0].get("free_action_type") == expected, (
         f"Expected free_action_type '{expected}', got {free_cards[0].get('free_action_type')}"
     )
+
+
+# ─── Game modes ───────────────────────────────────────────────────────────────
+
+
+@given("a new game with 2 players in the lobby", target_fixture="ctx")
+def new_game_2_players_lobby():
+    p1 = _unique("p1")
+    p2 = _unique("p2")
+    t1, id1 = _register(p1)
+    t2, id2 = _register(p2)
+    game_id = _new_game(t1)
+    _join(t2, game_id)
+    # In lobby tests p1 is always the host (game creator).
+    return {
+        "game_id": game_id,
+        "p1_token": t1,
+        "p1_id": id1,
+        "p2_token": t2,
+        "p2_id": id2,
+        "host_token": t1,
+        "non_host_token": t2,
+        "last_resp": None,
+        "last_status": None,
+    }
+
+
+@given(
+    "a started game with 2 players and sell_both_cups mode enabled",
+    target_fixture="ctx",
+)
+def started_game_sell_both_cups():
+    p1 = _unique("p1")
+    p2 = _unique("p2")
+    t1, id1 = _register(p1)
+    t2, id2 = _register(p2)
+    game_id = _new_game(t1)
+    _join(t2, game_id)
+    # Enable mode in the lobby before start
+    resp = _client.patch(
+        f"/v1/games/{game_id}/modes",
+        json={"game_modes": ["sell_both_cups"]},
+        cookies=_auth(t1),
+    )
+    assert resp.status_code == 200, resp.text
+    _start(t1, game_id)
+    game = _get_game(t1, game_id)
+    turn_owner_id = game["game_state"]["player_turn"]
+    if turn_owner_id == id1:
+        active_token, active_id = t1, id1
+        other_token, other_id = t2, id2
+    else:
+        active_token, active_id = t2, id2
+        other_token, other_id = t1, id1
+    return {
+        "game_id": game_id,
+        "p1_token": active_token,
+        "p1_id": active_id,
+        "p2_token": other_token,
+        "p2_id": other_id,
+        "host_token": t1,
+        "non_host_token": t2,
+        "last_resp": None,
+        "last_status": None,
+    }
+
+
+def _patch_modes(ctx: dict, modes: list[str], token_key: str = "host_token"):
+    token = ctx.get(token_key) or ctx["p1_token"]
+    resp = _client.patch(
+        f"/v1/games/{ctx['game_id']}/modes",
+        json={"game_modes": modes},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+    return resp
+
+
+@given(parsers.parse('the host has enabled the "{mode}" game mode'))
+def host_enabled_mode(ctx, mode):
+    resp = _patch_modes(ctx, [mode])
+    assert resp.status_code == 200, resp.text
+
+
+@when(parsers.parse('the host enables the "{mode}" game mode'))
+def host_enables_mode(ctx, mode):
+    _patch_modes(ctx, [mode])
+
+
+@when("the host clears all game modes")
+def host_clears_modes(ctx):
+    _patch_modes(ctx, [])
+
+
+@when(parsers.parse('the non-host tries to enable the "{mode}" game mode'))
+def non_host_tries_enable_mode(ctx, mode):
+    _patch_modes(ctx, [mode], token_key="non_host_token")
+
+
+@when(parsers.parse('the host tries to enable the "{mode}" game mode'))
+def host_tries_enable_mode(ctx, mode):
+    _patch_modes(ctx, [mode])
+
+
+@when(parsers.parse('the host tries to enable the "{mode}" game mode after start'))
+def host_tries_enable_after_start(ctx, mode):
+    # In a started game the helper context's "p1_token" is the active player,
+    # which may not be the host. Use the original creator (game host) token.
+    # Look it up from the game record.
+    game_resp = _client.get(
+        f"/v1/games/{ctx['game_id']}", cookies=_auth(ctx["p1_token"])
+    )
+    assert game_resp.status_code == 200
+    host_id = game_resp.json()["host"]
+    host_token = ctx["p1_token"] if ctx["p1_id"] == host_id else ctx["p2_token"]
+    resp = _client.patch(
+        f"/v1/games/{ctx['game_id']}/modes",
+        json={"game_modes": [mode]},
+        cookies=_auth(host_token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when("the host starts the game")
+def host_starts_game(ctx):
+    _start(ctx.get("host_token", ctx["p1_token"]), ctx["game_id"])
+
+
+@when("the available game modes are listed")
+def list_available_game_modes(ctx):
+    resp = _client.get("/v1/game-modes")
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@then("the request should succeed")
+def request_should_succeed(ctx):
+    assert ctx["last_status"] == 200, (
+        f"Expected 200, got {ctx['last_status']}: "
+        f"{ctx['last_resp'].text if ctx['last_resp'] else 'no response'}"
+    )
+
+
+@then(parsers.parse('the game\'s enabled modes should include "{mode}"'))
+def game_modes_include(ctx, mode):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    modes = game["game_state"].get("game_modes", [])
+    assert mode in modes, f"Expected '{mode}' in {modes}"
+
+
+@then(parsers.parse('the started game\'s enabled modes should include "{mode}"'))
+def started_game_modes_include(ctx, mode):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    assert game["status"] == "STARTED", f"Expected STARTED, got {game['status']}"
+    modes = game["game_state"].get("game_modes", [])
+    assert mode in modes, f"Expected '{mode}' in {modes}"
+
+
+@then("the game should have no enabled modes")
+def game_no_modes(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    modes = game["game_state"].get("game_modes", [])
+    assert modes == [], f"Expected no modes, got {modes}"
+
+
+@then(parsers.parse('the list should include "{mode}"'))
+def list_includes(ctx, mode):
+    assert ctx["last_status"] == 200
+    modes = ctx["last_resp"].json().get("modes", [])
+    assert mode in modes, f"Expected '{mode}' in {modes}"
+
+
+# ─── Sell both cups action steps ──────────────────────────────────────────────
+
+
+def _sell_cup_with_additional(
+    token: str,
+    game_id: str,
+    cup_index: int,
+    declared_specials: list[str],
+    additional_cups: list[dict],
+):
+    return _client.post(
+        f"/v1/games/{game_id}/actions/sell-cup",
+        json={
+            "cup_index": cup_index,
+            "declared_specials": declared_specials,
+            "additional_cups": additional_cups,
+        },
+        cookies=_auth(token),
+    )
+
+
+@when(parsers.parse("player {n:d} sells both cups with no declared specials"))
+def player_sells_both_cups(ctx, n):
+    token, _ = _player(ctx, n)
+    resp = _sell_cup_with_additional(
+        token,
+        ctx["game_id"],
+        0,
+        [],
+        [{"cup_index": 1, "declared_specials": []}],
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(parsers.parse("player {n:d} tries to sell both cups with no declared specials"))
+def player_tries_sell_both_cups(ctx, n):
+    player_sells_both_cups(ctx, n)
+
+
+@when(parsers.parse("player {n:d} tries to sell both cups declaring sugar on each"))
+def player_tries_sell_both_sugar_each(ctx, n):
+    token, _ = _player(ctx, n)
+    resp = _sell_cup_with_additional(
+        token,
+        ctx["game_id"],
+        0,
+        ["sugar"],
+        [{"cup_index": 1, "declared_specials": ["sugar"]}],
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(parsers.parse("player {n:d} tries to sell cup {cup_index:d} twice in one action"))
+def player_tries_sell_same_cup_twice(ctx, n, cup_index):
+    token, _ = _player(ctx, n)
+    resp = _sell_cup_with_additional(
+        token,
+        ctx["game_id"],
+        cup_index,
+        [],
+        [{"cup_index": cup_index, "declared_specials": []}],
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
