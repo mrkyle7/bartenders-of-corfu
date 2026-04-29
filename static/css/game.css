@@ -4224,3 +4224,79 @@
     opacity: 0.85;
     font-style: italic;
 }
+
+/* Game modes — lobby toggles */
+.gb-game-modes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.gb-game-mode-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--theme-bg-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--theme-border, rgba(255, 255, 255, 0.08));
+    cursor: pointer;
+}
+
+.gb-game-mode-row input[type="checkbox"] {
+    margin-top: 2px;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.gb-game-mode-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.gb-game-mode-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.gb-game-mode-desc {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.gb-game-modes-readonly {
+    margin-top: 6px;
+    font-size: 0.9rem;
+    opacity: 0.85;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.gb-game-mode-readonly-row::before {
+    content: "✓ ";
+    color: var(--theme-accent, #6db96d);
+    margin-right: 4px;
+}
+
+.gb-section-hint {
+    font-size: 0.85rem;
+    opacity: 0.75;
+    margin-top: 4px;
+    margin-bottom: 6px;
+}
+
+.gb-cup-combined-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    margin-top: 6px;
+}
+
+.gb-sell-both-btn {
+    width: 100%;
+}

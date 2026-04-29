@@ -182,7 +182,9 @@ def build_deck() -> list[Card]:
         ("Weak Bladder", "GIN"),
     ]:
         cards.append(
-            Card(id=str(uuid4()), card_type="free_action", name=name, spirit_type=spirit)
+            Card(
+                id=str(uuid4()), card_type="free_action", name=name, spirit_type=spirit
+            )
         )
 
     return cards

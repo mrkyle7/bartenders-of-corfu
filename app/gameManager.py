@@ -5,6 +5,7 @@ from app import actions
 from app.bot_player import process_bot_turns
 from app.db import db
 from app.game import Game, GameException, Status
+from app.game_modes import normalise_modes
 from app.GameState import GameState
 
 
@@ -94,7 +95,9 @@ class GameManager:
             raise GameException(
                 "At least 2 players are required to start the game", status_code=409
             )
-        new_state = GameState.start_game(list(game.players))
+        new_state = GameState.start_game(
+            list(game.players), game_modes=list(game.game_state.game_modes)
+        )
         result = db.start_game(game_id, new_state)
         match result:
             case "not_found":
@@ -106,6 +109,33 @@ class GameManager:
                 return
             case _:
                 raise GameException("Failed to start game", status_code=500)
+
+    def set_game_modes(
+        self, requester_id: UUID, game_id: UUID, modes: list[str]
+    ) -> list[str]:
+        """Set the optional rule variations for a game.
+
+        Only the host may change modes, and only while the game is NEW.
+        Returns the normalised list of modes now in effect.
+        """
+        game = db.get_game(game_id)
+        if game is None:
+            raise GameException("Game not found", status_code=404)
+        if game.host != requester_id:
+            raise GameException("Only the host can change game modes", status_code=403)
+        if game.status != Status.NEW:
+            raise GameException(
+                "Game modes are locked once the game has started", status_code=409
+            )
+        try:
+            normalised = normalise_modes(modes)
+        except ValueError as e:
+            raise GameException(str(e), status_code=400)
+
+        gs = game.game_state
+        gs.game_modes = normalised
+        db.update_game_state(game_id, gs)
+        return normalised
 
     def get_game_by_id(self, id: UUID) -> Game | None:
         """Returns a game by its ID or None if not found."""
@@ -193,11 +223,20 @@ class GameManager:
         return new_state, payload
 
     def sell_cup(
-        self, game: Game, player_id: UUID, cup_index: int, declared_specials: list[str]
+        self,
+        game: Game,
+        player_id: UUID,
+        cup_index: int,
+        declared_specials: list[str],
+        additional_cups: list[dict] | None = None,
     ) -> tuple[GameState, dict]:
         self._require_started(game)
         new_state, payload = actions.sell_cup(
-            game.game_state, player_id, cup_index, declared_specials
+            game.game_state,
+            player_id,
+            cup_index,
+            declared_specials,
+            additional_cups=additional_cups,
         )
         self._apply_action(game, player_id, "sell_cup", new_state, payload)
         return new_state, payload

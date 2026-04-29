@@ -463,6 +463,8 @@ function renderLobby(game) {
         list.appendChild(entry);
     });
 
+    renderGameModes(game);
+
     // Add Bot + Start Game buttons — host only; Join button for non-members
     const section = el('gbStartGameSection');
     if (!section) return;
@@ -510,6 +512,131 @@ function renderLobby(game) {
         btn.setAttribute('aria-label', 'Start the game');
         btn.onclick = startGame;
         section.appendChild(btn);
+    }
+}
+
+// User-facing copy for each optional rule variation. Add a new entry here
+// when introducing a new mode; the lobby will pick it up automatically as
+// long as the API exposes the mode in /v1/game-modes.
+const GAME_MODE_INFO = {
+    sell_both_cups: {
+        label: 'Sell both cups',
+        description: 'Your sell action can sell both cups in one go.',
+    },
+};
+
+function renderGameModes(game) {
+    const section = el('gbGameModesSection');
+    if (!section) return;
+    section.replaceChildren();
+
+    const isHost = S.me && S.me.id === game.host;
+    const enabled = (game.game_state && game.game_state.game_modes) || [];
+
+    const heading = document.createElement('div');
+    heading.className = 'gb-section-title';
+    heading.textContent = 'Game modes';
+    section.appendChild(heading);
+
+    if (!isHost) {
+        // Read-only summary for non-hosts
+        const list = document.createElement('div');
+        list.className = 'gb-game-modes-readonly';
+        if (enabled.length === 0) {
+            list.textContent = 'Standard rules (no modes selected)';
+        } else {
+            enabled.forEach(m => {
+                const info = GAME_MODE_INFO[m];
+                const row = document.createElement('div');
+                row.className = 'gb-game-mode-readonly-row';
+                row.textContent = info ? info.label : m;
+                list.appendChild(row);
+            });
+        }
+        section.appendChild(list);
+        return;
+    }
+
+    // Host: render a checkbox per available mode
+    const note = document.createElement('div');
+    note.className = 'gb-section-hint';
+    note.textContent = 'Modes are locked once the game starts.';
+    section.appendChild(note);
+
+    loadGameModesAndRender(section, enabled);
+}
+
+async function loadGameModesAndRender(section, enabled) {
+    let available = [];
+    try {
+        const resp = await fetch('/v1/game-modes');
+        if (resp.ok) {
+            const data = await resp.json();
+            available = data.modes || [];
+        }
+    } catch { /* fall through with empty list */ }
+
+    if (available.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'gb-section-hint';
+        empty.textContent = 'No optional modes available.';
+        section.appendChild(empty);
+        return;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'gb-game-modes-list';
+    available.forEach(modeKey => {
+        const info = GAME_MODE_INFO[modeKey] || { label: modeKey, description: '' };
+        const row = document.createElement('label');
+        row.className = 'gb-game-mode-row';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = enabled.includes(modeKey);
+        checkbox.dataset.mode = modeKey;
+        checkbox.setAttribute('aria-label', `${info.label} game mode`);
+        checkbox.onchange = () => updateGameModes();
+        row.appendChild(checkbox);
+
+        const text = document.createElement('span');
+        text.className = 'gb-game-mode-text';
+        const labelEl = document.createElement('div');
+        labelEl.className = 'gb-game-mode-label';
+        labelEl.textContent = info.label;
+        text.appendChild(labelEl);
+        if (info.description) {
+            const desc = document.createElement('div');
+            desc.className = 'gb-game-mode-desc';
+            desc.textContent = info.description;
+            text.appendChild(desc);
+        }
+        row.appendChild(text);
+        list.appendChild(row);
+    });
+    section.appendChild(list);
+}
+
+async function updateGameModes() {
+    const section = el('gbGameModesSection');
+    if (!section) return;
+    const checkboxes = section.querySelectorAll('input[type="checkbox"][data-mode]');
+    const selected = [];
+    checkboxes.forEach(cb => { if (cb.checked) selected.push(cb.dataset.mode); });
+    clearError();
+    try {
+        const resp = await fetch(`/v1/games/${S.gameId}/modes`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game_modes: selected }),
+        });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.error || 'Failed to update game modes');
+            await refreshGame();
+        }
+    } catch (e) {
+        showError('Network error updating game modes');
+        await refreshGame();
     }
 }
 
@@ -1368,6 +1495,43 @@ function renderMyCups(myState, isMyTurn, game, gs) {
 
         cupsEl.appendChild(cupEl);
     });
+
+    // Combined "Sell both cups" — only when the sell_both_cups game mode is
+    // active, it's the player's turn, no take is in progress, and both cups
+    // resolve to a sellable drink (with combined specials fitting the mat).
+    const cupTakeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
+    const modes = (gs && gs.game_modes) || [];
+    if (isMyTurn && !cupTakeInProgress && modes.includes('sell_both_cups')) {
+        const drink0 = detectBestDrink(cupData[0].contents, specials, cupData[0].hasDoubler, specialistSpiritTypes);
+        const drink1 = detectBestDrink(cupData[1].contents, specials, cupData[1].hasDoubler, specialistSpiritTypes);
+        if (drink0 && drink1) {
+            const matCounts = {};
+            specials.forEach(s => { matCounts[s] = (matCounts[s] || 0) + 1; });
+            const need = {};
+            [...(drink0.declaredSpecials || []), ...(drink1.declaredSpecials || [])]
+                .forEach(s => { need[s] = (need[s] || 0) + 1; });
+            const fits = Object.entries(need).every(([k, v]) => (matCounts[k] || 0) >= v);
+            if (fits) {
+                const totalPts = drink0.points + drink1.points;
+                const wrap = document.createElement('div');
+                wrap.className = 'gb-cup-combined-actions';
+                const sellBothBtn = document.createElement('button');
+                sellBothBtn.className = 'gb-cup-action-btn sell gb-sell-both-btn';
+                sellBothBtn.innerHTML = `💰 Sell both cups — ${totalPts}pts`;
+                sellBothBtn.setAttribute(
+                    'aria-label',
+                    `Sell both cups for ${totalPts} points (${drink0.name} ${drink0.points}pts plus ${drink1.name} ${drink1.points}pts)`
+                );
+                sellBothBtn.onclick = () => doSellBothCups(
+                    drink0.declaredSpecials || [],
+                    drink1.declaredSpecials || [],
+                    sellBothBtn,
+                );
+                wrap.appendChild(sellBothBtn);
+                cupsEl.appendChild(wrap);
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3219,6 +3383,35 @@ async function shareGame(btn) {
         showToast('Link copied to clipboard');
     } else {
         openShareFallbackModal(url);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Inline Sell Both Cups (sell_both_cups mode only)
+// ─────────────────────────────────────────────────────────────
+async function doSellBothCups(specialsCup0, specialsCup1, btn) {
+    if (btn) setButtonBusy(btn, true, 'Selling…');
+    clearError();
+
+    try {
+        const resp = await gameAction('sell-cup', {
+            cup_index: 0,
+            declared_specials: specialsCup0,
+            additional_cups: [
+                { cup_index: 1, declared_specials: specialsCup1 },
+            ],
+        });
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            showError(d.detail || d.error || 'Cannot sell both cups.');
+        } else {
+            await refreshGame();
+            await refreshHistory();
+        }
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showError('Network error. Please try again.');
+    } finally {
+        if (btn) setButtonBusy(btn, false);
     }
 }
 

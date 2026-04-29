@@ -275,8 +275,7 @@ def _opponent_threats(gs: GameState, ps: PlayerState) -> dict[Ingredient, float]
             for r_spirits, r_mixers, r_specials, _pts, _name in _RECIPES:
                 # Recipe is a candidate if opponent has all required specials
                 if all(
-                    opp_special_counter.get(sp, 0) >= n
-                    for sp, n in r_specials.items()
+                    opp_special_counter.get(sp, 0) >= n for sp, n in r_specials.items()
                 ):
                     for ing, n in r_spirits.items():
                         bump(ing, 0.7 * n)
@@ -1164,8 +1163,11 @@ class Mastermind(Strategy):
 
     def _max_opp_pts(self, gs: GameState, pid) -> int:
         return max(
-            (p.points for k, p in gs.player_states.items()
-             if k != pid and not p.is_eliminated),
+            (
+                p.points
+                for k, p in gs.player_states.items()
+                if k != pid and not p.is_eliminated
+            ),
             default=0,
         )
 
@@ -1231,8 +1233,11 @@ class Mastermind(Strategy):
         elif max_pts >= 20:
             u = 0.2
         opp_karaoke = max(
-            (p.karaoke_cards_claimed for k, p in gs.player_states.items()
-             if k != pid and not p.is_eliminated),
+            (
+                p.karaoke_cards_claimed
+                for k, p in gs.player_states.items()
+                if k != pid and not p.is_eliminated
+            ),
             default=0,
         )
         if opp_karaoke >= 2:
@@ -1273,7 +1278,9 @@ class Mastermind(Strategy):
             score += 10
 
         # Bladder pressure: selling frees cups, reducing future forced drinking
-        bladder_fill = len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
+        bladder_fill = (
+            len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
+        )
         if bladder_fill >= 0.75:
             score += 5
 
@@ -1281,11 +1288,14 @@ class Mastermind(Strategy):
         ci = action.params.get("cup_index")
         if ci is not None and pts <= 1:
             from app.actions import _SPIRITS as _SP
+
             cup_spirit = next(
                 (ing for ing in ps.cups[ci].ingredients if ing in _SP), None
             )
             if cup_spirit:
-                remaining = gs.bag_contents.count(cup_spirit) + gs.open_display.count(cup_spirit)
+                remaining = gs.bag_contents.count(cup_spirit) + gs.open_display.count(
+                    cup_spirit
+                )
                 if remaining == 0:
                     score += 12  # No matching spirits exist — sell immediately
 
@@ -1389,7 +1399,9 @@ class Mastermind(Strategy):
 
     def _score_wee(self, ps: PlayerState) -> float:
         overflow = len(ps.bladder) + ps.take_count - ps.bladder_capacity
-        bladder_fill = len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
+        bladder_fill = (
+            len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
+        )
 
         if overflow >= 3:
             score = 80.0
@@ -1509,7 +1521,10 @@ class Mastermind(Strategy):
                 if spirit_ing and cups._can_add_spirit(ci, spirit_ing):
                     score = 10.0
                     # 2nd spirit → enables 3-pt double-spirit sell
-                    if cups.spirit_counts[ci] == 1 and cups.spirit_type[ci] == spirit_ing:
+                    if (
+                        cups.spirit_counts[ci] == 1
+                        and cups.spirit_type[ci] == spirit_ing
+                    ):
                         score += 5
                     # Cup already has a mixer → closer to sellable
                     if cups.mixer_count[ci] > 0:
@@ -1544,8 +1559,13 @@ class Mastermind(Strategy):
         return best_action
 
     def _claim_unlock_value(
-        self, gs: GameState, ps: PlayerState,
-        spirit_name: str, before: int, after: int, focus: str,
+        self,
+        gs: GameState,
+        ps: PlayerState,
+        spirit_name: str,
+        before: int,
+        after: int,
+        focus: str,
     ) -> float:
         """Value of a card claim that drinking stored spirits would unlock."""
         value = 0.0
@@ -1597,7 +1617,14 @@ class Mastermind(Strategy):
                 if idx in used:
                     continue
                 val, disp, ci = self._eval_display_item(
-                    gs, ps, ing, cups, focus_ing, focus, hot, threats,
+                    gs,
+                    ps,
+                    ing,
+                    cups,
+                    focus_ing,
+                    focus,
+                    hot,
+                    threats,
                 )
                 if val > best_val:
                     best_val, best_idx, best_disp, best_ci = val, idx, disp, ci
@@ -1623,7 +1650,15 @@ class Mastermind(Strategy):
         return assignments
 
     def _eval_display_item(
-        self, gs, ps, ing, cups, focus_ing, focus, hot, threats=None,
+        self,
+        gs,
+        ps,
+        ing,
+        cups,
+        focus_ing,
+        focus,
+        hot,
+        threats=None,
     ):
         """Score a single display ingredient.
 
@@ -1673,7 +1708,11 @@ class Mastermind(Strategy):
                 ev += frac * (5.0 if ci is not None else -(2.0 + ps.drunk_level * 1.5))
             elif ing in _MIXERS:
                 ci = cups.best_cup_for_mixer(ing)
-                ev += frac * (4.0 if (ci is not None and cups.spirit_type[ci] is not None) else 1.5)
+                ev += frac * (
+                    4.0
+                    if (ci is not None and cups.spirit_type[ci] is not None)
+                    else 1.5
+                )
             else:
                 ev += frac * 0.5
         return ev
@@ -1697,7 +1736,7 @@ class Mastermind(Strategy):
         others = [i for i in drawn if i not in _SPIRITS and i not in _MIXERS]
 
         # Cup spirits (focus first), drink what can't be cupped
-        spirits.sort(key=lambda s: (0 if s == focus_ing else 1))
+        spirits.sort(key=lambda s: 0 if s == focus_ing else 1)
         spirits_drunk_this_batch = 0
         for spirit in spirits:
             ci = cups.best_cup_for_spirit(spirit)
