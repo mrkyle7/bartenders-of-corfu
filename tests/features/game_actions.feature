@@ -884,3 +884,54 @@ Feature: Game turn actions
     And player 1's bladder has 3 VODKA spirits
     When player 1 claims that card
     Then player 1's free action card should have free_action_type "sell_cup"
+
+  # ── Free Action Cards: cannot start a take after main action is done ────────
+
+  Scenario: Cannot take from open display after main action when only a non-take free action remains
+    Given it is player 1's turn
+    And player 1 holds a GIN free action card
+    And player 1 has 3 ingredients in their bladder
+    And player 1's cup 0 contains 1 WHISKEY and 1 COLA
+    And the open display contains 5 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 tries to take 1 COLA from the open display placing all in cup 1
+    Then the action should be rejected with a 409 error
+    And it should still be player 1's turn
+
+  Scenario: Cannot draw from bag after main action when only a non-take free action remains
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a GIN free action card
+    And player 1 has 3 ingredients in their bladder
+    And player 1's cup 0 contains 1 WHISKEY and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 tries to take an ingredient
+    Then the action should be rejected with a 409 error
+    And it should still be player 1's turn
+
+  Scenario: Cannot start a multi-batch take after main action when only a non-take free action remains
+    Given it is player 1's turn
+    And player 1 holds a GIN free action card
+    And player 1 has 3 ingredients in their bladder
+    And player 1's cup 0 contains 1 WHISKEY and 1 COLA
+    And the open display contains 5 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 tries to take 1 COLA from the open display placing all in cup 1
+    Then the action should be rejected with a 409 error
+    When player 1 tries to take 2 COLA from the open display placing all in cup 1
+    Then the action should be rejected with a 409 error
+    And it should still be player 1's turn
+    And player 1 has taken 0 ingredients so far this turn
+
+  Scenario: Take ingredients still permitted after main action when player holds a take_ingredients free action card
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a RUM free action card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 takes 3 ingredients from the bag placing all in cup 1
+    Then it should be player 2's turn
