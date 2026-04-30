@@ -136,6 +136,17 @@ function playerName(pid) {
     return pid.slice(0, 8);
 }
 
+function sortPlayersByTurnOrder(playerIds, gs) {
+    const ids = [...(playerIds || [])];
+    const turnOrder = (gs && gs.turn_order) || [];
+    if (turnOrder.length === 0) return ids;
+    const rank = pid => {
+        const idx = turnOrder.indexOf(pid);
+        return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+    };
+    return ids.sort((a, b) => rank(a) - rank(b));
+}
+
 async function notifyMyTurn() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (document.visibilityState === 'visible') return;
@@ -317,7 +328,7 @@ function renderAllStats(game, gs) {
     if (!bar) return;
     bar.replaceChildren();
     const gameEnded = game.status === 'ENDED';
-    (game.players || []).forEach(pid => {
+    sortPlayersByTurnOrder(game.players, gs).forEach(pid => {
         const pState = gs.player_states ? gs.player_states[pid] : null;
         const isMe = S.me && pid === S.me.id;
         const isActive = !gameEnded && gs.player_turn === pid;
@@ -1696,7 +1707,7 @@ function renderOthers(game, gs, isReplay) {
     const othersEl = el('gbOthers');
     othersEl.replaceChildren();
 
-    const otherIds = (game.players || []).filter(pid => !S.me || pid !== S.me.id);
+    const otherIds = sortPlayersByTurnOrder((game.players || []).filter(pid => !S.me || pid !== S.me.id), gs);
     otherIds.forEach(pid => {
         const pState = gs.player_states ? gs.player_states[pid] : null;
         const sheet = buildOtherSheet(pid, pState, gs);
@@ -1931,7 +1942,7 @@ function renderUndoSection(game, isReplay) {
         const voteMap = S.pendingUndo.votes || {};
         const votesEl = document.createElement('div');
         votesEl.className = 'gb-undo-votes';
-        (game.players || []).forEach(pid => {
+        sortPlayersByTurnOrder(game.players, game.game_state).forEach(pid => {
             const v = voteMap[pid];
             const row = document.createElement('div');
             row.className = 'gb-undo-vote-row';
@@ -3670,6 +3681,8 @@ function renderActionBar(game, gs, isReplay) {
     const isMyTurn = !isReplay && S.me && gs.player_turn === S.me.id && game.status === 'STARTED';
     if (!isMyTurn) {
         bar.classList.add('hidden');
+        const matSlot = el('gbMatEndTurnSlot');
+        if (matSlot) matSlot.classList.add('hidden');
         return;
     }
     bar.classList.remove('hidden');
@@ -3765,6 +3778,7 @@ function renderActionBar(game, gs, isReplay) {
     }
 
     // End Turn button: show when main action is taken and free actions remain
+    const showEndTurn = mainTaken && myFreeActions.length > 0 && !takeInProgress;
     let endTurnBtn = el('gbActionEndTurn');
     if (!endTurnBtn) {
         endTurnBtn = document.createElement('button');
@@ -3773,13 +3787,36 @@ function renderActionBar(game, gs, isReplay) {
         endTurnBtn.textContent = 'End Turn';
         bar.appendChild(endTurnBtn);
     }
-    if (mainTaken && myFreeActions.length > 0 && !takeInProgress) {
+    if (showEndTurn) {
         endTurnBtn.classList.remove('hidden');
         endTurnBtn.disabled = false;
         endTurnBtn.onclick = () => doEndTurn(endTurnBtn);
     } else {
         endTurnBtn.classList.add('hidden');
         endTurnBtn.disabled = true;
+    }
+
+    // Mirror End Turn button into the player mat for easier access without scrolling.
+    const matSlot = el('gbMatEndTurnSlot');
+    if (matSlot) {
+        let matEndTurnBtn = el('gbMatEndTurn');
+        if (!matEndTurnBtn) {
+            matEndTurnBtn = document.createElement('button');
+            matEndTurnBtn.id = 'gbMatEndTurn';
+            matEndTurnBtn.className = 'gb-action-btn gb-action-end-turn gb-mat-end-turn';
+            matEndTurnBtn.textContent = 'End Turn';
+            matSlot.appendChild(matEndTurnBtn);
+        }
+        if (showEndTurn) {
+            matSlot.classList.remove('hidden');
+            matEndTurnBtn.classList.remove('hidden');
+            matEndTurnBtn.disabled = false;
+            matEndTurnBtn.onclick = () => doEndTurn(matEndTurnBtn);
+        } else {
+            matSlot.classList.add('hidden');
+            matEndTurnBtn.classList.add('hidden');
+            matEndTurnBtn.disabled = true;
+        }
     }
 }
 

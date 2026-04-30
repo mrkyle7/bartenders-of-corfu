@@ -1061,6 +1061,17 @@
     background: #0284c7;
 }
 
+.gb-mat-end-turn-slot {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+.gb-mat-end-turn-slot.hidden { display: none; }
+.gb-mat-end-turn {
+    padding: 10px 18px;
+    font-size: 0.95em;
+}
+
 .gb-store-card-actions {
     display: flex;
     gap: 4px;
