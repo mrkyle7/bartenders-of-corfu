@@ -42,4 +42,4 @@ A task is complete when:
 ## Subagents
 - `spec-reader` — reads allium specs and returns a precise rule briefing; invoke before implementing any game logic to avoid misreading the spec
 - `bdd-test-writer` — writes BDD scenarios and step definitions matching project style; invoke when adding test coverage for new behaviour
-- `ui-developer` — builds and modifies UI components; enforces the board-game interaction model (clickable elements, state at a glance, guided turn flow), mobile/desktop layout, and WCAG 2.1 AA; invoke for any task touching `static/`
+- `ui-developer` — builds and modifies UI components; enforces the board-game interaction model (clickable elements, state at a glance, guided turn flow), mobile/desktop layout, WCAG 2.1 AA, and the theming/contrast rules in `.claude/agents/ui-developer.md` — read that doc's "Theming and contrast" section before writing any CSS for `static/`. Two contrast contexts exist (light page chrome vs. dark `.gb-board-section`); the lobby panel lives on the dark board, so page-chrome tokens like `--theme-text-primary` cause dark-on-dark there.
