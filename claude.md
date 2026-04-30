@@ -16,6 +16,9 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 - API changes are non-breaking: add optional fields only, never remove or rename
 - UI: WCAG 2.1 AA; responsive ≥320 px mobile and ≥1280 px desktop; no raw API errors shown to users; all interactive elements have descriptive `aria-label` attributes
 
+## Working with the User
+- Push back when a request looks wrong for the domain. If the user asks for something that conflicts with how the game/UI is naturally structured (e.g. sorting players alphabetically when turn order is the obvious ordering, hiding a control that's needed mid-turn, removing a guardrail), ask a clarifying question before implementing. Cheap to ask, expensive to undo.
+
 ## Architecture
 - `/app` — FastAPI routes (`api.py`), business logic (`actions.py`, `gameManager.py`), domain models (`GameState.py`, `PlayerState.py`, `card.py`, `cocktails.py`)
 - `/static` — frontend assets
