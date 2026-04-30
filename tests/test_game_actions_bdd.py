@@ -766,6 +766,15 @@ def player_try_sell_cup(ctx, n, cup_index):
     player_sell_cup_no_specials(ctx, n, cup_index)
 
 
+@when(
+    parsers.parse(
+        "player {n:d} tries to take {spec} from the open display placing all in cup {cup_index:d}"
+    )
+)
+def player_try_take_open_to_cup(ctx, n, spec, cup_index):
+    player_take_open_to_cup(ctx, n, spec, cup_index)
+
+
 @when(parsers.parse("player {n:d} tries to drink cup {cup_index:d}"))
 def player_try_drink_cup(ctx, n, cup_index):
     player_drink_cup(ctx, n, cup_index)
@@ -1407,6 +1416,20 @@ def still_players_turn(ctx, n):
     assert gs["player_turn"] == pid, (
         f"Expected player {n} ({pid}) to still have the turn, "
         f"but player_turn is {gs['player_turn']}"
+    )
+
+
+@then(parsers.parse("player {n:d} has taken {count:d} ingredients so far this turn"))
+def player_taken_count_so_far(ctx, n, count):
+    _, pid = _player(ctx, n)
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    gs = game["game_state"]
+    assert gs["player_turn"] == pid, (
+        f"Expected player {n} to be the active player; got {gs['player_turn']}"
+    )
+    actual = gs.get("ingredients_taken_this_turn", 0)
+    assert actual == count, (
+        f"Expected {count} ingredients taken so far this turn; got {actual}"
     )
 
 

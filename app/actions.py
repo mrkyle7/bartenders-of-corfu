@@ -180,6 +180,26 @@ def _available_free_actions(ps: "PlayerState", used: list[str]) -> set[str]:
     return actions
 
 
+def _require_action_eligible(gs: GameState, player_id: UUID, action_type: str) -> None:
+    """Raise 409 if `action_type` is not currently permitted for the player.
+
+    Permitted iff the action is available as an unused free action, or the
+    player has not yet taken their main action this turn. Use this BEFORE
+    mutating state in multi-step actions (TakeIngredients, DrawFromBag),
+    where the eligibility check would otherwise only fire on the final batch.
+    """
+    ps = gs.player_states[player_id]
+    available_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+    if action_type in available_free:
+        return
+    if not gs.main_action_taken_this_turn:
+        return
+    raise GameException(
+        "You have already taken your main action this turn",
+        status_code=409,
+    )
+
+
 def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> bool:
     """Handle turn advancement after a turn action is performed.
 
@@ -425,6 +445,13 @@ def draw_from_bag(
             status_code=409,
         )
 
+    # Validate up front that take_ingredients is permitted (as a free action or
+    # the main action). Without this check, draw_from_bag would mutate state
+    # and the rejection would only fire later — when take_ingredients tried to
+    # finish the turn — leaving the game stuck mid-batch.
+    if gs.ingredients_taken_this_turn == 0:
+        _require_action_eligible(gs, player_id, "take_ingredients")
+
     take_count = ps.take_count
     already_taken = gs.ingredients_taken_this_turn
     remaining = take_count - already_taken
@@ -485,6 +512,13 @@ def take_ingredients(
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
+
+    # First batch of a take must pass the same eligibility check that other
+    # turn actions perform via _finish_turn_action. Doing it here prevents the
+    # batch from succeeding only to be rejected on a later batch's
+    # turn-completion path — which would leave the take half-done.
+    if gs.ingredients_taken_this_turn == 0 and not gs.bag_draw_pending:
+        _require_action_eligible(gs, player_id, "take_ingredients")
 
     take_count = ps.take_count
     already_taken = gs.ingredients_taken_this_turn
