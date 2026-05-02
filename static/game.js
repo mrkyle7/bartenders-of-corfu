@@ -2081,7 +2081,13 @@ function formatAction(move) {
     const a = move.action || {};
     switch (a.type) {
         case 'take_ingredients': return 'Took ingredients';
-        case 'sell_cup':         return `Sold cup ${(a.cup_index ?? '') + 1}`;
+        case 'sell_cup':         {
+            const sold = a.sold_cups;
+            if (Array.isArray(sold) && sold.length > 1) {
+                return `Sold cups ${sold.map(c => (c.cup_index ?? 0) + 1).join(' & ')}`;
+            }
+            return `Sold cup ${(a.cup_index ?? '') + 1}`;
+        }
         case 'drink_cup':        return `Drank cup ${(a.cup_index ?? '') + 1}`;
         case 'go_for_a_wee':    return 'Went for a wee';
         case 'claim_card':       return `Claimed ${a.card_name || 'a card'}`;
@@ -2170,12 +2176,22 @@ function _detailTakeIngredients(a) {
 }
 
 function _detailSellCup(a) {
-    const cupNum = (a.cup_index ?? 0) + 1;
-    const pts = a.points_earned ?? 0;
-    const specials = a.declared_specials || [];
     const f = document.createDocumentFragment();
-    f.appendChild(_detailRow(`Cup ${cupNum}:`, _ingBadges(a.ingredients)));
-    if (specials.length) f.appendChild(_detailRow('Specials:', _specialBadges(specials)));
+    const sold = Array.isArray(a.sold_cups) && a.sold_cups.length > 1 ? a.sold_cups : null;
+    if (sold) {
+        sold.forEach(c => {
+            const cupNum = (c.cup_index ?? 0) + 1;
+            f.appendChild(_detailRow(`Cup ${cupNum}:`, _ingBadges(c.ingredients)));
+            const specials = c.declared_specials || [];
+            if (specials.length) f.appendChild(_detailRow(`Cup ${cupNum} specials:`, _specialBadges(specials)));
+        });
+    } else {
+        const cupNum = (a.cup_index ?? 0) + 1;
+        const specials = a.declared_specials || [];
+        f.appendChild(_detailRow(`Cup ${cupNum}:`, _ingBadges(a.ingredients)));
+        if (specials.length) f.appendChild(_detailRow('Specials:', _specialBadges(specials)));
+    }
+    const pts = a.points_earned ?? 0;
     f.appendChild(_detailRow('Earned:', _frag(h('span', { className: 'gb-points-badge' }, `+${pts} pts`))));
     return f;
 }

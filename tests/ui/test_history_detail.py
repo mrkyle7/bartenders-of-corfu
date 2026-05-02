@@ -324,3 +324,83 @@ def test_sell_cup_detail_shows_points_badge(
         )
         detail.wait_for(state="visible", timeout=3000)
         assert detail.locator(".gb-detail-label").count() >= 1
+
+
+def test_sell_both_cups_history_shows_each_cup(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """When a sell_cup move includes a sold_cups array (sell_both_cups mode),
+    the history summary lists every cup index and the detail panel renders a
+    row for each cup with its own ingredients."""
+    _start_game(base_url, new_user["jwt"], other_user_and_jwt["jwt"], new_game)
+
+    fake_history = {
+        "moves": [
+            {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "turn_number": 0,
+                "move_number": 1,
+                "player_id": new_user["user"]["id"],
+                "action": {
+                    "type": "sell_cup",
+                    "cup_index": 0,
+                    "ingredients": ["WHISKEY", "COLA"],
+                    "declared_specials": [],
+                    "points_earned": 4,
+                    "sold_cups": [
+                        {
+                            "cup_index": 0,
+                            "ingredients": ["WHISKEY", "COLA"],
+                            "declared_specials": [],
+                            "points_earned": 2,
+                        },
+                        {
+                            "cup_index": 1,
+                            "ingredients": ["GIN", "TONIC"],
+                            "declared_specials": [],
+                            "points_earned": 2,
+                        },
+                    ],
+                },
+                "created_at": "2025-01-01T00:00:00Z",
+            }
+        ]
+    }
+
+    def handle_history(route):
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps(fake_history),
+        )
+
+    page.route(f"**/v1/games/{new_game}/history", handle_history)
+
+    page.goto(_game_url(base_url, new_game))
+    _wait_for_history_entry(page)
+
+    entry = page.locator(".gb-history-expandable").first
+    assert "Sold cups 1 & 2" in entry.inner_text()
+
+    entry.click()
+    detail = entry.locator(
+        "xpath=following-sibling::div[contains(@class,'gb-history-detail')]"
+    )
+    detail.wait_for(state="visible", timeout=3000)
+
+    # Both cup labels appear as separate detail rows
+    labels = [
+        el.inner_text()
+        for el in detail.locator(".gb-detail-label").element_handles()
+    ]
+    assert "Cup 1:" in labels
+    assert "Cup 2:" in labels
+
+    # Each cup's distinct ingredients are rendered
+    detail_text = detail.inner_text()
+    assert "Whiskey" in detail_text or "WHISKEY" in detail_text
+    assert "Gin" in detail_text or "GIN" in detail_text
+
+    # Combined points badge is shown once
+    points_badge = detail.locator(".gb-points-badge")
+    assert points_badge.count() == 1
+    assert "+4 pts" in points_badge.first.inner_text()
