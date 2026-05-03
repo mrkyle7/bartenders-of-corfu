@@ -190,7 +190,7 @@
 
         </div>
 
-        <!-- ===== BOTTOM PANEL (history / replay / undo) ===== -->
+        <!-- ===== BOTTOM PANEL (history / replay / modes) ===== -->
         <div class="gb-bottom-panel" role="complementary" aria-label="Game history">
             <div class="gb-bottom-tabs" role="tablist" aria-label="Bottom panel tabs">
                 <button class="gb-tab-btn active" role="tab" aria-selected="true"
@@ -203,11 +203,21 @@
                         onclick="switchTab('replay')">
                     Replay
                 </button>
+                <button class="gb-tab-btn hidden" role="tab" aria-selected="false"
+                        aria-controls="gbTabModes" id="gbTabBtnModes"
+                        onclick="switchTab('modes')">
+                    Active Modes
+                </button>
             </div>
 
             <div class="gb-tab-content active" id="gbTabHistory"
                  role="tabpanel" aria-labelledby="gbTabBtnHistory">
                 <div id="gbHistoryLog" aria-live="polite" aria-relevant="additions"></div>
+            </div>
+
+            <div class="gb-tab-content hidden" id="gbTabModes"
+                 role="tabpanel" aria-labelledby="gbTabBtnModes" hidden>
+                <div id="gbActiveModesList" class="gb-active-modes-list" aria-live="polite"></div>
             </div>
 
             <div class="gb-tab-content" id="gbTabReplay"

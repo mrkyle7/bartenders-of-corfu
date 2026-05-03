@@ -437,6 +437,34 @@
 
 .gb-tab-content.active { display: block; }
 
+/* ---------- Active modes tab list ----------
+   Lives in the bottom panel (light page-chrome surface), so it uses
+   --theme-text-primary and --theme-text-secondary. */
+.gb-active-modes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gb-active-mode-row {
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(var(--theme-accent-rgb), 0.08);
+    border: 1px solid rgba(var(--theme-accent-rgb), 0.25);
+}
+
+.gb-active-mode-label {
+    font-weight: 600;
+    color: var(--theme-text-primary);
+    font-size: 0.95rem;
+}
+
+.gb-active-mode-desc {
+    font-size: 0.85rem;
+    color: var(--theme-text-secondary);
+    margin-top: 2px;
+}
+
 /* ---------- Section headings ---------- */
 .gb-section-title {
     font-size: 0.78em;

@@ -1941,3 +1941,138 @@ def player_tries_sell_same_cup_twice(ctx, n, cup_index):
     )
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
+
+
+# ─── Generic mode-enabled started game fixture ────────────────────────────────
+
+
+def _started_game_with_modes(modes: list[str]) -> dict:
+    p1 = _unique("p1")
+    p2 = _unique("p2")
+    t1, id1 = _register(p1)
+    t2, id2 = _register(p2)
+    game_id = _new_game(t1)
+    _join(t2, game_id)
+    if modes:
+        resp = _client.patch(
+            f"/v1/games/{game_id}/modes",
+            json={"game_modes": modes},
+            cookies=_auth(t1),
+        )
+        assert resp.status_code == 200, resp.text
+    _start(t1, game_id)
+    game = _get_game(t1, game_id)
+    turn_owner_id = game["game_state"]["player_turn"]
+    if turn_owner_id == id1:
+        active_token, active_id = t1, id1
+        other_token, other_id = t2, id2
+    else:
+        active_token, active_id = t2, id2
+        other_token, other_id = t1, id1
+    return {
+        "game_id": game_id,
+        "p1_token": active_token,
+        "p1_id": active_id,
+        "p2_token": other_token,
+        "p2_id": other_id,
+        "host_token": t1,
+        "non_host_token": t2,
+        "last_resp": None,
+        "last_status": None,
+    }
+
+
+@given(
+    "a started game with 2 players and claim_card_free_action mode enabled",
+    target_fixture="ctx",
+)
+def started_game_claim_card_free_action():
+    return _started_game_with_modes(["claim_card_free_action"])
+
+
+@given(
+    "a started game with 2 players and reroll_specials_free_action mode enabled",
+    target_fixture="ctx",
+)
+def started_game_reroll_specials_free_action():
+    return _started_game_with_modes(["reroll_specials_free_action"])
+
+
+@given(
+    parsers.parse(
+        "player {n:d} has a take in progress with {count:d} ingredient already taken"
+    )
+)
+@given(
+    parsers.parse(
+        "player {n:d} has a take in progress with {count:d} ingredients already taken"
+    )
+)
+def player_take_in_progress(ctx, n, count):
+    def patch(gs):
+        gs.ingredients_taken_this_turn = count
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@when(parsers.parse('player {n:d} re-rolls "{special}"'))
+def player_rerolls_simple(ctx, n, special):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
+        json={"chosen_specials": [special]},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@then("the claim should be recorded as a free action")
+def claim_recorded_as_free(ctx):
+    assert ctx["last_status"] == 200, ctx["last_resp"].text
+    body = ctx["last_resp"].json()
+    assert body.get("is_free_action") is True, (
+        f"Expected is_free_action=True, got {body}"
+    )
+
+
+@then("the claim should be recorded as a main action")
+def claim_recorded_as_main(ctx):
+    assert ctx["last_status"] == 200, ctx["last_resp"].text
+    body = ctx["last_resp"].json()
+    assert body.get("is_free_action") is False, (
+        f"Expected is_free_action=False, got {body}"
+    )
+
+
+@then("the reroll should be recorded as a free action")
+def reroll_recorded_as_free(ctx):
+    assert ctx["last_status"] == 200, ctx["last_resp"].text
+    body = ctx["last_resp"].json()
+    assert body.get("is_free_action") is True, (
+        f"Expected is_free_action=True, got {body}"
+    )
+
+
+@then("the reroll should be recorded as a main action")
+def reroll_recorded_as_main(ctx):
+    assert ctx["last_status"] == 200, ctx["last_resp"].text
+    body = ctx["last_resp"].json()
+    assert body.get("is_free_action") is False, (
+        f"Expected is_free_action=False, got {body}"
+    )
+
+
+@then("the deck should not contain the Cocktail Shaker card")
+def deck_excludes_cocktail_shaker(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    deck = game["game_state"].get("deck", []) or []
+    rows = game["game_state"].get("card_rows", []) or []
+    all_cards = list(deck)
+    for r in rows:
+        all_cards.extend(r.get("cards", []))
+    names = [c.get("name") for c in all_cards]
+    assert "Cocktail Shaker" not in names, (
+        f"Cocktail Shaker should be removed; deck/rows contain: {names}"
+    )

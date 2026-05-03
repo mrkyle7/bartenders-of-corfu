@@ -17,6 +17,14 @@ class GameMode(str, Enum):
     """Optional rule variations selected in the lobby."""
 
     SELL_BOTH_CUPS = "sell_both_cups"
+    # ClaimCard is always available as a free additional action, regardless of
+    # whether the player holds the (non-existent) matching free-action card.
+    # Once-per-turn, mirroring FreeActionCard semantics.
+    CLAIM_CARD_FREE_ACTION = "claim_card_free_action"
+    # ReRollSpecials is always available as a free additional action. The
+    # FreeActionCard that grants this (Cocktail Shaker) is excluded from the
+    # deck when this mode is active.
+    REROLL_SPECIALS_FREE_ACTION = "reroll_specials_free_action"
 
 
 VALID_GAME_MODES: frozenset[str] = frozenset(m.value for m in GameMode)

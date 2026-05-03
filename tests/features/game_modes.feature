@@ -40,6 +40,8 @@ Feature: Game modes
   Scenario: Available game modes are advertised by the API
     When the available game modes are listed
     Then the list should include "sell_both_cups"
+    And the list should include "claim_card_free_action"
+    And the list should include "reroll_specials_free_action"
 
   # ── Sell both cups action ──────────────────────────────────────────────────
 
@@ -95,3 +97,58 @@ Feature: Game modes
     When player 1 sells both cups with no declared specials
     Then it should be player 2's turn
     And a move record should be created for the game
+
+  # ── Claim card free action mode ────────────────────────────────────────────
+
+  Scenario: Claim card is treated as a free action when claim_card_free_action mode is on
+    Given a started game with 2 players and claim_card_free_action mode enabled
+    And it is player 1's turn
+    And player 1's bladder has 1 VODKA spirit
+    And a store card is available in row 2
+    When player 1 claims that card
+    Then the request should succeed
+    And the claim should be recorded as a free action
+    And it should still be player 1's turn
+
+  Scenario: Claim card consumes the main action when claim_card_free_action mode is off
+    Given a started game with 2 players
+    And it is player 1's turn
+    And player 1's bladder has 1 VODKA spirit
+    And a store card is available in row 2
+    When player 1 claims that card
+    Then the request should succeed
+    And the claim should be recorded as a main action
+    And it should be player 2's turn
+
+  Scenario: Partial take blocks a free claim under claim_card_free_action mode
+    Given a started game with 2 players and claim_card_free_action mode enabled
+    And it is player 1's turn
+    And player 1's bladder has 1 VODKA spirit
+    And a store card is available in row 2
+    And player 1 has a take in progress with 1 ingredient already taken
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 409 error
+
+  # ── Reroll specials free action mode ───────────────────────────────────────
+
+  Scenario: Re-roll specials is treated as a free action when reroll_specials_free_action mode is on
+    Given a started game with 2 players and reroll_specials_free_action mode enabled
+    And it is player 1's turn
+    And player 1 has "lemon" on their player mat
+    When player 1 re-rolls "lemon"
+    Then the request should succeed
+    And the reroll should be recorded as a free action
+    And it should still be player 1's turn
+
+  Scenario: Re-roll specials consumes the main action when reroll_specials_free_action mode is off
+    Given a started game with 2 players
+    And it is player 1's turn
+    And player 1 has "lemon" on their player mat
+    When player 1 re-rolls "lemon"
+    Then the request should succeed
+    And the reroll should be recorded as a main action
+    And it should be player 2's turn
+
+  Scenario: Cocktail Shaker free-action card is excluded from the deck under reroll mode
+    Given a started game with 2 players and reroll_specials_free_action mode enabled
+    Then the deck should not contain the Cocktail Shaker card

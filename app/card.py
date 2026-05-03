@@ -112,13 +112,19 @@ class CardRow:
         )
 
 
-def build_deck() -> list[Card]:
+def build_deck(game_modes: list[str] | None = None) -> list[Card]:
     """Build the 25-card deck per cards.allium spec (unshuffled).
 
     5 KaraokeCards (one per spirit), 5 StoreCards (one per spirit),
     4 RefresherCards (one per mixer), 2 CupDoublerCards,
     5 SpecialistCards (one per spirit), 4 FreeActionCards (RUM, WHISKEY, VODKA, GIN).
+
+    When the ``reroll_specials_free_action`` game mode is enabled, the
+    Cocktail Shaker (WHISKEY → reroll_specials) free-action card is excluded;
+    the deck shrinks to 24 cards.
     """
+    modes = set(game_modes or [])
+    skip_reroll_card = "reroll_specials_free_action" in modes
     cards: list[Card] = []
 
     # 5 KaraokeCards — one per spirit type
@@ -181,6 +187,8 @@ def build_deck() -> list[Card]:
         ("Entrepreneur", "VODKA"),
         ("Weak Bladder", "GIN"),
     ]:
+        if skip_reroll_card and name == "Cocktail Shaker":
+            continue
         cards.append(
             Card(
                 id=str(uuid4()), card_type="free_action", name=name, spirit_type=spirit

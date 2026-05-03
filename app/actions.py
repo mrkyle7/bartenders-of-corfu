@@ -167,8 +167,18 @@ _FREE_ACTION_TYPE_MAP: dict[str, str] = {
     "GIN": "go_for_a_wee",
 }
 
+# Game modes that turn a specific action type into a free additional action,
+# regardless of whether the player holds the matching FreeActionCard. Each
+# such free action remains once-per-turn, mirroring FreeActionCard semantics.
+_MODE_FREE_ACTION_MAP: dict[str, str] = {
+    "claim_card_free_action": "claim_card",
+    "reroll_specials_free_action": "reroll_specials",
+}
 
-def _available_free_actions(ps: "PlayerState", used: list[str]) -> set[str]:
+
+def _available_free_actions(
+    gs: GameState, ps: "PlayerState", used: list[str]
+) -> set[str]:
     """Return the set of free action types available to the player this turn."""
     actions = set()
     for card_dict in ps.cards:
@@ -177,6 +187,9 @@ def _available_free_actions(ps: "PlayerState", used: list[str]) -> set[str]:
             action_type = _FREE_ACTION_TYPE_MAP.get(spirit) if spirit else None
             if action_type and action_type not in used:
                 actions.add(action_type)
+    for mode, action_type in _MODE_FREE_ACTION_MAP.items():
+        if gs.has_mode(mode) and action_type not in used:
+            actions.add(action_type)
     return actions
 
 
@@ -189,7 +202,7 @@ def _require_action_eligible(gs: GameState, player_id: UUID, action_type: str) -
     where the eligibility check would otherwise only fire on the final batch.
     """
     ps = gs.player_states[player_id]
-    available_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+    available_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
     if action_type in available_free:
         return
     if not gs.main_action_taken_this_turn:
@@ -211,7 +224,7 @@ def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> boo
     this isn't an available free action.
     """
     ps = gs.player_states[player_id]
-    available_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+    available_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
 
     if action_type in available_free:
         # Use as free action
@@ -229,7 +242,7 @@ def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> boo
 
     # Advance turn only when main action is done AND no unused free actions remain
     if gs.main_action_taken_this_turn:
-        remaining_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+        remaining_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
         if len(remaining_free) == 0:
             gs.turn_number += 1
             _advance_turn(gs)
@@ -1311,7 +1324,7 @@ def end_turn(
             "You must take an action before ending your turn", status_code=409
         )
 
-    remaining_free = _available_free_actions(ps, gs.free_actions_used_this_turn)
+    remaining_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
     if len(remaining_free) == 0:
         raise GameException(
             "Your turn is already complete — no free actions to forfeit",
