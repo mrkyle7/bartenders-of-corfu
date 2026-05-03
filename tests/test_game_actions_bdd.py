@@ -2032,8 +2032,9 @@ def player_rerolls_simple(ctx, n, special):
 def claim_recorded_as_free(ctx):
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     body = ctx["last_resp"].json()
-    assert body.get("is_free_action") is True, (
-        f"Expected is_free_action=True, got {body}"
+    move = body.get("move", {})
+    assert move.get("is_free_action") is True, (
+        f"Expected move.is_free_action=True, got {body}"
     )
 
 
@@ -2041,8 +2042,9 @@ def claim_recorded_as_free(ctx):
 def claim_recorded_as_main(ctx):
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     body = ctx["last_resp"].json()
-    assert body.get("is_free_action") is False, (
-        f"Expected is_free_action=False, got {body}"
+    move = body.get("move", {})
+    assert move.get("is_free_action") is False, (
+        f"Expected move.is_free_action=False, got {body}"
     )
 
 
@@ -2050,8 +2052,9 @@ def claim_recorded_as_main(ctx):
 def reroll_recorded_as_free(ctx):
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     body = ctx["last_resp"].json()
-    assert body.get("is_free_action") is True, (
-        f"Expected is_free_action=True, got {body}"
+    move = body.get("move", {})
+    assert move.get("is_free_action") is True, (
+        f"Expected move.is_free_action=True, got {body}"
     )
 
 
@@ -2059,8 +2062,9 @@ def reroll_recorded_as_free(ctx):
 def reroll_recorded_as_main(ctx):
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     body = ctx["last_resp"].json()
-    assert body.get("is_free_action") is False, (
-        f"Expected is_free_action=False, got {body}"
+    move = body.get("move", {})
+    assert move.get("is_free_action") is False, (
+        f"Expected move.is_free_action=False, got {body}"
     )
 
 
