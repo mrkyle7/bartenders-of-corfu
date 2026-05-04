@@ -125,6 +125,26 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
         _add_go_for_a_wee(ps, result)
         _add_claim_card(gs, ps, result)
         _add_refresh_card_row(gs, ps, result)
+        _add_reroll_specials(gs, ps, result)
+
+    # Mark claim_card / reroll_specials as free when the relevant mode is on
+    # and the matching free action hasn't been used yet this turn. Doing this
+    # after collection keeps each _add_* helper focused on legality.
+    used_free = set(gs.free_actions_used_this_turn or [])
+    if (
+        gs.has_mode(GameMode.CLAIM_CARD_FREE_ACTION.value)
+        and "claim_card" not in used_free
+    ):
+        for a in result:
+            if a.action_type == "claim_card":
+                a.is_free = True
+    if (
+        gs.has_mode(GameMode.REROLL_SPECIALS_FREE_ACTION.value)
+        and "reroll_specials" not in used_free
+    ):
+        for a in result:
+            if a.action_type == "reroll_specials":
+                a.is_free = True
 
     return result
 
@@ -420,3 +440,24 @@ def _add_refresh_card_row(gs: GameState, ps: PlayerState, result: list[Action]):
                     description=f"Refresh card row {row.position}",
                 )
             )
+
+
+def _add_reroll_specials(gs: GameState, ps: PlayerState, result: list[Action]):
+    """Surface reroll_specials as a single "reroll all" action.
+
+    This action only registers as a turn action when the player holds at least
+    one special. Bots only need a single representative option — picking which
+    specials to re-roll is left up to the strategy. Re-rolling all of them is
+    the most common useful case, especially under the mode that makes this
+    free.
+    """
+    if not ps.special_ingredients:
+        return
+    chosen = list(ps.special_ingredients)
+    result.append(
+        Action(
+            action_type="reroll_specials",
+            params={"chosen_specials": chosen},
+            description=f"Re-roll all {len(chosen)} special(s)",
+        )
+    )

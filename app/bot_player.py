@@ -184,6 +184,8 @@ def _execute_action(
         )
     elif t == "refresh_card_row":
         game_manager.refresh_card_row(game, player_id, p["row_position"])
+    elif t == "reroll_specials":
+        game_manager.reroll_specials(game, player_id, p["chosen_specials"])
     else:
         raise GameException(f"Unknown action type: {t}", status_code=500)
 

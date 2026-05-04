@@ -95,12 +95,17 @@ export function flash(elId, cssClass, msg, durationMs = 2500) {
 }
 
 export function switchTab(name) {
-    ['history','replay'].forEach(t => {
+    ['history','replay','modes'].forEach(t => {
         const btn = el(`gbTabBtn${t.charAt(0).toUpperCase()+t.slice(1)}`);
         const pane = el(`gbTab${t.charAt(0).toUpperCase()+t.slice(1)}`);
         const active = t === name;
         if (btn)  { btn.classList.toggle('active', active); btn.setAttribute('aria-selected', String(active)); }
-        if (pane) { pane.classList.toggle('active', active); }
+        if (pane) {
+            pane.classList.toggle('active', active);
+            // Use the hidden attribute alongside the .active class to keep
+            // ARIA tabpanel semantics correct (hidden=true on inactive panes).
+            pane.hidden = !active;
+        }
     });
 }
 

@@ -130,7 +130,7 @@ class GameState:
         first_player = turn_order[0]
 
         # Build card deck and deal 3 rows of 3 cards
-        deck = build_deck()
+        deck = build_deck(game_modes)
         card_rows, remaining_deck = deal_initial_rows(deck)
 
         return cls(

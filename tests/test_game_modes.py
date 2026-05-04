@@ -45,6 +45,15 @@ def test_normalise_modes_handles_none_and_empty():
 
 def test_game_mode_enum_value_matches_string():
     assert GameMode.SELL_BOTH_CUPS.value == "sell_both_cups"
+    assert GameMode.CLAIM_CARD_FREE_ACTION.value == "claim_card_free_action"
+    assert GameMode.REROLL_SPECIALS_FREE_ACTION.value == "reroll_specials_free_action"
+
+
+def test_normalise_modes_accepts_new_modes():
+    assert normalise_modes(["claim_card_free_action"]) == ["claim_card_free_action"]
+    assert normalise_modes(["reroll_specials_free_action"]) == [
+        "reroll_specials_free_action"
+    ]
 
 
 # ─── GameState serialisation ─────────────────────────────────────────────────
@@ -202,3 +211,241 @@ def test_sell_cup_rejects_same_special_on_both_cups():
             additional_cups=[{"cup_index": 1, "declared_specials": ["sugar"]}],
         )
     assert exc.value.status_code == 400
+
+
+# ─── claim_card_free_action mode ─────────────────────────────────────────────
+
+from app.actions import claim_card, reroll_specials  # noqa: E402
+from app.card import Card, CardRow, build_deck  # noqa: E402
+
+
+def _state_with_card_in_row(modes: list[str], card: Card) -> GameState:
+    gs = _two_player_state(modes)
+    gs.card_rows = [
+        CardRow(position=1, cards=[]),
+        CardRow(position=2, cards=[card]),
+        CardRow(position=3, cards=[]),
+    ]
+    return gs
+
+
+def test_claim_card_uses_free_slot_when_mode_on():
+    """With claim_card_free_action enabled, a claim doesn't burn the main action."""
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row(["claim_card_free_action"], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA]  # 1 needed for store
+
+    new_state, payload = claim_card(gs, pid, "c1")
+
+    assert payload["is_free_action"] is True
+    assert new_state.main_action_taken_this_turn is False
+    assert "claim_card" in new_state.free_actions_used_this_turn
+    # Turn does not advance because the player still has their main action
+    assert new_state.player_turn == pid
+
+
+def test_claim_card_is_normal_main_action_without_mode():
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row([], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA]
+
+    new_state, payload = claim_card(gs, pid, "c1")
+
+    assert payload["is_free_action"] is False
+    # No free actions available, so turn advances
+    assert new_state.player_turn != pid
+
+
+def test_claim_card_free_only_once_per_turn():
+    """Second claim same turn falls through to main action when the free slot is spent."""
+    c1 = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    c2 = Card(id="c2", card_type="store", name="Rum Store", spirit_type="RUM")
+    gs = _two_player_state(["claim_card_free_action"])
+    gs.card_rows = [
+        CardRow(position=1, cards=[]),
+        CardRow(position=2, cards=[c1, c2]),
+        CardRow(position=3, cards=[]),
+    ]
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA, Ingredient.RUM]
+
+    state_after_first, p1 = claim_card(gs, pid, "c1")
+    assert p1["is_free_action"] is True
+    state_after_second, p2 = claim_card(state_after_first, pid, "c2")
+    assert p2["is_free_action"] is False  # used as main action this time
+    # Turn now advances — main taken AND no remaining free actions.
+    assert state_after_second.player_turn != pid
+
+
+def test_claim_card_blocked_mid_take_even_with_mode():
+    """Partial-take in progress must still block ClaimCard (mode does not lift this)."""
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row(["claim_card_free_action"], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA]
+    gs.ingredients_taken_this_turn = 1  # mid-batch
+
+    with pytest.raises(GameException) as exc:
+        claim_card(gs, pid, "c1")
+    assert exc.value.status_code == 409
+
+
+def test_claim_card_blocked_after_main_action_when_mode_off():
+    """Without the mode, after main is taken claim_card must be rejected."""
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row([], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA]
+    gs.main_action_taken_this_turn = True  # already taken
+
+    with pytest.raises(GameException) as exc:
+        claim_card(gs, pid, "c1")
+    assert exc.value.status_code == 409
+
+
+def test_claim_card_after_main_action_allowed_when_mode_on():
+    """With the mode, claim_card is still allowed after the main action — as free."""
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row(["claim_card_free_action"], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA]
+    gs.main_action_taken_this_turn = True  # main already taken
+
+    new_state, payload = claim_card(gs, pid, "c1")
+    assert payload["is_free_action"] is True
+    # Main taken AND free action used → turn now advances
+    assert new_state.player_turn != pid
+
+
+# ─── reroll_specials_free_action mode ────────────────────────────────────────
+
+
+def test_reroll_specials_uses_free_slot_when_mode_on():
+    gs = _two_player_state(["reroll_specials_free_action"])
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.special_ingredients = ["sugar", "lemon"]
+
+    new_state, payload = reroll_specials(gs, pid, ["sugar"])
+    assert payload["is_free_action"] is True
+    assert new_state.main_action_taken_this_turn is False
+    assert "reroll_specials" in new_state.free_actions_used_this_turn
+    assert new_state.player_turn == pid
+
+
+def test_reroll_specials_main_action_without_mode():
+    gs = _two_player_state([])
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.special_ingredients = ["sugar"]
+
+    new_state, payload = reroll_specials(gs, pid, ["sugar"])
+    assert payload["is_free_action"] is False
+    # Turn advances because no free actions remain
+    assert new_state.player_turn != pid
+
+
+def test_reroll_specials_blocked_mid_take_even_with_mode():
+    gs = _two_player_state(["reroll_specials_free_action"])
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.special_ingredients = ["sugar"]
+    gs.ingredients_taken_this_turn = 1  # mid-batch
+
+    with pytest.raises(GameException) as exc:
+        reroll_specials(gs, pid, ["sugar"])
+    assert exc.value.status_code == 409
+
+
+# ─── Deck composition mode-driven changes ───────────────────────────────────
+
+
+def _has_card_named(deck: list[Card], name: str) -> bool:
+    return any(c.name == name for c in deck)
+
+
+def test_build_deck_includes_cocktail_shaker_by_default():
+    deck = build_deck()
+    assert _has_card_named(deck, "Cocktail Shaker")
+    assert len(deck) == 25
+
+
+def test_build_deck_excludes_cocktail_shaker_when_reroll_mode_on():
+    deck = build_deck(["reroll_specials_free_action"])
+    assert not _has_card_named(deck, "Cocktail Shaker")
+    assert len(deck) == 24
+    # Other free-action cards still present
+    assert _has_card_named(deck, "Greedy Bartender")
+    assert _has_card_named(deck, "Entrepreneur")
+    assert _has_card_named(deck, "Weak Bladder")
+
+
+def test_build_deck_unchanged_for_claim_card_mode():
+    """The claim_card_free_action mode does not alter the deck."""
+    deck = build_deck(["claim_card_free_action"])
+    assert len(deck) == 25
+    assert _has_card_named(deck, "Cocktail Shaker")
+
+
+# ─── valid_actions surfaces mode-driven free actions ─────────────────────────
+
+
+def test_valid_actions_marks_claim_as_free_under_mode():
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row(["claim_card_free_action"], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA] * 3  # affordable
+
+    actions = get_valid_actions(gs, pid)
+    claims = [a for a in actions if a.action_type == "claim_card"]
+    assert claims, "Expected claim_card to surface"
+    assert all(a.is_free for a in claims), (
+        "claim_card should be marked is_free under mode"
+    )
+
+
+def test_valid_actions_does_not_mark_claim_as_free_without_mode():
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row([], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA] * 3
+
+    actions = get_valid_actions(gs, pid)
+    claims = [a for a in actions if a.action_type == "claim_card"]
+    assert claims and all(not a.is_free for a in claims)
+
+
+def test_valid_actions_marks_reroll_as_free_under_mode():
+    gs = _two_player_state(["reroll_specials_free_action"])
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.special_ingredients = ["sugar"]
+
+    actions = get_valid_actions(gs, pid)
+    rerolls = [a for a in actions if a.action_type == "reroll_specials"]
+    assert rerolls, "Expected reroll_specials to surface"
+    assert all(a.is_free for a in rerolls)
+
+
+def test_valid_actions_reroll_not_marked_free_after_used():
+    gs = _two_player_state(["reroll_specials_free_action"])
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.special_ingredients = ["sugar"]
+    gs.free_actions_used_this_turn = ["reroll_specials"]
+
+    actions = get_valid_actions(gs, pid)
+    rerolls = [a for a in actions if a.action_type == "reroll_specials"]
+    if rerolls:
+        # Once-per-turn semantics: not free anymore
+        assert all(not a.is_free for a in rerolls)

@@ -8,13 +8,15 @@
 --   ApplyDrunkModifier — Refresher cards modify drunk calculation
 --   SellCup           — CupDoubler and Specialist cards modify points calculation
 --
--- Deck composition (25 cards total):
+-- Deck composition (25 cards total — see GameModes below for mode-conditional changes):
 --   5 × KaraokeCard     (one per spirit type)
 --   5 × StoreCard       (one per spirit type)
 --   4 × RefresherCard   (one per mixer type)
 --   2 × CupDoublerCard  (Bendy Straw, Cocktail Umbrella)
 --   5 × SpecialistCard  (one per spirit type)
 --   4 × FreeActionCard  (one each for RUM, WHISKEY, VODKA, GIN)
+-- When the reroll_specials_free_action mode is enabled, the Cocktail Shaker
+-- (WHISKEY → reroll_specials) FreeActionCard is excluded; deck shrinks to 24.
 
 use "./game.allium" as game
 
@@ -196,20 +198,22 @@ entity DiscardPile {
 
 -- ─── Setup ────────────────────────────────────────────────────────────────────
 -- 3 random karaoke cards are placed in row 1 (the top row).
--- The remaining 18 cards (2 karaoke + 16 non-karaoke) are shuffled together;
--- 3 are dealt to row 2, 3 to row 3, and the remaining 12 form the draw deck.
+-- The remaining cards (2 karaoke + the rest) are shuffled together;
+-- 3 are dealt to row 2, 3 to row 3, and the rest form the draw deck.
+-- Without modes the deck is 25 cards → 16 form the draw deck after row 2/3.
+-- With reroll_specials_free_action enabled the deck is 24 → 15 form the draw deck.
 
 rule SetupCardRows {
     when: GameStarted()
     let all_karaoke  = deck where kind = Karaoke          -- exactly 5 cards
     let karaoke_row_cards = random 3 from all_karaoke
-    let remaining_18 = shuffle(deck - karaoke_row_cards)  -- 2 karaoke + 16 others
-    let row2_cards   = first 3 from remaining_18
-    let row3_cards   = next 3 from remaining_18 (after row2_cards)
+    let remaining_after_row1 = shuffle(deck - karaoke_row_cards)
+    let row2_cards   = first 3 from remaining_after_row1
+    let row3_cards   = next 3 from remaining_after_row1 (after row2_cards)
     ensures: game/CardRow.created(position: 1, cards: karaoke_row_cards)
     ensures: game/CardRow.created(position: 2, cards: row2_cards)
     ensures: game/CardRow.created(position: 3, cards: row3_cards)
-    ensures: deck = remaining_18 - row2_cards - row3_cards   -- 12 cards remain
+    ensures: deck = remaining_after_row1 - row2_cards - row3_cards
     ensures: DiscardPile.created(board: board, cards: [])
 }
 
@@ -370,7 +374,7 @@ rule ReRollSpecials {
         -- "nothing" → the special is lost; nothing is returned to the bag.
 }
 
-guarantee: ReRollSpecials consumes the player's one action for the turn (unless used as a free action)
+guarantee: ReRollSpecials consumes the player's one action for the turn unless used as a free action — either via the Cocktail Shaker FreeActionCard or via the reroll_specials_free_action GameMode
 guarantee: no ingredients are added to or removed from the bag during ReRollSpecials
 guarantee: "nothing" results produce no new special — the player simply loses that special
 guarantee: the player may re-roll any number of their specials (1 to all) in a single action
@@ -394,6 +398,12 @@ rule FreeActionTurnLogic {
     --      → perform the action as a free action (does not set main_action_taken)
     --      → mark the free action type as used in free_actions_used_this_turn
     --
+    --    Or if the action type is granted as a free action by an enabled
+    --    GameMode (claim_card_free_action → ClaimCard,
+    --    reroll_specials_free_action → ReRollSpecials) AND that free action
+    --    has not been used this turn:
+    --      → same treatment as branch 1 above
+    --
     -- 2. Otherwise, if main_action_taken is false:
     --      → perform the action as the main action
     --      → set main_action_taken = true
@@ -408,6 +418,36 @@ rule FreeActionTurnLogic {
     --      → the turn stays with the current player
     requires: true  -- applied inline in each action handler
 }
+
+-- ─── Game modes ──────────────────────────────────────────────────────────────
+-- Optional rule variations selected by the host in the lobby. Modes are locked
+-- once the game starts and travel with the game state.
+
+amendment game/BoardState {
+    -- Enabled mode keys (empty list under standard rules). Validated against
+    -- the GameMode enum below.
+    game_modes: List<String> = []
+}
+
+enum GameMode {
+    sell_both_cups
+        -- SellCup may sell both cups in one main action.
+    claim_card_free_action
+        -- ClaimCard is always treated as a free additional action (once per
+        -- turn, mirroring FreeActionCard semantics). No FreeActionCard exists
+        -- for ClaimCard, so deck composition is unchanged.
+    reroll_specials_free_action
+        -- ReRollSpecials is always treated as a free additional action (once
+        -- per turn). The Cocktail Shaker FreeActionCard (WHISKEY →
+        -- reroll_specials) is excluded from the deck, since it would otherwise
+        -- be redundant — total deck size becomes 24.
+}
+
+guarantee: game_modes is set in the lobby and locked once the game starts
+guarantee: claim_card_free_action grants ClaimCard as a free action at most once per turn
+guarantee: reroll_specials_free_action grants ReRollSpecials as a free action at most once per turn
+guarantee: when reroll_specials_free_action is enabled, the Cocktail Shaker FreeActionCard is not present in the deck
+guarantee: a partial TakeIngredients batch still blocks ClaimCard and ReRollSpecials regardless of mode (the player must finish or end the take first)
 
 rule EndTurn {
     -- A player may explicitly end their turn, forfeiting any unused free actions.

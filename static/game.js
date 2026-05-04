@@ -321,6 +321,44 @@ function renderAll(game, replayState = null) {
 
     // Render action bar
     renderActionBar(game, gs, isReplay);
+
+    // Surface enabled modes as a tab at the bottom of the game UI
+    renderActiveModesTab(game, gs);
+}
+
+function renderActiveModesTab(game, gs) {
+    const tabBtn = el('gbTabBtnModes');
+    const list = el('gbActiveModesList');
+    if (!tabBtn || !list) return;
+    const enabled = (gs && gs.game_modes) || [];
+    if (enabled.length === 0) {
+        // No modes — hide tab entirely. If currently selected, fall back to history.
+        tabBtn.classList.add('hidden');
+        if (tabBtn.classList.contains('active')) {
+            switchTab('history');
+        }
+        list.replaceChildren();
+        return;
+    }
+
+    tabBtn.classList.remove('hidden');
+    list.replaceChildren();
+    enabled.forEach(modeKey => {
+        const info = GAME_MODE_INFO[modeKey] || { label: modeKey, description: '' };
+        const row = document.createElement('div');
+        row.className = 'gb-active-mode-row';
+        const label = document.createElement('div');
+        label.className = 'gb-active-mode-label';
+        label.textContent = info.label;
+        row.appendChild(label);
+        if (info.description) {
+            const desc = document.createElement('div');
+            desc.className = 'gb-active-mode-desc';
+            desc.textContent = info.description;
+            row.appendChild(desc);
+        }
+        list.appendChild(row);
+    });
 }
 
 function renderAllStats(game, gs) {
@@ -533,6 +571,14 @@ const GAME_MODE_INFO = {
     sell_both_cups: {
         label: 'Sell both cups',
         description: 'Your sell action can sell both cups in one go.',
+    },
+    claim_card_free_action: {
+        label: 'Free claim card',
+        description: 'Claim Card is always a free additional action (once per turn).',
+    },
+    reroll_specials_free_action: {
+        label: 'Free re-roll specials',
+        description: 'Re-roll Specials is always a free additional action (once per turn). The Cocktail Shaker free-action card is removed from the deck.',
     },
 };
 
@@ -3776,10 +3822,18 @@ function renderActionBar(game, gs, isReplay) {
     // only matching free action types should be enabled (plus End Turn).
     const mainTaken = !!gs.main_action_taken_this_turn;
     const freeUsed = gs.free_actions_used_this_turn || [];
+    const enabledModes = (gs && gs.game_modes) || [];
     const myFreeActions = (myState.cards || [])
         .filter(c => c.card_type === 'free_action' && c.free_action_type)
         .map(c => c.free_action_type)
         .filter(a => !freeUsed.includes(a));
+    // Mode-driven free actions: same once-per-turn semantics as FreeActionCards
+    if (enabledModes.includes('claim_card_free_action') && !freeUsed.includes('claim_card')) {
+        myFreeActions.push('claim_card');
+    }
+    if (enabledModes.includes('reroll_specials_free_action') && !freeUsed.includes('reroll_specials')) {
+        myFreeActions.push('reroll_specials');
+    }
 
     if (mainTaken && !takeInProgress) {
         // Only free actions are available; disable non-matching actions
@@ -3788,8 +3842,7 @@ function renderActionBar(game, gs, isReplay) {
         // drink_cup has no free action card, always disabled after main action
         drinkBtn.disabled = true;
         if (!myFreeActions.includes('go_for_a_wee')) weeBtn.disabled = true;
-        // claim_card has no free action card
-        claimBtn.disabled = true;
+        if (!myFreeActions.includes('claim_card')) claimBtn.disabled = true;
         if (!myFreeActions.includes('reroll_specials')) rerollBtn.disabled = true;
     }
 
