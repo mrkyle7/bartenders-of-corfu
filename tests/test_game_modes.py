@@ -449,3 +449,74 @@ def test_valid_actions_reroll_not_marked_free_after_used():
     if rerolls:
         # Once-per-turn semantics: not free anymore
         assert all(not a.is_free for a in rerolls)
+
+
+# ─── valid_actions filters non-free actions when main is taken ────────────────
+
+
+def test_valid_actions_filters_non_free_after_main_taken():
+    """After the main action is taken, only free actions remain legal.
+
+    The UI uses this to grey out unavailable buttons after the player has
+    used their main slot. Without this filter the action bar shows every
+    turn action as enabled even though the backend would 409 on submission.
+    """
+    card = Card(id="c1", card_type="store", name="Vodka Store", spirit_type="VODKA")
+    gs = _state_with_card_in_row(["claim_card_free_action"], card)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.bladder = [Ingredient.VODKA] * 3
+    ps.special_ingredients = ["sugar"]
+    ps.cups[0].ingredients = [Ingredient.VODKA, Ingredient.COLA]
+    gs.main_action_taken_this_turn = True
+
+    actions = get_valid_actions(gs, pid)
+    types = {a.action_type for a in actions}
+    # claim_card is free under the mode, so it stays.
+    assert "claim_card" in types
+    assert all(a.is_free for a in actions if a.action_type == "claim_card")
+    # Sell, drink, and other non-free turn actions should now be filtered out.
+    for non_free in ("sell_cup", "drink_cup", "go_for_a_wee", "take_ingredients"):
+        assert non_free not in types, (
+            f"{non_free} should be filtered when main is already taken"
+        )
+
+
+def test_valid_actions_keeps_free_card_action_after_main_taken():
+    """A FreeActionCard turns its action_type free for the turn — the action
+    must remain in the valid_actions output even after the main action."""
+    gs = _two_player_state(None)
+    pid = gs.player_turn
+    ps = gs.player_states[pid]
+    ps.special_ingredients = ["sugar"]
+    # Equivalent of holding the WHISKEY ("Cocktail Shaker") FreeActionCard.
+    ps.cards.append(
+        {
+            "id": "fa1",
+            "card_type": "free_action",
+            "name": "Cocktail Shaker",
+            "spirit_type": "WHISKEY",
+        }
+    )
+    gs.main_action_taken_this_turn = True
+
+    actions = get_valid_actions(gs, pid)
+    rerolls = [a for a in actions if a.action_type == "reroll_specials"]
+    assert rerolls, "reroll_specials should remain available via FreeActionCard"
+    assert all(a.is_free for a in rerolls)
+
+
+def test_valid_actions_mid_take_unaffected_by_main_taken_filter():
+    """A multi-batch take in progress must still be completable even if the
+    backend later sets main_action_taken — filtering must short-circuit on
+    take-in-progress so the player can finish their batch."""
+    gs = _two_player_state(None)
+    pid = gs.player_turn
+    # Simulate first batch already drew an ingredient: take is in progress.
+    gs.ingredients_taken_this_turn = 1
+    # And, as a paranoia case, pretend main was somehow flipped on.
+    gs.main_action_taken_this_turn = True
+
+    actions = get_valid_actions(gs, pid)
+    types = {a.action_type for a in actions}
+    assert "take_ingredients" in types

@@ -28,6 +28,15 @@ _MIXER_MAP: dict[str, Ingredient] = {
     "CRANBERRY": Ingredient.CRANBERRY,
 }
 
+# Mirrors _FREE_ACTION_TYPE_MAP in app/actions.py. Held FreeActionCards turn
+# their spirit's matching action into a once-per-turn free action.
+_CARD_FREE_ACTION_MAP: dict[str, str] = {
+    "RUM": "take_ingredients",
+    "WHISKEY": "reroll_specials",
+    "VODKA": "sell_cup",
+    "GIN": "go_for_a_wee",
+}
+
 
 @dataclass
 class Action:
@@ -145,6 +154,31 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
         for a in result:
             if a.action_type == "reroll_specials":
                 a.is_free = True
+
+    # FreeActionCards held by the player turn matching turn actions into free
+    # actions (RUM→take_ingredients, VODKA→sell_cup, WHISKEY→reroll_specials,
+    # GIN→go_for_a_wee), once per turn. Mark them so callers — UI and bots —
+    # can route them through the free-action slot before the main action.
+    card_free_types: set[str] = set()
+    for cd in ps.cards:
+        if cd.get("card_type") != "free_action":
+            continue
+        spirit = cd.get("spirit_type")
+        action_type = _CARD_FREE_ACTION_MAP.get(spirit) if spirit else None
+        if action_type and action_type not in used_free:
+            card_free_types.add(action_type)
+    if card_free_types:
+        for a in result:
+            if a.action_type in card_free_types:
+                a.is_free = True
+
+    # Once the main action has been taken, only free actions are legal — any
+    # non-free turn action would 409 if attempted. Filter them out so the UI
+    # reflects the real availability rather than greyless "active" buttons.
+    # Mid-take is preserved by the `tip` short-circuit above (continuing a
+    # batch doesn't re-consume the main action).
+    if gs.main_action_taken_this_turn and not tip:
+        result = [a for a in result if a.is_free]
 
     return result
 

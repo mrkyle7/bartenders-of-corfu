@@ -3956,6 +3956,74 @@ function renderActionBar(game, gs, isReplay) {
             matEndTurnBtn.disabled = true;
         }
     }
+
+    // Available-actions panel on the player mat — surfaces what the player
+    // can still do, especially after the main action when only free slots
+    // remain. Only shown when main is taken (otherwise the action bar at
+    // the top is the primary surface and a duplicate panel adds noise).
+    renderMatAvailableActions(availableTypes, mainTaken, takeInProgress);
+}
+
+const ACTION_BAR_META = {
+    take_ingredients: { label: 'Take',   icon: '🍸', target: '.gb-bar-inline' },
+    sell_cup:         { label: 'Sell',   icon: '💰', target: '#gbMyCups' },
+    drink_cup:        { label: 'Drink',  icon: '🍺', target: '#gbMyCups' },
+    go_for_a_wee:     { label: 'Wee',    icon: '🚽', target: '#gbBladderWeeRow' },
+    claim_card:       { label: 'Claim',  icon: '🃏', target: '#gbCardRows' },
+    reroll_specials:  { label: 'Reroll', icon: '🎲', target: '#gbMySpecials' },
+};
+
+function renderMatAvailableActions(availableTypes, mainTaken, takeInProgress) {
+    const container = el('gbMatAvailableActions');
+    if (!container) return;
+
+    // Only show when main is taken — that's when the action bar greys out
+    // most options and the player needs an at-a-glance reminder of what
+    // free slots remain. Pre-main, the action bar at the top already shows
+    // every option clearly.
+    const types = Object.keys(availableTypes || {});
+    if (!mainTaken || takeInProgress || types.length === 0) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = '';
+    const label = document.createElement('span');
+    label.className = 'gb-mat-available-actions__label';
+    label.textContent = 'Still available:';
+    container.appendChild(label);
+
+    types.forEach(t => {
+        const meta = ACTION_BAR_META[t];
+        if (!meta) return;
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'gb-mat-action-chip';
+        chip.setAttribute('data-action', t);
+        chip.setAttribute('aria-label', `${meta.label} (free)`);
+        const icon = document.createElement('span');
+        icon.textContent = meta.icon;
+        chip.appendChild(icon);
+        const text = document.createElement('span');
+        text.textContent = meta.label;
+        chip.appendChild(text);
+        if (availableTypes[t]?.is_free) {
+            const tag = document.createElement('span');
+            tag.className = 'gb-mat-action-chip__free-tag';
+            tag.textContent = 'FREE';
+            chip.appendChild(tag);
+        }
+        chip.onclick = () => {
+            if (t === 'reroll_specials') enterRerollMode();
+            const node = meta.target.startsWith('#')
+                ? el(meta.target.slice(1))
+                : document.querySelector(meta.target);
+            node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+        container.appendChild(chip);
+    });
+    container.classList.remove('hidden');
 }
 
 // ─────────────────────────────────────────────────────────────
