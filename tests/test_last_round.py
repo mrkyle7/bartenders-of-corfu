@@ -240,6 +240,105 @@ class TestLastRoundWithElimination:
         assert gs.winner == b  # B has 52 pts
 
 
+class TestLastRoundWithFreeActionModes:
+    """Last-round must still resolve when free-action modes leave free slots unused.
+
+    When `claim_card_free_action` (or `reroll_specials_free_action`) is on, every
+    player has at least one free action available every turn. After the main
+    action, the turn does not auto-advance — the player must explicitly use the
+    free action or end_turn. The round still has to resolve once the turn wraps
+    back to the round-start player.
+    """
+
+    def _make_with_mode(self, points, mode):
+        pids = [uuid4() for _ in range(2)]
+        player_states = {}
+        for i, pid in enumerate(pids):
+            ps = PlayerState.new_player(pid)
+            ps.points = points[i]
+            player_states[pid] = ps
+        gs = GameState(
+            winner=None,
+            bag_contents=[Ingredient.COLA] * 20,
+            player_states=player_states,
+            player_turn=pids[0],
+            open_display=[Ingredient.COLA] * 5,
+            turn_order=list(pids),
+            turn_number=0,
+            game_modes=[mode],
+        )
+        return gs, pids
+
+    def test_p2_trigger_then_end_turn_ends_game(self):
+        """P2 (last) triggers last_round under claim_card_free_action; end_turn ends game."""
+        from app import actions as A
+
+        gs, pids = self._make_with_mode([0, 37], "claim_card_free_action")
+        p1, p2 = pids
+
+        # P1 takes a non-scoring main action, then ends their turn (free claim_card forfeited)
+        gs.player_states[p1].bladder = [Ingredient.COLA]
+        gs, _ = A.go_for_a_wee(gs, p1)
+        gs, _ = A.end_turn(gs, p1)
+        assert gs.player_turn == p2
+
+        # P2 sells LIET → 52 pts → triggers last_round; turn does NOT advance
+        # because claim_card free slot is unused.
+        _setup_cup_for_liet(gs.player_states[p2])
+        gs, _ = A.sell_cup(gs, p2, 0, ["sugar", "lemon"])
+        assert gs.last_round is True
+        assert gs.winner is None
+        assert gs.player_turn == p2  # still P2 — free claim_card remains
+
+        # P2 ends their turn → wraps to P1 (round_start) → game ends.
+        gs, _ = A.end_turn(gs, p2)
+        assert gs.winner == p2  # P2 has 52, P1 has 0
+
+    def test_force_advance_turn_resolves_last_round(self):
+        """The bot's force-advance fallback must still resolve last_round.
+
+        Simulates the path `_force_advance_turn` takes when a bot has already
+        used its main action but won't pick up the free slot (e.g. no eligible
+        claim target). The fallback must end the game when the turn wraps to
+        the round-start player.
+        """
+        from app.bot_player import _force_advance_turn
+
+        gs, pids = self._make_with_mode([0, 37], "claim_card_free_action")
+        p1, p2 = pids
+
+        gs.player_states[p1].bladder = [Ingredient.COLA]
+        from app import actions as A
+
+        gs, _ = A.go_for_a_wee(gs, p1)
+        gs, _ = A.end_turn(gs, p1)
+        _setup_cup_for_liet(gs.player_states[p2])
+        gs, _ = A.sell_cup(gs, p2, 0, ["sugar", "lemon"])
+        assert gs.last_round is True
+        assert gs.player_turn == p2
+
+        # Stub a minimal game/manager so we can drive _force_advance_turn directly.
+        class _FakeGame:
+            def __init__(self, gs):
+                self.id = uuid4()
+                self.game_state = gs
+
+        class _FakeManager:
+            def __init__(self):
+                self.last_state = None
+
+            def _apply_action(self, _game, _player_id, _action_type, gs, _payload):
+                self.last_state = gs
+
+        fake_game = _FakeGame(gs)
+        fake_mgr = _FakeManager()
+        _force_advance_turn(fake_mgr, fake_game, p2)
+        new_state = fake_mgr.last_state
+        assert new_state is not None
+        assert new_state.player_turn == p1
+        assert new_state.winner == p2  # round wrapped → game ends
+
+
 class TestGameStateSerialization:
     """last_round persists through serialization."""
 

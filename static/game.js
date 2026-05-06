@@ -75,10 +75,24 @@ async function load() {
     }
 }
 
+async function fetchValidActions() {
+    if (!S.gameId) return null;
+    try {
+        const resp = await fetch(`/v1/games/${S.gameId}/valid-actions`);
+        if (!resp.ok) return null;
+        return await resp.json();
+    } catch {
+        return null;
+    }
+}
+
 async function refreshGame(quiet = false) {
     if (!quiet) clearError();
     try {
-        const resp = await fetch(`/v1/games/${S.gameId}`);
+        const [resp, validActions] = await Promise.all([
+            fetch(`/v1/games/${S.gameId}`),
+            fetchValidActions(),
+        ]);
         if (resp.status === 401 || resp.status === 403) {
             window.location.href = '/';
             return;
@@ -90,6 +104,7 @@ async function refreshGame(quiet = false) {
         const game = await resp.json();
         await resolvePlayerNames(game.players);
         S.game = game;
+        S.validActions = validActions;
         S.pendingUndo = game.pending_undo || null;
         const newTurn = game.game_state && game.game_state.player_turn;
         const isMyTurn = S.me && newTurn === S.me.id;
@@ -3737,6 +3752,105 @@ async function doCancelGame(btn) {
 // ─────────────────────────────────────────────────────────────
 // Action bar (quick-nav + availability indicators)
 // ─────────────────────────────────────────────────────────────
+
+// Free action map shared with the backend (FreeActionCard spirit → action type).
+const FREE_ACTION_TYPE_MAP = {
+    RUM: 'take_ingredients',
+    WHISKEY: 'reroll_specials',
+    VODKA: 'sell_cup',
+    GIN: 'go_for_a_wee',
+};
+
+// Compute which action types are currently available + free vs main, mirroring
+// the server's `valid_actions` for the action-bar buttons. Used only as a
+// fallback when the server response hasn't arrived yet — the server's answer
+// is authoritative. Intentionally covers only the legality concerns the bar
+// surfaces; precise sell-cup combinations etc. stay server-side.
+function computeFallbackAvailableTypes(gs, myState) {
+    const out = {};
+    const takeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
+    const bladder = myState.bladder || [];
+    const specials = myState.special_ingredients || [];
+    const cup0 = myState.cups?.[0]?.ingredients || [];
+    const cup1 = myState.cups?.[1]?.ingredients || [];
+    const hasDoubler0 = !!myState.cups?.[0]?.has_cup_doubler;
+    const hasDoubler1 = !!myState.cups?.[1]?.has_cup_doubler;
+    const specSpiritTypes = (myState.cards || [])
+        .filter(c => c.card_type === 'specialist' && c.spirit_type)
+        .map(c => c.spirit_type);
+    const bagCount = (gs.bag_contents || []).length;
+    const displayCount = (gs.open_display || []).length;
+    const totalAvail = bagCount + displayCount;
+    const takeCount = myState.take_count || 3;
+
+    const freeUsed = new Set(gs.free_actions_used_this_turn || []);
+    const enabledModes = gs.game_modes || [];
+    const myCardFreeTypes = new Set(
+        (myState.cards || [])
+            .filter(c => c.card_type === 'free_action' && (c.spirit_type || c.free_action_type))
+            .map(c => c.free_action_type || FREE_ACTION_TYPE_MAP[c.spirit_type])
+            .filter(Boolean)
+            .filter(t => !freeUsed.has(t))
+    );
+    if (enabledModes.includes('claim_card_free_action') && !freeUsed.has('claim_card')) {
+        myCardFreeTypes.add('claim_card');
+    }
+    if (enabledModes.includes('reroll_specials_free_action') && !freeUsed.has('reroll_specials')) {
+        myCardFreeTypes.add('reroll_specials');
+    }
+    const mainTaken = !!gs.main_action_taken_this_turn;
+
+    const tryAdd = (type, legal) => {
+        if (!legal) return;
+        const isFree = myCardFreeTypes.has(type);
+        // After main action, only free-eligible action types remain available.
+        if (mainTaken && !isFree) return;
+        out[type] = { is_free: isFree };
+    };
+
+    if (takeInProgress) {
+        // Mid-take: only take_ingredients is legal.
+        tryAdd('take_ingredients', true);
+        return out;
+    }
+
+    tryAdd('take_ingredients', totalAvail >= takeCount);
+
+    const canSell = (
+        detectBestDrink(cup0, specials, hasDoubler0, specSpiritTypes) ||
+        detectBestDrink(cup1, specials, hasDoubler1, specSpiritTypes)
+    );
+    tryAdd('sell_cup', !!canSell);
+    tryAdd('drink_cup', cup0.length > 0 || cup1.length > 0);
+    tryAdd('go_for_a_wee', bladder.length > 0);
+
+    let canClaim = false;
+    for (const row of (gs.card_rows || [])) {
+        for (const card of (row.cards || [])) {
+            if (canAffordCard(card, bladder, gs)) { canClaim = true; break; }
+        }
+        if (canClaim) break;
+    }
+    tryAdd('claim_card', canClaim);
+    tryAdd('reroll_specials', specials.length > 0);
+
+    return out;
+}
+
+function fallbackHasUnusedFreeAction(gs, myState) {
+    const freeUsed = new Set(gs.free_actions_used_this_turn || []);
+    const enabledModes = gs.game_modes || [];
+    const fromCards = (myState.cards || [])
+        .filter(c => c.card_type === 'free_action' && (c.spirit_type || c.free_action_type))
+        .map(c => c.free_action_type || FREE_ACTION_TYPE_MAP[c.spirit_type])
+        .filter(Boolean)
+        .some(t => !freeUsed.has(t));
+    if (fromCards) return true;
+    if (enabledModes.includes('claim_card_free_action') && !freeUsed.has('claim_card')) return true;
+    if (enabledModes.includes('reroll_specials_free_action') && !freeUsed.has('reroll_specials')) return true;
+    return false;
+}
+
 function renderActionBar(game, gs, isReplay) {
     const bar = el('gbActionBar');
     if (!bar) return;
@@ -3752,102 +3866,57 @@ function renderActionBar(game, gs, isReplay) {
     const myState = gs.player_states?.[S.me.id];
     if (!myState) return;
 
-    const bladder = myState.bladder || [];
-    const specials = myState.special_ingredients || [];
-    const bagCount = (gs.bag_contents || []).length;
-    const displayCount = (gs.open_display || []).length;
-    const totalAvail = bagCount + displayCount;
-    const takeCount = myState.take_count || 3;
     const takeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
 
-    // Take: available if enough ingredients
-    const takeBtn = el('gbActionTake');
-    takeBtn.disabled = totalAvail < takeCount && !takeInProgress;
-    takeBtn.onclick = () => {
+    // Server-computed availability is the source of truth (mirrors the legality
+    // logic the bots use). When it hasn't loaded yet (initial render before the
+    // /valid-actions response arrives), fall back to a permissive client-side
+    // approximation so buttons aren't dead.
+    const serverTypes = S.validActions?.available_types || null;
+    const serverCanEndTurn = !!S.validActions?.can_end_turn;
+
+    const fallbackTypes = computeFallbackAvailableTypes(gs, myState);
+    const availableTypes = serverTypes || fallbackTypes;
+
+    const setBtn = (btnId, actionType, onClick) => {
+        const btn = el(btnId);
+        if (!btn) return;
+        const info = availableTypes[actionType];
+        const available = !!info;
+        btn.disabled = !available;
+        btn.classList.toggle('gb-action-free', available && !!info?.is_free);
+        btn.onclick = () => {
+            if (btn.disabled) return;
+            onClick?.();
+        };
+    };
+
+    setBtn('gbActionTake', 'take_ingredients', () => {
         document.querySelector('.gb-bar-inline')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
-    // Sell: available if either cup has a valid drink
-    const sellBtn = el('gbActionSell');
-    const cup0 = (myState.cups?.[0]?.ingredients) || [];
-    const cup1 = (myState.cups?.[1]?.ingredients) || [];
-    const hasDoubler0 = !!(myState.cups?.[0]?.has_cup_doubler);
-    const hasDoubler1 = !!(myState.cups?.[1]?.has_cup_doubler);
-    const specSpiritTypes = (myState.cards || [])
-        .filter(c => c.card_type === 'specialist' && c.spirit_type)
-        .map(c => c.spirit_type);
-    const canSell = detectBestDrink(cup0, specials, hasDoubler0, specSpiritTypes) || detectBestDrink(cup1, specials, hasDoubler1, specSpiritTypes);
-    sellBtn.disabled = takeInProgress || !canSell;
-    sellBtn.onclick = () => {
+    });
+    setBtn('gbActionSell', 'sell_cup', () => {
         el('gbMyCups')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
-    // Drink: available if either cup is non-empty
-    const drinkBtn = el('gbActionDrink');
-    drinkBtn.disabled = takeInProgress || (cup0.length === 0 && cup1.length === 0);
-    drinkBtn.onclick = () => {
+    });
+    setBtn('gbActionDrink', 'drink_cup', () => {
         el('gbMyCups')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
-    // Wee: disabled if take in progress or bladder is empty
-    const weeBtn = el('gbActionWee');
-    weeBtn.disabled = takeInProgress || bladder.length === 0;
-    weeBtn.onclick = () => {
+    });
+    setBtn('gbActionWee', 'go_for_a_wee', () => {
         el('gbBladderWeeRow')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
-    // Claim: available if any card is affordable
-    const claimBtn = el('gbActionClaim');
-    let canClaim = false;
-    for (const row of (gs.card_rows || [])) {
-        for (const card of (row.cards || [])) {
-            if (canAffordCard(card, bladder, gs)) { canClaim = true; break; }
-        }
-        if (canClaim) break;
-    }
-    claimBtn.disabled = takeInProgress || !canClaim;
-    claimBtn.onclick = () => {
+    });
+    setBtn('gbActionClaim', 'claim_card', () => {
         el('gbCardRows')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
-    // Reroll: available if player has at least 1 special
-    const rerollBtn = el('gbActionReroll');
-    rerollBtn.disabled = takeInProgress || specials.length < 1;
-    rerollBtn.onclick = () => {
+    });
+    setBtn('gbActionReroll', 'reroll_specials', () => {
         enterRerollMode();
         el('gbMySpecials')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
+    });
 
-    // Free action awareness: when main action is taken but free actions remain,
-    // only matching free action types should be enabled (plus End Turn).
+    // End Turn button: server tells us when it is legal; while server data is
+    // loading fall back to (main_taken && some free action remains).
     const mainTaken = !!gs.main_action_taken_this_turn;
-    const freeUsed = gs.free_actions_used_this_turn || [];
-    const enabledModes = (gs && gs.game_modes) || [];
-    const myFreeActions = (myState.cards || [])
-        .filter(c => c.card_type === 'free_action' && c.free_action_type)
-        .map(c => c.free_action_type)
-        .filter(a => !freeUsed.includes(a));
-    // Mode-driven free actions: same once-per-turn semantics as FreeActionCards
-    if (enabledModes.includes('claim_card_free_action') && !freeUsed.includes('claim_card')) {
-        myFreeActions.push('claim_card');
-    }
-    if (enabledModes.includes('reroll_specials_free_action') && !freeUsed.includes('reroll_specials')) {
-        myFreeActions.push('reroll_specials');
-    }
-
-    if (mainTaken && !takeInProgress) {
-        // Only free actions are available; disable non-matching actions
-        if (!myFreeActions.includes('take_ingredients')) takeBtn.disabled = true;
-        if (!myFreeActions.includes('sell_cup')) sellBtn.disabled = true;
-        // drink_cup has no free action card, always disabled after main action
-        drinkBtn.disabled = true;
-        if (!myFreeActions.includes('go_for_a_wee')) weeBtn.disabled = true;
-        if (!myFreeActions.includes('claim_card')) claimBtn.disabled = true;
-        if (!myFreeActions.includes('reroll_specials')) rerollBtn.disabled = true;
-    }
-
-    // End Turn button: show when main action is taken and free actions remain
-    const showEndTurn = mainTaken && myFreeActions.length > 0 && !takeInProgress;
+    const showEndTurn = serverTypes
+        ? serverCanEndTurn
+        : (mainTaken && fallbackHasUnusedFreeAction(gs, myState) && !takeInProgress);
     let endTurnBtn = el('gbActionEndTurn');
     if (!endTurnBtn) {
         endTurnBtn = document.createElement('button');

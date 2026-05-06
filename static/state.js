@@ -30,6 +30,10 @@ const state = {
     // Re-roll specials state
     rerollMode:     false,  // true when selecting specials for re-roll
     rerollSelected: [],     // indices into special_ingredients to re-roll
+
+    // Valid actions for the current player (refreshed alongside game state).
+    // Shape: { actions: [...], available_types: { type: { is_free } }, can_end_turn: bool }
+    validActions:   null,
 };
 
 export default state;
