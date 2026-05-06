@@ -868,6 +868,18 @@ function renderBagVisual(bagCount, isMyTurn, myState, gs) {
             takeBtn.disabled = true;
         }
 
+        // Take is only legal when valid_actions includes take_ingredients —
+        // after the main action that's only true if the player still has a
+        // free take slot (e.g. RUM FreeActionCard). Without this guard, the
+        // Take button stays bright after a Sell despite the action being
+        // illegal.
+        const availableTypes = getAvailableActionTypes(gs, myState);
+        const takeIngAvailable = !!availableTypes.take_ingredients;
+        if (!takeIngAvailable) takeBtn.disabled = true;
+        if (takeIngAvailable && availableTypes.take_ingredients?.is_free) {
+            takeBtn.classList.add('gb-action-free-inline');
+        }
+
         drawRow.append(minusBtn, countSpan, plusBtn, takeBtn);
         bagCountEl.parentNode.insertBefore(wrap, bagCountEl);
         bagCountEl.parentNode.insertBefore(drawRow, bagCountEl);
@@ -893,12 +905,19 @@ function renderBoard(game, gs, isReplay) {
         empty.className = 'gb-empty-text';
         dispEl.appendChild(empty);
     } else {
+        // Open-display badges only stay interactive while a take is legal.
+        // Once the main action is used (and no free take slot remains), tapping
+        // a badge would 409 — disable the click handler and dim the badge so
+        // the affordance matches reality.
+        const displayAvailableTypes = isMyTurn ? getAvailableActionTypes(gs, myState) : {};
+        const displayTakeAvailable = !!displayAvailableTypes.take_ingredients;
         display.forEach((ing, idx) => {
             const badge = makeIngredientBadge(ing);
-            badge.setAttribute('role', isMyTurn ? 'button' : 'listitem');
+            const takeable = isMyTurn && displayTakeAvailable;
+            badge.setAttribute('role', takeable ? 'button' : 'listitem');
             badge.dataset.ingredient = ing;
             badge.dataset.idx = idx;
-            if (isMyTurn) {
+            if (takeable) {
                 badge.classList.add('gb-display-takeable');
                 badge.setAttribute('tabindex', '0');
                 badge.title = `Take ${ingredientLabel(ing)}`;
@@ -907,6 +926,8 @@ function renderBoard(game, gs, isReplay) {
                 badge.onkeydown = e => {
                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addDisplayToStaging(ing, idx, myState, gs); }
                 };
+            } else if (isMyTurn) {
+                badge.classList.add('gb-display-disabled');
             }
             dispEl.appendChild(badge);
         });
@@ -950,7 +971,14 @@ function renderBoard(game, gs, isReplay) {
                 refreshBtn.className = 'gb-refresh-row-btn';
                 refreshBtn.textContent = 'Refresh Row';
                 refreshBtn.setAttribute('aria-label', `Refresh card row ${row.position}`);
-                refreshBtn.onclick = () => doRefreshRow(row.position, refreshBtn);
+                // refresh_card_row is a main turn action — grey out once main
+                // is taken (no FreeActionCard or mode currently makes it free).
+                const rowAvailable = !!getAvailableActionTypes(gs, myState).refresh_card_row;
+                refreshBtn.disabled = !rowAvailable;
+                refreshBtn.onclick = () => {
+                    if (refreshBtn.disabled) return;
+                    doRefreshRow(row.position, refreshBtn);
+                };
                 rowLabelRow.appendChild(refreshBtn);
             } else {
                 const hasStoredSpirits = (myState.cards || []).some(c => c.card_type === 'store' && (c.stored_spirits || []).length > 0);
@@ -1001,7 +1029,12 @@ function _cloneCardIcon(cardType) {
 }
 function buildCardElement(card, bladder, canClaim, gs) {
     const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
-    const affordable = canClaim && canAffordCard(card, bladder, gs);
+    // Cards are only actually claimable when the legality engine includes
+    // claim_card — once the main action is taken, this only stays true if a
+    // free claim slot is available (claim_card_free_action mode).
+    const myStateForClaim = (S.me && gs && gs.player_states) ? gs.player_states[S.me.id] : null;
+    const claimAvailable = canClaim && !!getAvailableActionTypes(gs, myStateForClaim).claim_card;
+    const affordable = claimAvailable && canAffordCard(card, bladder, gs);
 
     const cardEl = document.createElement('div');
     cardEl.className = `gb-card ${cardType}` + (affordable ? ' claimable' : '');
@@ -1291,12 +1324,19 @@ function renderBladderWeeRow(myState, isMyTurn, game, gs) {
     bladderWrap.appendChild(makeBladderSlots(bladder, cap, toiletTokens));
     container.appendChild(bladderWrap);
 
-    // Wee button (next to bladder)
+    // Wee button (next to bladder). Disabled when the action is illegal \u2014
+    // either bladder empty, mid-take, OR main action already taken without a
+    // free wee slot (the GIN FreeActionCard or a future mode would supply
+    // one). Reuses the server's valid_actions for the legality check.
     const takeInProgress = (gs.ingredients_taken_this_turn || 0) > 0;
     if (isMyTurn) {
-        const weeDisabled = takeInProgress || bladder.length === 0;
+        const availableTypes = getAvailableActionTypes(gs, myState);
+        const weeAvailable = !!availableTypes.go_for_a_wee;
+        const weeDisabled = takeInProgress || bladder.length === 0 || !weeAvailable;
         const tile = document.createElement('div');
-        tile.className = 'gb-wee-tile' + (weeDisabled ? ' disabled' : '');
+        let cls = 'gb-wee-tile' + (weeDisabled ? ' disabled' : '');
+        if (!weeDisabled && availableTypes.go_for_a_wee?.is_free) cls += ' gb-action-free-inline';
+        tile.className = cls;
         tile.setAttribute('role', 'button');
         tile.setAttribute('tabindex', weeDisabled ? '-1' : '0');
         tile.setAttribute('aria-label', `Go for a wee \u2014 empties bladder, sobers up 1 level (${toiletTokens} tokens left)`);
@@ -1514,12 +1554,25 @@ function renderMyCups(myState, isMyTurn, game, gs) {
             // Auto-detect best drink for this cup
             const drink = detectBestDrink(contents, specials, hasDoubler, specialistSpiritTypes);
 
+            // Cross-check legality with the server's valid_actions: when the main
+            // action has been taken (and sell_cup isn't a free slot for this
+            // turn) the Sell/Drink buttons must grey out \u2014 players cannot take
+            // another main action this turn.
+            const availableTypes = getAvailableActionTypes(gs, myState);
+            const sellAvailable = !!availableTypes.sell_cup;
+            const drinkAvailable = !!availableTypes.drink_cup;
+
             if (drink) {
                 const sellBtn = document.createElement('button');
                 sellBtn.className = 'gb-cup-action-btn sell';
                 sellBtn.innerHTML = `\uD83D\uDCB0 Sell \u2014 ${drink.name} (${drink.points}pts)`;
                 sellBtn.setAttribute('aria-label', `Sell cup ${index + 1} as ${drink.name} for ${drink.points} points`);
-                sellBtn.onclick = () => doSellCup(index, drink.declaredSpecials, sellBtn);
+                sellBtn.disabled = !sellAvailable;
+                if (availableTypes.sell_cup?.is_free) sellBtn.classList.add('gb-action-free-inline');
+                sellBtn.onclick = () => {
+                    if (sellBtn.disabled) return;
+                    doSellCup(index, drink.declaredSpecials, sellBtn);
+                };
                 actions.appendChild(sellBtn);
             }
 
@@ -1553,7 +1606,9 @@ function renderMyCups(myState, isMyTurn, game, gs) {
                     drinkBtn.innerHTML += ' <span class="gb-cup-warning">\u26A0 WET!</span>';
                 }
                 drinkBtn.setAttribute('aria-label', `Drink cup ${index + 1}`);
+                drinkBtn.disabled = !drinkAvailable;
                 drinkBtn.onclick = () => {
+                    if (drinkBtn.disabled) return;
                     if (newBladderSize > bladderCap) {
                         if (!confirm(`Drinking this cup will overflow your bladder (${newBladderSize}/${bladderCap}) and eliminate you! Are you sure?`)) return;
                     }
@@ -2639,23 +2694,34 @@ function renderSpecialsSection(myState, isMyTurn, gs) {
         row.className = 'gb-specials-mat-row';
         specials.forEach(s => row.appendChild(makeIngredientBadge(s)));
 
-        // Inline re-roll tile (like the wee button next to bladder)
+        // Inline re-roll tile (like the wee button next to bladder). Greys
+        // out when reroll_specials isn't legal — typically post-main without
+        // a free reroll slot, or mid-take.
         const specialsTakeInProgress = gs && (gs.ingredients_taken_this_turn || 0) > 0;
         if (isMyTurn && !specialsTakeInProgress) {
+            const availableTypesForReroll = getAvailableActionTypes(gs, myState);
+            const rerollAvailable = !!availableTypesForReroll.reroll_specials;
             const tile = document.createElement('div');
-            tile.className = 'gb-reroll-tile';
+            let rerollCls = 'gb-reroll-tile' + (!rerollAvailable ? ' disabled' : '');
+            if (rerollAvailable && availableTypesForReroll.reroll_specials?.is_free) {
+                rerollCls += ' gb-action-free-inline';
+            }
+            tile.className = rerollCls;
             tile.setAttribute('role', 'button');
-            tile.setAttribute('tabindex', '0');
+            tile.setAttribute('tabindex', rerollAvailable ? '0' : '-1');
+            if (!rerollAvailable) tile.setAttribute('aria-disabled', 'true');
             tile.setAttribute('aria-label', 'Re-roll specials — risk losing them for new ones');
             tile.append(
                 h('span', { className: 'gb-reroll-tile-icon' }, '\uD83C\uDFB2'),
                 h('span', { className: 'gb-reroll-tile-label' }, 'Re-roll')
             );
-            tile.onclick = () => {
-                enterRerollMode();
-                specialsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            };
-            tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click(); } };
+            if (rerollAvailable) {
+                tile.onclick = () => {
+                    enterRerollMode();
+                    specialsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                };
+                tile.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click(); } };
+            }
             row.appendChild(tile);
         }
 
@@ -3760,6 +3826,16 @@ const FREE_ACTION_TYPE_MAP = {
     VODKA: 'sell_cup',
     GIN: 'go_for_a_wee',
 };
+
+// Lookup the current available action types — server's `available_types` from
+// /valid-actions when present, otherwise the client-side fallback. Used by
+// inline buttons (cup drink/sell, bladder wee, bag take, card refresh, …) so
+// they can grey themselves out the same way the action bar at the top does.
+function getAvailableActionTypes(gs, myState) {
+    const serverTypes = S.validActions?.available_types || null;
+    if (serverTypes) return serverTypes;
+    return computeFallbackAvailableTypes(gs, myState);
+}
 
 // Compute which action types are currently available + free vs main, mirroring
 // the server's `valid_actions` for the action-bar buttons. Used only as a
