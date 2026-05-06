@@ -3802,6 +3802,35 @@
     color: var(--text-muted, #a98b5e);
 }
 
+/* Subtle highlight on action-bar buttons that the player can take as a free
+   action this turn (FreeActionCard or game mode). The "FREE" badge sits above
+   the icon and cues the player that using this action does not consume the
+   main turn slot. */
+.gb-action-bar-btn.gb-action-free {
+    border-color: rgba(124, 198, 124, 0.7);
+    background: rgba(70, 140, 70, 0.18);
+    position: relative;
+}
+
+.gb-action-bar-btn.gb-action-free::after {
+    content: 'FREE';
+    position: absolute;
+    top: -7px;
+    right: -4px;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgba(70, 140, 70, 0.85);
+    color: #f3fff3;
+    pointer-events: none;
+}
+
+.gb-action-bar-btn.gb-action-free:disabled::after {
+    display: none;
+}
+
 .gb-action-bar-icon {
     font-size: 0.95rem;
 }

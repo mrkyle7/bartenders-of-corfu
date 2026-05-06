@@ -1071,6 +1071,80 @@ async def action_cancel_game(game_id: str, request: Request):
 # ─── Move history & replay ────────────────────────────────────────────────────
 
 
+@app.get("/v1/games/{game_id}/valid-actions")
+async def get_valid_actions(game_id: str, request: Request):
+    """Return the set of actions the requesting player can legally take right now.
+
+    The UI uses this to mark only available action buttons as enabled, with
+    everything else greyed out. Mirrors the legality logic the bots already use.
+    Returns an empty `actions` list when it isn't the requester's turn.
+    """
+    token_user, game, err = _game_action_precheck(game_id, request)
+    if err:
+        return err
+
+    actions: list[dict] = []
+    can_end_turn = False
+    available_types: dict[str, dict] = {}
+
+    try:
+        if game.status == Status.STARTED and game.game_state is not None:
+            # Imported here so api module load doesn't pull in playtesting eagerly.
+            from playtesting.valid_actions import get_valid_actions as _vactions
+            from app.actions import _available_free_actions
+
+            gs = game.game_state
+            raw = _vactions(gs, token_user.id)
+            for a in raw:
+                actions.append(
+                    {
+                        "action_type": a.action_type,
+                        "params": a.params,
+                        "is_free": a.is_free,
+                        "description": a.description,
+                    }
+                )
+
+            # Summarise — for each action_type present, whether it is available
+            # as a free action this turn. Bots/UI can treat this as the source
+            # of truth for enabling action-bar buttons.
+            for a in actions:
+                t = a["action_type"]
+                # If we've seen this type already, prefer is_free=True only when
+                # any instance is free (free trumps main for UX colouring).
+                existing = available_types.get(t)
+                if existing is None:
+                    available_types[t] = {"is_free": a["is_free"]}
+                elif a["is_free"] and not existing["is_free"]:
+                    existing["is_free"] = True
+
+            # End-turn legality mirrors actions.end_turn — main taken AND at
+            # least one free action remaining.
+            ps = gs.player_states.get(token_user.id)
+            if (
+                gs.player_turn == token_user.id
+                and ps is not None
+                and not ps.is_eliminated
+                and gs.main_action_taken_this_turn
+            ):
+                remaining = _available_free_actions(
+                    gs, ps, gs.free_actions_used_this_turn
+                )
+                can_end_turn = len(remaining) > 0
+        return JSONResponse(
+            content={
+                "actions": actions,
+                "available_types": available_types,
+                "can_end_turn": can_end_turn,
+            }
+        )
+    except Exception:
+        logger.exception("Failed to compute valid actions for game %s", game_id)
+        return JSONResponse(
+            status_code=500, content={"error": "Failed to compute valid actions"}
+        )
+
+
 @app.get("/v1/games/{game_id}/history")
 async def get_game_history(game_id: str, request: Request):
     token_user, game, err = _game_action_precheck(game_id, request)
