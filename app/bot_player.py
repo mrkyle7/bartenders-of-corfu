@@ -114,6 +114,21 @@ def _execute_bot_turn(
             logger.debug("Bot free action failed: %s", e)
             break
 
+    # If the main action was taken in a previous _execute_bot_turn invocation
+    # this turn (turn didn't advance because free actions remained, then this
+    # invocation's free phase took none), end the turn cleanly via end_turn so
+    # last-round/last-player-standing checks fire correctly.
+    game = db.get_game(game.id)
+    gs = game.game_state
+    if gs.winner is not None:
+        return
+    if gs.main_action_taken_this_turn:
+        try:
+            game_manager.end_turn(game, player_id)
+        except GameException as e:
+            logger.debug("Bot end_turn after main-taken failed: %s", e)
+        return
+
     # Main action phase
     for attempt in range(MAX_RETRIES):
         game = db.get_game(game.id)
@@ -244,11 +259,16 @@ def _execute_take(
 
 def _force_advance_turn(game_manager, game: Game, player_id: UUID) -> None:
     """Force-advance the turn when a bot can't act."""
-    from app.actions import _advance_turn, _deep_copy_state
+    from app.actions import (
+        _advance_turn,
+        _check_last_round_complete,
+        _deep_copy_state,
+    )
 
     gs = _deep_copy_state(game.game_state)
     gs.turn_number += 1
     _advance_turn(gs)
+    _check_last_round_complete(gs)
     game_manager._apply_action(
         game, player_id, "skip_turn", gs, {"reason": "no_valid_actions"}
     )
