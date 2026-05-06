@@ -1100,6 +1100,63 @@
     font-size: 0.95em;
 }
 
+/* "Available actions" hint that lives on the player mat. Surfaces the
+   actions the player can still take this turn (typically free actions
+   remaining after the main action). Each chip scrolls to the relevant
+   area when tapped. */
+.gb-mat-available-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border: 1px solid rgba(124, 198, 124, 0.55);
+    border-radius: 8px;
+    background: rgba(70, 140, 70, 0.14);
+    color: var(--theme-text-primary);
+}
+.gb-mat-available-actions.hidden { display: none; }
+.gb-mat-available-actions__label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--theme-text-primary);
+    margin-right: 4px;
+}
+.gb-mat-action-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(124, 198, 124, 0.65);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--theme-text-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+.gb-mat-action-chip:hover {
+    background: rgba(124, 198, 124, 0.25);
+    transform: translateY(-1px);
+}
+.gb-mat-action-chip:focus {
+    outline: 2px solid var(--theme-text-primary);
+    outline-offset: 2px;
+}
+.gb-mat-action-chip__free-tag {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(70, 140, 70, 0.85);
+    color: #f3fff3;
+}
+
 .gb-store-card-actions {
     display: flex;
     gap: 4px;
