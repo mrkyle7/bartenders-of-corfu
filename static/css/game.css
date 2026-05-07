@@ -3643,6 +3643,42 @@
     transform: scale(0.96);
 }
 
+.gb-cup-action-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    filter: grayscale(0.7);
+}
+
+/* Free-action highlight on inline buttons (cup/bladder/specials/bag) — green
+   tint cues the player that this action is currently available as a free
+   slot (FreeActionCard or game mode), distinct from a normal main action. */
+.gb-action-free-inline {
+    box-shadow: 0 0 0 2px rgba(70, 140, 70, 0.85), 0 0 8px rgba(124, 198, 124, 0.55);
+    position: relative;
+}
+.gb-action-free-inline::after {
+    content: 'FREE';
+    position: absolute;
+    top: -7px;
+    right: -4px;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(70, 140, 70, 0.9);
+    color: #f3fff3;
+    pointer-events: none;
+}
+
+/* Open-display ingredient badge dimmed when the player can't take this turn. */
+.gb-display-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+    filter: grayscale(0.4);
+}
+
 .gb-cup-action-btn.sell {
     background: linear-gradient(135deg, #27ae60, #1e8449);
     color: #fff;
