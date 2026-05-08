@@ -551,6 +551,30 @@ def _smart_pending_assignments(
     return assignments
 
 
+def _safe_to_take(
+    gs: GameState, ps: PlayerState, drunk_cap: int = 3
+) -> bool:
+    """Estimate whether take_ingredients keeps drunk_level ≤ drunk_cap.
+
+    Conservative: SPECIAL tokens roll to the mat (no drunk cost), spirits
+    can be cupped (no drunk cost), and anything that doesn't fit is treated
+    as a forced spirit drink. Mixers are counted as drinks too even though
+    they often sober — the bias is toward not taking when uncertain.
+    """
+    cup_slots = sum(MAX_CUP_INGREDIENTS - len(c.ingredients) for c in ps.cups)
+    specials_avail = sum(
+        1 for ing in gs.open_display if ing == Ingredient.SPECIAL
+    )
+
+    if ps.drunk_level >= drunk_cap:
+        # At cap: only safe if every take can be absorbed with no drinks
+        return ps.take_count <= cup_slots + specials_avail
+
+    headroom = drunk_cap - ps.drunk_level
+    forced_drinks = max(0, ps.take_count - cup_slots - specials_avail)
+    return forced_drinks <= headroom
+
+
 def _find_action(actions: list[Action], action_type: str) -> Action | None:
     for a in actions:
         if a.action_type == action_type:
@@ -837,20 +861,16 @@ class CocktailHunter(Strategy):
     ) -> Action:
         ps = gs.player_states[player_id]
 
-        # Always sell high-value cups (cocktails, double-spirit drinks)
-        sell = _best_sell(valid_actions, min_pts=3)
-        if sell:
-            return sell
-
-        # If SPECIAL tokens are available on the display, prefer taking
-        # ingredients over selling cheap 1-pt drinks — specials roll to the
-        # mat and unlock 10–15 pt cocktail recipes.
-        if any(ing == Ingredient.SPECIAL for ing in gs.open_display):
+        # If SPECIAL tokens are on the display AND taking them is safe
+        # (won't push drunk above 3), prefer taking over any sell — banking
+        # specials on the mat sets up future 10–15 pt cocktails.
+        has_specials = any(ing == Ingredient.SPECIAL for ing in gs.open_display)
+        if has_specials and _safe_to_take(gs, ps):
             take = _find_action(valid_actions, "take_ingredients")
             if take:
                 return take
 
-        # No specials to grab — sell any cup with points to keep cups clear
+        # Otherwise, sell any cup with points (highest value first)
         sell = _best_sell(valid_actions, min_pts=1)
         if sell:
             return sell
