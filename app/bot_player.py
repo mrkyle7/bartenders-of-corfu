@@ -208,53 +208,77 @@ def _execute_action(
 def _execute_take(
     game_manager, game: Game, player_id: UUID, strategy: Strategy
 ) -> None:
-    """Handle the multi-step take_ingredients flow for a bot."""
-    gs = game.game_state
-    ps = gs.player_states[player_id]
-    take_count = ps.take_count
-    remaining = take_count - gs.ingredients_taken_this_turn
+    """Handle the multi-step take_ingredients flow for a bot.
 
-    # Phase 1: display picks
-    display_assignments = strategy.choose_take_assignments(gs, player_id, remaining)
-
-    if display_assignments:
-        new_state, payload = game_manager.take_ingredients(
-            game, player_id, display_assignments
-        )
-        if payload.get("turn_complete", False):
-            return
-        # Re-fetch game after state change
-        game = db.get_game(game.id)
-
-    # Phase 2: draw from bag in batches
-    batch_limit = 10
-    while batch_limit > 0:
-        batch_limit -= 1
+    Strategies may bail out of the display loop early (returning fewer
+    assignments than requested) so the bag can fill the rest with random
+    items instead of forcing certain drunk drinks. After the bag is
+    drained, we loop back to the display so any leftover picks complete
+    the take.
+    """
+    outer_limit = 5
+    while outer_limit > 0:
+        outer_limit -= 1
         game = db.get_game(game.id)
         gs = game.game_state
         ps = gs.player_states[player_id]
         remaining = ps.take_count - gs.ingredients_taken_this_turn
         if remaining <= 0:
-            break
+            return
 
-        bag_count = min(remaining, len(gs.bag_contents))
-        if bag_count <= 0:
-            break
+        # Phase 1: display picks (may return fewer than `remaining` if the
+        # strategy bails early — bag fills the gap below).
+        display_assignments = strategy.choose_take_assignments(
+            gs, player_id, remaining
+        )
+        if display_assignments:
+            new_state, payload = game_manager.take_ingredients(
+                game, player_id, display_assignments
+            )
+            if payload.get("turn_complete", False):
+                return
+            game = db.get_game(game.id)
 
-        new_state, draw_payload = game_manager.draw_from_bag(game, player_id, bag_count)
-        # Re-fetch game after draw
+        # Phase 2: draw from bag in batches
+        batch_limit = 10
+        while batch_limit > 0:
+            batch_limit -= 1
+            game = db.get_game(game.id)
+            gs = game.game_state
+            ps = gs.player_states[player_id]
+            remaining = ps.take_count - gs.ingredients_taken_this_turn
+            if remaining <= 0:
+                return
+
+            bag_count = min(remaining, len(gs.bag_contents))
+            if bag_count <= 0:
+                break  # bag empty — fall back to display via outer loop
+
+            new_state, draw_payload = game_manager.draw_from_bag(
+                game, player_id, bag_count
+            )
+            game = db.get_game(game.id)
+            gs = game.game_state
+
+            drawn = gs.bag_draw_pending[:]
+            pending_assignments = strategy.choose_pending_assignments(
+                gs, player_id, drawn
+            )
+            new_state, payload = game_manager.take_ingredients(
+                game, player_id, pending_assignments
+            )
+            if payload.get("turn_complete", False):
+                return
+            game = db.get_game(game.id)
+
+        # If we reach here the bag is empty but the take isn't done —
+        # outer loop will re-poll the strategy for any remaining display
+        # picks. If display is also empty the next iteration will return
+        # via the remaining<=0 / no-display guards.
         game = db.get_game(game.id)
         gs = game.game_state
-
-        drawn = gs.bag_draw_pending[:]
-        pending_assignments = strategy.choose_pending_assignments(gs, player_id, drawn)
-
-        new_state, payload = game_manager.take_ingredients(
-            game, player_id, pending_assignments
-        )
-        if payload.get("turn_complete", False):
+        if not gs.open_display:
             return
-        game = db.get_game(game.id)
 
 
 def _force_advance_turn(game_manager, game: Game, player_id: UUID) -> None:
