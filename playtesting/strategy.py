@@ -366,23 +366,8 @@ def _smart_take_assignments(
     for _ in range(count):
         placed = False
 
-        # Pass 0 (cocktail bot): SPECIAL tokens → mat. They auto-roll onto
-        # the mat regardless of disposition, so grab them eagerly.
-        if not placed and prioritize_specials:
-            for ing in list(display_available):
-                if ing == Ingredient.SPECIAL:
-                    display_available.remove(ing)
-                    assignments.append(
-                        {
-                            "ingredient": ing.name,
-                            "source": "display",
-                            "disposition": "drink",
-                        }
-                    )
-                    placed = True
-                    break
-
-        # Pass 1: preferred spirit → cup
+        # Pass 1: preferred spirit → cup (specialist bot: keep focus spirit
+        # ahead of specials so the +2 specialist bonus path stays primary)
         if not placed and spirit_to_cup and prefer_spirit:
             if prefer_spirit in display_available:
                 cup_idx = cups.best_cup_for_spirit(prefer_spirit)
@@ -398,6 +383,24 @@ def _smart_take_assignments(
                         }
                     )
                     placed = True
+
+        # Pass 1.5 (cocktail/safe/specialist bots): SPECIAL tokens → mat.
+        # They auto-roll onto the mat regardless of disposition (no drunk
+        # cost, no bladder fill), so they're a free pickup once the
+        # preferred spirit (if any) is already secured.
+        if not placed and prioritize_specials:
+            for ing in list(display_available):
+                if ing == Ingredient.SPECIAL:
+                    display_available.remove(ing)
+                    assignments.append(
+                        {
+                            "ingredient": ing.name,
+                            "source": "display",
+                            "disposition": "drink",
+                        }
+                    )
+                    placed = True
+                    break
 
         # Pass 2: any spirit from display → cup
         if not placed and spirit_to_cup:
@@ -915,7 +918,8 @@ class SafeSeller(Strategy):
     """Conservative: sell quickly, stay sober, wee when needed.
 
     Spirits → cups with valid mixers → sell immediately.
-    Drinks only mixers for sobering.
+    Drinks only mixers for sobering. Grabs SPECIAL tokens eagerly because
+    they roll to the mat without filling the bladder or raising drunk.
     """
 
     name = "SafeSeller"
@@ -957,6 +961,15 @@ class SafeSeller(Strategy):
             return wee
 
         return valid_actions[0]
+
+    def choose_take_assignments(
+        self, gs: GameState, player_id: UUID, count: int
+    ) -> list[dict]:
+        ps = gs.player_states[player_id]
+        cups = CupTracker(ps)
+        return _smart_take_assignments(
+            gs, ps, count, cups, prioritize_specials=True
+        )
 
 
 class AggressiveDrinker(Strategy):
@@ -1184,6 +1197,7 @@ class SpecialistBuilder(Strategy):
                 cups,
                 prefer_spirit=focus_ing,
                 mixer_to_cup_if_paired=True,
+                prioritize_specials=True,
             )
         else:
             # Need spirits in bladder for specialist claim (2 required).
@@ -1199,10 +1213,18 @@ class SpecialistBuilder(Strategy):
                         prefer_spirit=focus_ing,
                         spirit_to_cup=False,
                         mixer_to_cup_if_paired=False,
+                        prioritize_specials=True,
                     )
 
             # Default: safe play with preferred spirit → cups
-            return _smart_take_assignments(gs, ps, count, cups, prefer_spirit=focus_ing)
+            return _smart_take_assignments(
+                gs,
+                ps,
+                count,
+                cups,
+                prefer_spirit=focus_ing,
+                prioritize_specials=True,
+            )
 
     def choose_pending_assignments(
         self, gs: GameState, player_id: UUID, drawn: list[Ingredient]
@@ -1447,6 +1469,8 @@ class Mastermind(Strategy):
             score -= 3.0
 
         # Display quality bonus/penalty (rough estimate)
+        mat_specials = len(ps.special_ingredients)
+        special_bonus = 1.5 + min(mat_specials, 3) * 0.5
         for ing in gs.open_display:
             if ing in _SPIRITS:
                 if cups.best_cup_for_spirit(ing) is not None:
@@ -1455,6 +1479,9 @@ class Mastermind(Strategy):
                     score -= 1.0 + drunk * 0.5  # Forced to drink
             elif ing in _MIXERS:
                 score += 0.5
+            else:
+                # SPECIAL → mat: cost-free pickup that enables 10–15 pt cocktails
+                score += special_bonus
 
         # Bag risk when spirit slots are exhausted
         if spirit_slots == 0:
@@ -1831,8 +1858,13 @@ class Mastermind(Strategy):
             base = 3.0 if ing.name in hot else 1.5
             return (base + threat * 0.8, "drink", None)
 
-        # SPECIAL token
-        return (0.5 + threat * 0.5, "drink", None)
+        # SPECIAL token: rolls onto the mat without raising drunk or filling
+        # bladder, and unlocks 10–15 pt cocktail recipes. Each special already
+        # on the mat signals committed cocktail intent — the next one is
+        # increasingly valuable.
+        mat_specials = len(ps.special_ingredients)
+        base = 4.0 + min(mat_specials, 3) * 1.0
+        return (base + threat * 0.5, "drink", None)
 
     def _bag_draw_ev(self, gs, ps, cups, focus_ing):
         """Expected value of a single random bag draw given current cup state."""
