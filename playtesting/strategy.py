@@ -320,6 +320,7 @@ def _smart_take_assignments(
     prefer_spirit: Ingredient | None = None,
     spirit_to_cup: bool = True,
     mixer_to_cup_if_paired: bool = True,
+    prioritize_specials: bool = False,
 ) -> list[dict]:
     """Shared smart assignment builder — returns display-only assignments.
 
@@ -331,6 +332,10 @@ def _smart_take_assignments(
     2. Paired mixers → cups (only valid pairings)
     3. Other mixers → drink (sobering effect when no spirits drunk)
     4. Stops when display is exhausted (remaining come from bag)
+
+    When ``prioritize_specials`` is True (cocktail bot), SPECIAL tokens are
+    taken before anything else — they always roll to the mat regardless of
+    disposition and are required for 10–15 pt cocktail recipes.
 
     Within each priority class, ingredients opponents need are picked
     first as a denial play (see `_opponent_threats`).
@@ -360,6 +365,22 @@ def _smart_take_assignments(
 
     for _ in range(count):
         placed = False
+
+        # Pass 0 (cocktail bot): SPECIAL tokens → mat. They auto-roll onto
+        # the mat regardless of disposition, so grab them eagerly.
+        if not placed and prioritize_specials:
+            for ing in list(display_available):
+                if ing == Ingredient.SPECIAL:
+                    display_available.remove(ing)
+                    assignments.append(
+                        {
+                            "ingredient": ing.name,
+                            "source": "display",
+                            "disposition": "drink",
+                        }
+                    )
+                    placed = True
+                    break
 
         # Pass 1: preferred spirit → cup
         if not placed and spirit_to_cup and prefer_spirit:
@@ -802,7 +823,8 @@ class KaraokeRusher(Strategy):
 class CocktailHunter(Strategy):
     """Builds spirits + valid mixers in cups for sellable drinks.
 
-    Prioritises selling any sellable cup to stay alive and score.
+    Prioritises grabbing SPECIAL tokens from the display to enable 10–15 pt
+    cocktails over greedy 1-pt non-cocktail sells.
     """
 
     name = "CocktailHunter"
@@ -812,7 +834,20 @@ class CocktailHunter(Strategy):
     ) -> Action:
         ps = gs.player_states[player_id]
 
-        # Sell any cup with points (keeps cups clear for new drinks)
+        # Always sell high-value cups (cocktails, double-spirit drinks)
+        sell = _best_sell(valid_actions, min_pts=3)
+        if sell:
+            return sell
+
+        # If SPECIAL tokens are available on the display, prefer taking
+        # ingredients over selling cheap 1-pt drinks — specials roll to the
+        # mat and unlock 10–15 pt cocktail recipes.
+        if any(ing == Ingredient.SPECIAL for ing in gs.open_display):
+            take = _find_action(valid_actions, "take_ingredients")
+            if take:
+                return take
+
+        # No specials to grab — sell any cup with points to keep cups clear
         sell = _best_sell(valid_actions, min_pts=1)
         if sell:
             return sell
@@ -866,7 +901,14 @@ class CocktailHunter(Strategy):
     ) -> list[dict]:
         ps = gs.player_states[player_id]
         cups = CupTracker(ps)
-        return _smart_take_assignments(gs, ps, count, cups, mixer_to_cup_if_paired=True)
+        return _smart_take_assignments(
+            gs,
+            ps,
+            count,
+            cups,
+            mixer_to_cup_if_paired=True,
+            prioritize_specials=True,
+        )
 
 
 class SafeSeller(Strategy):
