@@ -240,10 +240,13 @@ def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> boo
             status_code=409,
         )
 
-    # Advance turn only when main action is done AND no unused free actions remain
+    # Advance turn when main action is done and no unused free actions remain.
+    # An eliminated player can no longer use their free actions, so the turn
+    # must advance regardless — otherwise the game stalls on a hospitalised
+    # or wet player who still holds unused free action cards.
     if gs.main_action_taken_this_turn:
         remaining_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
-        if len(remaining_free) == 0:
+        if len(remaining_free) == 0 or ps.is_eliminated:
             gs.turn_number += 1
             _advance_turn(gs)
             _check_last_round_complete(gs)
@@ -1099,6 +1102,15 @@ def drink_stored_spirit(
 
     # Apply drunk modifier for the batch
     _apply_drunk_modifier(gs, player_id, drunk_ingredients)
+
+    # If drinking from the store hospitalised this player, advance the turn
+    # so the game doesn't get stuck (this is a free action and would
+    # otherwise leave player_turn pointing at an eliminated player).
+    if ps.is_eliminated and gs.player_turn == player_id:
+        _reset_take_batch_state(gs)
+        gs.turn_number += 1
+        _advance_turn(gs)
+        _check_last_round_complete(gs)
 
     payload = {
         "store_card_index": store_card_index,

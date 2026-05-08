@@ -54,13 +54,21 @@ def process_bot_turns(game_manager, game_id: UUID) -> None:
             return
 
         ps = gs.player_states.get(current_player)
-        if ps is None or ps.is_eliminated:
+        if ps is None:
             return
 
         # Check if current player is a bot
         bot_map = get_bot_ids_for_game(game.players)
         if current_player not in bot_map:
             return  # human player's turn
+
+        if ps.is_eliminated:
+            # The turn somehow ended up on an eliminated bot (e.g. an upstream
+            # bug left a hospitalised player as the active turn). Force-advance
+            # so the game doesn't stall and continue the loop to process the
+            # next player.
+            _force_advance_turn(game_manager, game, current_player)
+            continue
 
         strategy_name = bot_map[current_player]
         strategy = _get_strategy(strategy_name)

@@ -138,8 +138,26 @@ class GameManager:
         return normalised
 
     def get_game_by_id(self, id: UUID) -> Game | None:
-        """Returns a game by its ID or None if not found."""
-        return db.get_game(id)
+        """Returns a game by its ID or None if not found.
+
+        Self-heals games that are stuck on an eliminated bot's turn — that
+        situation should never occur after the relevant turn-advance fixes,
+        but this acts as a recovery path for games that entered the stuck
+        state before those fixes shipped.
+        """
+        game = db.get_game(id)
+        if (
+            game is not None
+            and game.status == Status.STARTED
+            and game.game_state is not None
+            and game.game_state.winner is None
+            and game.game_state.player_turn is not None
+        ):
+            ps = game.game_state.player_states.get(game.game_state.player_turn)
+            if ps is not None and ps.is_eliminated:
+                self._schedule_bot_turns(id)
+                game = db.get_game(id) or game
+        return game
 
     def list_games(
         self,
