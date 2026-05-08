@@ -1649,11 +1649,23 @@ function renderMyCups(myState, isMyTurn, game, gs) {
                     'aria-label',
                     `Sell both cups for ${totalPts} points (${drink0.name} ${drink0.points}pts plus ${drink1.name} ${drink1.points}pts)`
                 );
-                sellBothBtn.onclick = () => doSellBothCups(
-                    drink0.declaredSpecials || [],
-                    drink1.declaredSpecials || [],
-                    sellBothBtn,
-                );
+                // Sell-both-cups is a sell_cup main action — disable when the
+                // server's valid_actions doesn't include sell_cup (i.e. main
+                // already used and no free sell slot remains).
+                const bothAvailableTypes = getAvailableActionTypes(gs, myState);
+                const sellBothAvailable = !!bothAvailableTypes.sell_cup;
+                sellBothBtn.disabled = !sellBothAvailable;
+                if (sellBothAvailable && bothAvailableTypes.sell_cup?.is_free) {
+                    sellBothBtn.classList.add('gb-action-free-inline');
+                }
+                sellBothBtn.onclick = () => {
+                    if (sellBothBtn.disabled) return;
+                    doSellBothCups(
+                        drink0.declaredSpecials || [],
+                        drink1.declaredSpecials || [],
+                        sellBothBtn,
+                    );
+                };
                 wrap.appendChild(sellBothBtn);
                 cupsEl.appendChild(wrap);
             }
