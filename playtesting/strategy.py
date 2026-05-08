@@ -79,6 +79,11 @@ class CupTracker:
         self.spirit_type: list[Ingredient | None] = [None, None]
         self.mixer_count: list[int] = [0, 0]
         self.mixer_types: list[set[Ingredient]] = [set(), set()]
+        # Cup is "spoiled" when adding more ingredients can't make it sellable
+        # (mixed spirit types, mixed mixer types, or mixer that doesn't pair
+        # with the cup's spirit). Used so later passes don't waste picks on a
+        # cup that's already a write-off.
+        self.is_spoiled: list[bool] = [False, False]
 
         for ci in (0, 1):
             for ing in ps.cups[ci].ingredients:
@@ -89,11 +94,24 @@ class CupTracker:
                     elif self.spirit_type[ci] != ing:
                         # Mixed spirits — cup is already ruined
                         self.spirit_type[ci] = ing  # just track latest
+                        self.is_spoiled[ci] = True
                 elif ing in _MIXERS:
                     self.mixer_count[ci] += 1
                     self.mixer_types[ci].add(ing)
+            # Detect cups already spoiled by mixed mixer types or invalid pairing
+            if len(self.mixer_types[ci]) > 1:
+                self.is_spoiled[ci] = True
+            if (
+                self.spirit_type[ci] is not None
+                and self.mixer_count[ci] > 0
+            ):
+                valid = VALID_PAIRINGS.get(self.spirit_type[ci], set())
+                if any(m not in valid for m in self.mixer_types[ci]):
+                    self.is_spoiled[ci] = True
 
     def can_add(self, cup_idx: int) -> bool:
+        if self.is_spoiled[cup_idx]:
+            return False  # don't waste picks on a write-off cup
         return self.fill[cup_idx] < MAX_CUP_INGREDIENTS
 
     def _can_add_spirit(self, cup_idx: int, spirit: Ingredient) -> bool:
@@ -132,6 +150,63 @@ class CupTracker:
         self.fill[cup_idx] += 1
         self.mixer_count[cup_idx] += 1
         self.mixer_types[cup_idx].add(mixer)
+
+    def can_spoil_with(self, cup_idx: int, spirit: Ingredient) -> bool:
+        """Can this spirit be dumped into the cup, accepting it becomes
+        unsellable? Only legal if the cup already has a different spirit
+        (mixed spirit types is what spoils it) and there's room within the
+        2-spirit game rule.
+        """
+        if self.is_spoiled[cup_idx]:
+            return False  # already a write-off; don't keep dumping into it
+        if self.fill[cup_idx] >= MAX_CUP_INGREDIENTS:
+            return False
+        if self.spirit_counts[cup_idx] >= 2:
+            return False  # game rule: max 2 spirits per cup
+        if self.spirit_type[cup_idx] is None:
+            return False  # empty cup → not a spoil, would be a clean add
+        if self.spirit_type[cup_idx] == spirit:
+            return False  # matches existing spirit → clean add, not a spoil
+
+        # Don't spoil a cup that's still on a viable sellable path: it has a
+        # spirit + a paired mixer (or tequila slammer in progress).
+        spirit_in = self.spirit_type[cup_idx]
+        if self.mixer_count[cup_idx] > 0:
+            valid = VALID_PAIRINGS.get(spirit_in, set())
+            if all(m in valid for m in self.mixer_types[cup_idx]):
+                return False  # cup is on a valid sellable path
+        if (
+            spirit_in == Ingredient.TEQUILA
+            and self.spirit_counts[cup_idx] >= 1
+            and self.mixer_count[cup_idx] == 0
+        ):
+            return False  # tequila slammer in progress
+
+        return True
+
+    def spoil_with(self, cup_idx: int, spirit: Ingredient):
+        """Dump an incompatible spirit into the cup. Marks it as a write-off
+        so further passes don't keep adding to it.
+        """
+        self.fill[cup_idx] += 1
+        self.spirit_counts[cup_idx] += 1
+        self.spirit_type[cup_idx] = spirit
+        self.is_spoiled[cup_idx] = True
+
+    def best_spoil_cup(self, spirit: Ingredient) -> int | None:
+        """Pick the least-bad cup to spoil with this spirit. Prefer cups with
+        the smallest sunk cost (fewer ingredients), since we're writing the
+        cup off entirely.
+        """
+        candidates = [
+            (self.fill[i], i)
+            for i in (0, 1)
+            if self.can_spoil_with(i, spirit)
+        ]
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[0][1]
 
     def any_open(self) -> int | None:
         for i in (0, 1):
@@ -321,6 +396,8 @@ def _smart_take_assignments(
     spirit_to_cup: bool = True,
     mixer_to_cup_if_paired: bool = True,
     prioritize_specials: bool = False,
+    drunk_aware: bool = True,
+    drunk_cap: int = 3,
 ) -> list[dict]:
     """Shared smart assignment builder — returns display-only assignments.
 
@@ -344,6 +421,10 @@ def _smart_take_assignments(
     display_available = list(gs.open_display)
     hot = _hot_mixer_types(ps)
     threats = _opponent_threats(gs, ps)
+    # Track spirit drinks committed this batch so the safety gate can decide
+    # between drinking, spoiling a stuck cup, or bailing to the bag.
+    spirits_drunk_so_far = 0
+    spirit_drink_budget = max(0, drunk_cap - ps.drunk_level)
 
     # Pre-sort display: spirits we can cup first, then paired mixers,
     # then hot mixers (great to drink), then plain mixers, then specials.
@@ -455,21 +536,63 @@ def _smart_take_assignments(
                     placed = True
                     break
 
-        # Pass 5: drink spirits from display (when spirit_to_cup=False,
-        # or when no cup has room for this spirit type)
+        # Pass 5: handle spirits that can't be cupped. When drunk_aware, try
+        # to (a) spoil a stuck cup with the spirit, or (b) bail to the bag —
+        # both avoid certain drunk increase. Only drink as a true last resort
+        # when bailing isn't an option (used for KaraokeRusher's drink mode).
         if not placed:
-            for ing in list(display_available):
-                if ing in _SPIRITS:
-                    display_available.remove(ing)
+            spirit_to_handle = next(
+                (i for i in display_available if i in _SPIRITS), None
+            )
+            if spirit_to_handle is not None:
+                would_overflow = (
+                    drunk_aware
+                    and spirits_drunk_so_far + 1 > spirit_drink_budget
+                )
+                if would_overflow:
+                    # First option: spoil a stuck cup that can't be sold
+                    cup_to_spoil = cups.best_spoil_cup(spirit_to_handle)
+                    if cup_to_spoil is not None:
+                        display_available.remove(spirit_to_handle)
+                        cups.spoil_with(cup_to_spoil, spirit_to_handle)
+                        assignments.append(
+                            {
+                                "ingredient": spirit_to_handle.name,
+                                "source": "display",
+                                "disposition": "cup",
+                                "cup_index": cup_to_spoil,
+                            }
+                        )
+                        placed = True
+                    elif len(gs.bag_contents) >= count - len(assignments):
+                        # Bail: leave display alone, let the bag fill the rest
+                        # of the take (random — may give mixers or specials
+                        # instead of certain drunk). Only safe when bag has
+                        # enough items to cover the remaining picks.
+                        return assignments
+                    else:
+                        # Bag too small to bail; have to drink the spirit
+                        display_available.remove(spirit_to_handle)
+                        assignments.append(
+                            {
+                                "ingredient": spirit_to_handle.name,
+                                "source": "display",
+                                "disposition": "drink",
+                            }
+                        )
+                        spirits_drunk_so_far += 1
+                        placed = True
+                else:
+                    display_available.remove(spirit_to_handle)
                     assignments.append(
                         {
-                            "ingredient": ing.name,
+                            "ingredient": spirit_to_handle.name,
                             "source": "display",
                             "disposition": "drink",
                         }
                     )
+                    spirits_drunk_so_far += 1
                     placed = True
-                    break
 
         # Pass 6: any remaining display item (SPECIAL tokens etc.)
         if not placed and display_available:
@@ -496,13 +619,17 @@ def _smart_pending_assignments(
     cups: CupTracker,
     *,
     spirit_to_cup: bool = True,
+    drunk_aware: bool = True,
+    drunk_cap: int = 3,
+    spirits_already_drunk: int = 0,
 ) -> list[dict]:
     """Assign bag-drawn ingredients after seeing what was drawn.
 
     Since we know what each ingredient is, we can make optimal decisions:
     - Spirits → cup (if valid slot exists) to avoid raising drunk level
     - Mixers → drink (sobering effect when no spirits drunk in batch)
-    - If no cup room for a spirit, drink it (unavoidable)
+    - If no cup room for a spirit and drinking would push drunk over the cap,
+      spoil a stuck cup instead. Otherwise drink it (unavoidable).
     """
     assignments: list[dict] = []
 
@@ -510,6 +637,9 @@ def _smart_pending_assignments(
     spirits = [i for i in drawn if i in _SPIRITS]
     mixers = [i for i in drawn if i in _MIXERS]
     others = [i for i in drawn if i not in _SPIRITS and i not in _MIXERS]
+
+    spirits_drunk_so_far = spirits_already_drunk
+    spirit_drink_budget = max(0, drunk_cap - ps.drunk_level)
 
     # Assign spirits first (to cups if possible)
     for spirit in spirits:
@@ -525,7 +655,25 @@ def _smart_pending_assignments(
                     }
                 )
                 continue
-        # Can't cup it (or don't want to) — drink it
+        # Can't cup legally — drinking would raise drunk. Try spoiling a
+        # stuck cup if drinking would now exceed the safe cap.
+        would_overflow = (
+            drunk_aware and spirits_drunk_so_far + 1 > spirit_drink_budget
+        )
+        if would_overflow:
+            cup_to_spoil = cups.best_spoil_cup(spirit)
+            if cup_to_spoil is not None:
+                cups.spoil_with(cup_to_spoil, spirit)
+                assignments.append(
+                    {
+                        "source": "pending",
+                        "disposition": "cup",
+                        "cup_index": cup_to_spoil,
+                    }
+                )
+                continue
+        # Drink it (unavoidable: no cup, no spoil target)
+        spirits_drunk_so_far += 1
         assignments.append({"source": "pending", "disposition": "drink"})
 
     # Assign mixers — prefer cupping if valid pairing, otherwise drink
@@ -842,6 +990,7 @@ class KaraokeRusher(Strategy):
                             cups,
                             prefer_spirit=ing,
                             spirit_to_cup=False,
+                            drunk_aware=False,
                             mixer_to_cup_if_paired=False,
                         )
 
@@ -862,7 +1011,11 @@ class KaraokeRusher(Strategy):
                     have = sum(1 for i in ps.bladder if i == ing)
                     if 1 <= have < 3:
                         return _smart_pending_assignments(
-                            ps, drawn, cups, spirit_to_cup=False
+                            ps,
+                            drawn,
+                            cups,
+                            spirit_to_cup=False,
+                            drunk_aware=False,
                         )
 
         return _smart_pending_assignments(ps, drawn, cups)
@@ -1270,6 +1423,7 @@ class SpecialistBuilder(Strategy):
                         spirit_to_cup=False,
                         mixer_to_cup_if_paired=False,
                         prioritize_specials=True,
+                        drunk_aware=False,
                     )
 
             # Default: safe play with preferred spirit → cups
@@ -1295,7 +1449,9 @@ class SpecialistBuilder(Strategy):
         if not held and focus_ing and ps.drunk_level <= 1:
             have = sum(1 for i in ps.bladder if i == focus_ing)
             if have == 1:
-                return _smart_pending_assignments(ps, drawn, cups, spirit_to_cup=False)
+                return _smart_pending_assignments(
+                    ps, drawn, cups, spirit_to_cup=False, drunk_aware=False
+                )
 
         return _smart_pending_assignments(ps, drawn, cups)
 
