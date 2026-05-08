@@ -551,6 +551,22 @@ def _smart_pending_assignments(
     return assignments
 
 
+def _safe_specials_take(
+    gs: GameState, ps: PlayerState, valid_actions: list[Action]
+) -> Action | None:
+    """Return the take_ingredients action when SPECIAL tokens are on the
+    display and taking them is safe (drunk stays ≤ 3). Otherwise None.
+
+    Used by every strategy to prefer banking specials on the mat over
+    selling for points — specials enable 10–15 pt cocktails next turn.
+    """
+    if not any(ing == Ingredient.SPECIAL for ing in gs.open_display):
+        return None
+    if not _safe_to_take(gs, ps):
+        return None
+    return _find_action(valid_actions, "take_ingredients")
+
+
 def _safe_to_take(
     gs: GameState, ps: PlayerState, drunk_cap: int = 3
 ) -> bool:
@@ -748,6 +764,11 @@ class KaraokeRusher(Strategy):
         if karaoke:
             return karaoke[0]
 
+        # Safe specials take — bank them on the mat for future cocktails
+        take = _safe_specials_take(gs, ps, valid_actions)
+        if take:
+            return take
+
         # Sell any cup with points (free up cup space + score)
         sell = _best_sell(valid_actions, min_pts=1)
         if sell:
@@ -864,11 +885,9 @@ class CocktailHunter(Strategy):
         # If SPECIAL tokens are on the display AND taking them is safe
         # (won't push drunk above 3), prefer taking over any sell — banking
         # specials on the mat sets up future 10–15 pt cocktails.
-        has_specials = any(ing == Ingredient.SPECIAL for ing in gs.open_display)
-        if has_specials and _safe_to_take(gs, ps):
-            take = _find_action(valid_actions, "take_ingredients")
-            if take:
-                return take
+        take = _safe_specials_take(gs, ps, valid_actions)
+        if take:
+            return take
 
         # Otherwise, sell any cup with points (highest value first)
         sell = _best_sell(valid_actions, min_pts=1)
@@ -949,6 +968,12 @@ class SafeSeller(Strategy):
     ) -> Action:
         ps = gs.player_states[player_id]
 
+        # Safe specials take — banking specials avoids drinking and unlocks
+        # future cocktails.
+        take = _safe_specials_take(gs, ps, valid_actions)
+        if take:
+            return take
+
         # Sell any cup with points FIRST (before weeing)
         sell = _best_sell(valid_actions, min_pts=1)
         if sell:
@@ -1005,6 +1030,11 @@ class AggressiveDrinker(Strategy):
         self, gs: GameState, player_id: UUID, valid_actions: list[Action]
     ) -> Action:
         ps = gs.player_states[player_id]
+
+        # Safe specials take — free pickups for the mat
+        take = _safe_specials_take(gs, ps, valid_actions)
+        if take:
+            return take
 
         # Sell any cup with points
         sell = _best_sell(valid_actions, min_pts=1)
@@ -1129,6 +1159,12 @@ class SpecialistBuilder(Strategy):
     ) -> Action:
         ps = gs.player_states[player_id]
         focus = self._best_spirit_type(gs, ps)
+
+        # Safe specials take — bank specials for future cocktails before
+        # cashing in non-cocktail sells.
+        take = _safe_specials_take(gs, ps, valid_actions)
+        if take:
+            return take
 
         # Sell cups (specialist bonus makes even small drinks worthwhile)
         sell = _best_sell(valid_actions, min_pts=1)
@@ -1648,6 +1684,12 @@ class Mastermind(Strategy):
         ps = gs.player_states[player_id]
         focus = self._focus_spirit(gs, ps)
         focus_ing = _SPIRIT_MAP.get(focus)
+
+        # Safe specials take — pre-empt weighted scoring when SPECIAL tokens
+        # are on the display and the take stays under the drunk cap.
+        take = _safe_specials_take(gs, ps, valid_actions)
+        if take:
+            return take
 
         best_score, best_action = float("-inf"), valid_actions[0]
         for action in valid_actions:
