@@ -10,6 +10,8 @@ from app.game import GameException, Status
 from app.UserManager import UserManager, UserManagerPermissionError
 from app.JWTHandler import JWTHandler
 from app.logging_config import setup_logging, CanonicalLogMiddleware
+from app.db import db
+from app import push
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 import traceback
@@ -215,6 +217,53 @@ async def profile_page():
 @app.get("/health")
 async def health():
     return JSONResponse(content={"isAvailable": True})
+
+
+@app.get("/vapid-public-key")
+async def vapid_public_key():
+    key = push.get_public_key()
+    if not key:
+        return JSONResponse(status_code=503, content={"error": "Push not configured"})
+    return JSONResponse(content={"public_key": key})
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+
+
+@app.post("/v1/push-subscriptions")
+async def save_push_subscription(body: PushSubscriptionRequest, request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    db.save_push_subscription(
+        user_id=token_user.id,
+        endpoint=body.endpoint,
+        p256dh=body.keys.p256dh,
+        auth=body.keys.auth,
+    )
+    logger.info("Push subscription saved for user %s", token_user.username)
+    return JSONResponse(content={"ok": True}, status_code=201)
+
+
+@app.delete("/v1/push-subscriptions")
+async def delete_push_subscription(request: Request):
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    data = await request.json()
+    endpoint = data.get("endpoint")
+    if not endpoint:
+        return JSONResponse(status_code=400, content={"error": "endpoint required"})
+    db.delete_push_subscription(endpoint)
+    logger.info("Push subscription deleted for user %s", token_user.username)
+    return JSONResponse(content={"ok": True})
 
 
 @app.get("/v1/games")
@@ -754,6 +803,27 @@ def _game_action_precheck(
     return token_user, game, None
 
 
+def _fire_turn_push(old_turn, new_state, game) -> None:
+    """Send a push notification to the next player if the turn just changed."""
+    if new_state is None or new_state.player_turn is None:
+        return
+    if new_state.player_turn == old_turn:
+        return
+    new_player_id = new_state.player_turn
+    host = userManager.get_user(game.host)
+    host_name = host.username if host else "someone"
+    subs = db.get_push_subscriptions(new_player_id)
+    for sub in subs:
+        ok = push.send_push(
+            subscription_info={"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
+            title="Bartenders of Corfu",
+            body=f"It's your turn in {host_name}'s game!",
+            url=f"/game?id={game.id}",
+        )
+        if not ok:
+            db.delete_push_subscription(sub["endpoint"])
+
+
 class DrawFromBagRequest(BaseModel):
     count: int
 
@@ -820,6 +890,7 @@ async def action_sell_cup(game_id: str, body: SellCupRequest, request: Request):
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.sell_cup(
             game,
             token_user.id,
@@ -827,6 +898,7 @@ async def action_sell_cup(game_id: str, body: SellCupRequest, request: Request):
             body.declared_specials,
             additional_cups=body.additional_cups,
         )
+        _fire_turn_push(old_turn, new_state, game)
         logger.info("%s sold cup in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -848,7 +920,9 @@ async def action_drink_cup(game_id: str, body: DrinkCupRequest, request: Request
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.drink_cup(game, token_user.id, body.cup_index)
+        _fire_turn_push(old_turn, new_state, game)
         logger.info("%s drank cup in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -866,7 +940,9 @@ async def action_go_for_a_wee(game_id: str, request: Request):
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.go_for_a_wee(game, token_user.id)
+        _fire_turn_push(old_turn, new_state, game)
         logger.info("%s went for a wee in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1020,7 +1096,9 @@ async def action_end_turn(game_id: str, request: Request):
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.end_turn(game, token_user.id)
+        _fire_turn_push(old_turn, new_state, game)
         logger.info("%s ended turn in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1038,7 +1116,9 @@ async def action_quit_game(game_id: str, request: Request):
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.quit_game(game, token_user.id)
+        _fire_turn_push(old_turn, new_state, game)
         logger.info("%s quit game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}

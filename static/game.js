@@ -11,6 +11,38 @@ import { detectBestDrink, getCocktailRecipes, getValidPairings, SPECIAL_TYPES, c
 import S from './state.js';
 
 // ─────────────────────────────────────────────────────────────
+// Web Push subscription helper (shared with script.js)
+// ─────────────────────────────────────────────────────────────
+
+function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function subscribeToPush() {
+    if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) return;
+        const resp = await fetch('/vapid-public-key');
+        if (!resp.ok) return;
+        const { public_key } = await resp.json();
+        const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: _urlBase64ToUint8Array(public_key),
+        });
+        await fetch('/v1/push-subscriptions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sub.toJSON()),
+        });
+    } catch (_) {}
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initial load + polling
 // ─────────────────────────────────────────────────────────────
 async function load() {
@@ -41,9 +73,13 @@ async function load() {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
 
-    // Request browser notification permission (no-op if already granted/denied)
+    // Request browser notification permission, then subscribe to Web Push
     if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
+        Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') subscribeToPush();
+        });
+    } else if ('Notification' in window && Notification.permission === 'granted') {
+        subscribeToPush();
     }
 
     // Background polling: tell SW to poll all games when tab is hidden
