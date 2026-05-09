@@ -21,6 +21,7 @@ import subprocess
 # skipped when Supabase isn't reachable from this environment.
 _SUPABASE_DEPENDENT_FILES = {
     "test_api.py",
+    "test_push_api.py",
     "test_user_management.py",
     "test_user_manager.py",
     "test_jwt_handler.py",
