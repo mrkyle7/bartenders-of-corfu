@@ -64,8 +64,6 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
         │                                OS notification ────────► │
 ```
 
-**Why not polling?** The service worker's `setInterval` loop is killed when the browser terminates the worker (typically after ~30 seconds of inactivity). With Cloud Run scaling to zero there are also cold-start timeouts. Web Push flips the model: the browser vendor's infrastructure holds the message until the device is online, then delivers it and wakes the service worker via the `push` event — no polling needed.
-
 ## Key pieces
 
 | What | Where |
