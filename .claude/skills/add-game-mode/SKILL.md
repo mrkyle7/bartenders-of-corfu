@@ -105,7 +105,7 @@ If deck composition changes, fix any deck-size totals you can see in the comment
 
 ## 8. Verify
 
-- Run `./run-tests.sh` or `uv run pytest tests/test_game_modes.py tests/test_game_actions_bdd.py -k <mode_key>`.
+- Run `uv run pytest` or `uv run pytest tests/test_game_modes.py tests/test_game_actions_bdd.py -k <mode_key>`.
 - Run `uv run ruff check && uv run ruff format --check`.
 - Manually exercise the mode in the dev server: enable in lobby → start game → verify behaviour.
 

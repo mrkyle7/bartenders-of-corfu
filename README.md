@@ -99,4 +99,4 @@ The only manual prerequisite is creating the `github-terraform` service account 
 
 # Testing
 
-Run `./run-tests.sh`
+Run `uv run pytest`
