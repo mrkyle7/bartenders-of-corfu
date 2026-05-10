@@ -21,7 +21,7 @@ def b64url(data: bytes) -> str:
 
 
 key = generate_private_key(SECP256R1())
-private_key = b64url(key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption()))
+private_key = b64url(key.private_numbers().private_value.to_bytes(32, "big"))
 public_key = b64url(key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint))
 
 print("=" * 60)
