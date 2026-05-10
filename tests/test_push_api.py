@@ -68,7 +68,7 @@ class TestSavePushSubscription(unittest.TestCase):
         }
 
     def test_requires_auth(self):
-        resp = self.client.post("/v1/push-subscriptions", json=self._sub())
+        resp = self.client.post("/v1/push-subscriptions", json=self._sub(), cookies={'userjwt': 'invalid'})
         self.assertEqual(resp.status_code, 401)
 
     def test_saves_subscription(self):
@@ -113,6 +113,7 @@ class TestDeletePushSubscription(unittest.TestCase):
             "DELETE",
             "/v1/push-subscriptions",
             json={"endpoint": "https://push.example.com/sub/x"},
+            cookies={"userjwt": "invalid"}
         )
         self.assertEqual(resp.status_code, 401)
 
