@@ -7,6 +7,21 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
+// ─── Web Push notifications ──────────────────────────────────────────────────
+
+self.addEventListener('push', (e) => {
+    let payload = { title: 'Bartenders of Corfu', body: "It's your turn!", url: '/' };
+    try { payload = { ...payload, ...JSON.parse(e.data.text()) }; } catch (_) {}
+    e.waitUntil(
+        self.registration.showNotification(payload.title, {
+            body: payload.body,
+            icon: '/static/favicon.ico',
+            tag: 'turn-push',
+            data: { url: payload.url },
+        })
+    );
+});
+
 // ─── Notification click → focus or open game tab ────────────────────────────
 
 self.addEventListener('notificationclick', (e) => {

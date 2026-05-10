@@ -3,7 +3,7 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 
 ## Useful Commands
 - Start supabase: `supabase start --network-id k3s-net`
-- Run tests: `./run-tests.sh`
+- Run tests: `uv run pytest`
 - Run locally: `./run-local.sh`
 - Lint/Format: `uv run ruff check && uv run ruff format`
 - Test local k3s deployment: `./k-apply.sh`

@@ -576,6 +576,47 @@ class Db:
         )
         return resp.data[0]["turn_number"] if resp.data else 0
 
+    # ─── Push subscriptions ───────────────────────────────────────────────────
+
+    def save_push_subscription(
+        self, user_id: UUID, endpoint: str, p256dh: str, auth: str
+    ) -> bool:
+        """Upsert a push subscription for a user. Returns True on success."""
+        response = (
+            self.supabase.table("push_subscriptions")
+            .upsert(
+                {
+                    "user_id": str(user_id),
+                    "endpoint": endpoint,
+                    "p256dh": p256dh,
+                    "auth": auth,
+                },
+                on_conflict="endpoint",
+            )
+            .execute()
+        )
+        return len(response.data) >= 1
+
+    def get_push_subscriptions(self, user_id: UUID) -> list[dict]:
+        """Return all push subscriptions for a user."""
+        response = (
+            self.supabase.table("push_subscriptions")
+            .select("endpoint, p256dh, auth")
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        return response.data or []
+
+    def delete_push_subscription(self, endpoint: str) -> bool:
+        """Delete a push subscription by endpoint (e.g. after a 404/410 response)."""
+        response = (
+            self.supabase.table("push_subscriptions")
+            .delete()
+            .eq("endpoint", endpoint)
+            .execute()
+        )
+        return len(response.data) >= 1
+
     def add_player_to_game(self, game_id: UUID, player_id: UUID) -> str:
         """Add a player to an existing game. Returns a text code: 'ok' | 'not_found' | 'not_new' | 'duplicate' | 'full'"""
         response = self.supabase.rpc(
