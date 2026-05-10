@@ -18,3 +18,5 @@ k3s-rendered/
 .env
 .env.local
 .playwright-mcp/
+ml/policy_data.json
+ml/*.pkl

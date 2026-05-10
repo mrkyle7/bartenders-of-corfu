@@ -2191,3 +2191,13 @@ STRATEGY_CLASSES: dict[str, type[Strategy]] = {
     "specialist": SpecialistBuilder,
     "mastermind": Mastermind,
 }
+
+# Lazy-load MCTS to avoid circular imports and heavy deps in normal play
+def _register_mcts():
+    try:
+        from ml.mcts import MCTSStrategy
+        STRATEGY_CLASSES["mcts"] = MCTSStrategy
+    except ImportError:
+        pass
+
+_register_mcts()

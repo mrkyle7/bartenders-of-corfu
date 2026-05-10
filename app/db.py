@@ -639,4 +639,36 @@ class Db:
         return response.data
 
 
+    # --- Bot policy persistence ---
+
+    def get_bot_policy(self, key: str = "mcts_policy") -> dict | None:
+        """Load bot policy data from database."""
+        try:
+            response = (
+                self.supabase.table("bot_policy")
+                .select("value")
+                .eq("key", key)
+                .execute()
+            )
+            if response.data:
+                return response.data[0]["value"]
+        except Exception:
+            pass
+        return None
+
+    def save_bot_policy(self, data: dict, key: str = "mcts_policy") -> bool:
+        """Save bot policy data to database."""
+        try:
+            self.supabase.table("bot_policy").upsert(
+                {
+                    "key": key,
+                    "value": data,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ).execute()
+            return True
+        except Exception:
+            return False
+
+
 db = Db()
