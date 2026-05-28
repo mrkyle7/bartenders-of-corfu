@@ -817,7 +817,10 @@ def _fire_turn_push(old_turn, new_state, game) -> None:
     subs = db.get_push_subscriptions(new_player_id)
     for sub in subs:
         ok = push.send_push(
-            subscription_info={"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
+            subscription_info={
+                "endpoint": sub["endpoint"],
+                "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
+            },
             title="Bartenders of Corfu",
             body=f"It's your turn in {host_name}'s game!",
             url=f"/game?id={game.id}",
@@ -846,7 +849,10 @@ def _fire_game_end_push(game, new_state, cancelled: bool = False) -> None:
         subs = db.get_push_subscriptions(player.id)
         for sub in subs:
             ok = push.send_push(
-                subscription_info={"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
+                subscription_info={
+                    "endpoint": sub["endpoint"],
+                    "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
+                },
                 title="Bartenders of Corfu",
                 body=body,
                 url=f"/game?id={game.id}",
@@ -1263,12 +1269,13 @@ async def get_valid_actions(game_id: str, request: Request):
 
 
 @app.get("/v1/games/{game_id}/history")
-async def get_game_history(game_id: str, request: Request):
-    token_user, game, err = _game_action_precheck(game_id, request)
-    if err:
-        return err
+async def get_game_history(game_id: str):
     try:
-        moves = gameManager.get_history(UUID(game_id))
+        game_uuid = UUID(game_id)
+    except ValueError:
+        return JSONResponse(status_code=400, content={"error": "Invalid game ID"})
+    try:
+        moves = gameManager.get_history(game_uuid)
         return JSONResponse(content={"moves": moves})
     except Exception:
         logger.exception("Error fetching history for game %s", game_id)
@@ -1278,12 +1285,13 @@ async def get_game_history(game_id: str, request: Request):
 
 
 @app.get("/v1/games/{game_id}/history/{turn_number}")
-async def get_state_at_turn(game_id: str, turn_number: int, request: Request):
-    token_user, game, err = _game_action_precheck(game_id, request)
-    if err:
-        return err
+async def get_state_at_turn(game_id: str, turn_number: int):
     try:
-        state = gameManager.get_state_at_turn(UUID(game_id), turn_number)
+        game_uuid = UUID(game_id)
+    except ValueError:
+        return JSONResponse(status_code=400, content={"error": "Invalid game ID"})
+    try:
+        state = gameManager.get_state_at_turn(game_uuid, turn_number)
         if state is None:
             return JSONResponse(status_code=404, content={"error": "Turn not found"})
         return JSONResponse(content={"game_state": state})

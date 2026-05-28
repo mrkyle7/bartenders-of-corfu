@@ -453,10 +453,10 @@ Feature: Game turn actions
     When player 1 requests the state at turn 999
     Then the action should be rejected with a 404 error
 
-  Scenario: A player who is not a game member cannot access the move history
+  Scenario: A non-member can access the move history without auth
     Given player 1 has completed a turn
     When a non-member tries to fetch the move history
-    Then the action should be rejected with a 403 error
+    Then the action should succeed
 
   Scenario: Player 2 is eliminated when drunk and bladder limits are both exceeded simultaneously
     Given it is player 1's turn
