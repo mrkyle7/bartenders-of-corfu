@@ -8,8 +8,16 @@ situations. By weighting action-type priors toward what winners actually did,
 the MCTS bot explores winning strategies first.
 
 Usage:
-    uv run python -m ml.train_from_history --url https://cheetahmoongames.com
-    uv run python -m ml.train_from_history --url https://cheetahmoongames.com --max-games 50
+    # Analyze only (no policy update):
+    uv run python -m ml.train_from_history --dry-run
+
+    # Update local dev Supabase:
+    uv run python -m ml.train_from_history
+
+    # Update production Supabase directly:
+    uv run python -m ml.train_from_history \
+        --supabase-url https://XYZ.supabase.co \
+        --supabase-key SERVICE_ROLE_KEY
 """
 
 import argparse
@@ -128,17 +136,76 @@ def extract_training_data(
     }
 
 
-def update_policy(training_data: dict, alpha: float = 0.1) -> dict:
-    """Update the OnlinePolicy with training data from real games.
+def _save_policy_direct(supabase_url: str, supabase_key: str, data: dict):
+    """Save policy directly to a Supabase instance (no app.db dependency)."""
+    from datetime import datetime, timezone
 
-    Uses exponential moving average to blend real-game insights with
-    existing self-play learnings.
+    payload = json.dumps(
+        {
+            "key": "mcts_policy",
+            "value": data,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{supabase_url}/rest/v1/bot_policy",
+        data=payload,
+        headers={
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        resp.read()
+
+
+def _load_policy_direct(supabase_url: str, supabase_key: str) -> dict | None:
+    """Load policy directly from a Supabase instance."""
+    url = f"{supabase_url}/rest/v1/bot_policy?key=eq.mcts_policy&select=value"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        rows = json.loads(resp.read())
+    if rows:
+        return rows[0]["value"]
+    return None
+
+
+def update_policy(
+    training_data: dict,
+    alpha: float = 0.1,
+    supabase_url: str | None = None,
+    supabase_key: str | None = None,
+) -> dict:
+    """Update the MCTS policy with training data from real games.
+
+    If supabase_url/key are provided, reads/writes directly to that instance.
+    Otherwise falls back to the app.db singleton (local dev).
 
     Returns the updated policy data dict.
     """
-    from ml.mcts import get_online_policy
+    # Load existing policy
+    if supabase_url and supabase_key:
+        existing = _load_policy_direct(supabase_url, supabase_key)
+        policy_values = existing.get("values", {}) if existing else {}
+        policy_counts = existing.get("counts", {}) if existing else {}
+        games_played = existing.get("games_played", 0) if existing else 0
+    else:
+        from ml.mcts import get_online_policy
 
-    policy = get_online_policy()
+        policy = get_online_policy()
+        policy_values = policy.action_values
+        policy_counts = policy.action_counts
+        games_played = policy.games_played
 
     action_values = training_data["action_values"]
     action_samples = training_data["action_samples"]
@@ -154,26 +221,34 @@ def update_policy(training_data: dict, alpha: float = 0.1) -> dict:
         raw_avg = total_val / samples
         normalized = max(0.0, min(1.0, (raw_avg + 0.3) / 1.3))
 
-        old_val = policy.action_values.get(atype, 0.5)
-        old_count = policy.action_counts.get(atype, 0)
+        old_val = policy_values.get(atype, 0.5)
+        old_count = policy_counts.get(atype, 0)
 
         if old_count == 0:
-            # No prior data — use real game data directly
-            policy.action_values[atype] = normalized
+            policy_values[atype] = normalized
         else:
-            # Blend with existing policy using EMA
-            policy.action_values[atype] = old_val * (1 - alpha) + normalized * alpha
+            policy_values[atype] = old_val * (1 - alpha) + normalized * alpha
 
-        policy.action_counts[atype] = old_count + samples
+        policy_counts[atype] = old_count + samples
 
-    policy.games_played += training_data["games_processed"]
-    policy.save()
+    games_played += training_data["games_processed"]
 
-    return {
-        "values": policy.action_values,
-        "counts": policy.action_counts,
-        "games_played": policy.games_played,
+    result = {
+        "values": policy_values,
+        "counts": policy_counts,
+        "games_played": games_played,
     }
+
+    # Save
+    if supabase_url and supabase_key:
+        _save_policy_direct(supabase_url, supabase_key, result)
+    else:
+        policy.action_values = policy_values
+        policy.action_counts = policy_counts
+        policy.games_played = games_played
+        policy.save()
+
+    return result
 
 
 def report(training_data: dict, policy_data: dict):
@@ -238,8 +313,23 @@ def main():
         action="store_true",
         help="Fetch and analyze data without updating policy",
     )
+    parser.add_argument(
+        "--supabase-url",
+        type=str,
+        default=None,
+        help="Supabase URL to save policy to (e.g. production instance)",
+    )
+    parser.add_argument(
+        "--supabase-key",
+        type=str,
+        default=None,
+        help="Supabase service_role key for the target instance",
+    )
 
     args = parser.parse_args()
+
+    if bool(args.supabase_url) != bool(args.supabase_key):
+        parser.error("--supabase-url and --supabase-key must be used together")
 
     print(f"Fetching ended games from {args.url}...")
     games = fetch_ended_games(args.url, max_games=args.max_games)
@@ -258,12 +348,17 @@ def main():
 
     if args.dry_run:
         print("\n[DRY RUN] Showing analysis without updating policy")
-        # Show raw stats without policy update
         report(training_data, {"values": {}, "counts": {}, "games_played": 0})
         return
 
-    print("Updating MCTS policy...")
-    policy_data = update_policy(training_data, alpha=args.alpha)
+    target = args.supabase_url or "local app.db"
+    print(f"Updating MCTS policy on {target}...")
+    policy_data = update_policy(
+        training_data,
+        alpha=args.alpha,
+        supabase_url=args.supabase_url,
+        supabase_key=args.supabase_key,
+    )
     report(training_data, policy_data)
 
 
