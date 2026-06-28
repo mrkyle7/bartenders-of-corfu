@@ -1,0 +1,49 @@
+name: Train MCTS Bot
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_games:
+        description: "Max ended games to fetch"
+        required: false
+        default: "200"
+      alpha:
+        description: "EMA blending factor (0-1, higher = more weight to new data)"
+        required: false
+        default: "0.3"
+      dry_run:
+        description: "Dry run (analyze only, don't update policy)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Train MCTS from game history
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          ARGS="--max-games ${{ inputs.max_games }} --alpha ${{ inputs.alpha }} --verbose"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          else
+            ARGS="$ARGS --supabase-url $SUPABASE_URL --supabase-key $SUPABASE_KEY"
+          fi
+          uv run python -m ml.train_from_history $ARGS
