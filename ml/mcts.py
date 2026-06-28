@@ -241,11 +241,29 @@ class RolloutExecutor:
         if ps is None or ps.is_eliminated:
             return 0.0
 
-        # Score-based heuristic
-        my_score = ps.points + ps.karaoke_cards_claimed * 8
+        # Score-based heuristic — cards matter hugely
+        # Kyle wins with avg 3.2 cards and 5.2 pts/sell.
+        # Cards compound value: specialist = +2pt/sell, doubler = x2, store = spirit bank
+        card_value = 0.0
+        for cd in ps.cards:
+            ct = cd.get("card_type", "")
+            if ct == "specialist":
+                card_value += 6.0  # Enables +2pt per sell
+            elif ct == "cup_doubler":
+                card_value += 8.0  # Doubles non-cocktail sell
+            elif ct == "store":
+                card_value += 5.0  # Spirit accumulation
+            elif ct == "refresher":
+                card_value += 4.0  # Drunk management
+            elif ct == "karaoke":
+                card_value += 5.0  # Points already scored
+            else:
+                card_value += 3.0
+
+        my_score = ps.points + ps.karaoke_cards_claimed * 10 + card_value
         best_opp = max(
             (
-                p.points + p.karaoke_cards_claimed * 8
+                p.points + p.karaoke_cards_claimed * 10 + sum(3 for _ in p.cards)
                 for pid, p in gs.player_states.items()
                 if pid != player_id and not p.is_eliminated
             ),
@@ -562,11 +580,37 @@ class MCTSStrategy(Strategy):
         self._decisions_since_save = 0
         self._save_interval = 10  # Save policy every N decisions
 
+    def _filter_suicidal(
+        self, gs: GameState, player_id: UUID, actions: list[Action]
+    ) -> list[Action]:
+        """Remove actions that would cause self-elimination."""
+        ps = gs.player_states[player_id]
+        safe = []
+        for a in actions:
+            if a.action_type == "drink_cup":
+                ci = a.params.get("cup_index", 0)
+                cup = ps.cups[ci]
+                cup_size = len(cup.ingredients)
+                # Would overflow bladder → wet elimination
+                if len(ps.bladder) + cup_size > ps.bladder_capacity:
+                    continue
+                # Would get hospitalised (drunk > 5)
+                from app.actions import _SPIRITS as _SP
+
+                cup_spirits = sum(1 for i in cup.ingredients if i in _SP)
+                if ps.drunk_level + cup_spirits > 5:
+                    continue
+            safe.append(a)
+        return safe if safe else actions  # Never return empty
+
     def choose_action(
         self, gs: GameState, player_id: UUID, valid_actions: list[Action]
     ) -> Action:
         if not valid_actions:
             return self._fallback.choose_action(gs, player_id, valid_actions)
+
+        # Safety: filter out suicidal actions before MCTS considers them
+        valid_actions = self._filter_suicidal(gs, player_id, valid_actions)
 
         # For trivial decisions, use heuristic
         if len(valid_actions) <= 2:
@@ -574,7 +618,10 @@ class MCTSStrategy(Strategy):
 
         # Run MCTS search
         action = self.search_engine.search(
-            gs, player_id, valid_actions, policy=get_online_policy() if self._learn else None
+            gs,
+            player_id,
+            valid_actions,
+            policy=get_online_policy() if self._learn else None,
         )
 
         # Record learnings from the search tree

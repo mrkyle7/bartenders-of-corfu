@@ -101,10 +101,7 @@ class CupTracker:
             # Detect cups already spoiled by mixed mixer types or invalid pairing
             if len(self.mixer_types[ci]) > 1:
                 self.is_spoiled[ci] = True
-            if (
-                self.spirit_type[ci] is not None
-                and self.mixer_count[ci] > 0
-            ):
+            if self.spirit_type[ci] is not None and self.mixer_count[ci] > 0:
                 valid = VALID_PAIRINGS.get(self.spirit_type[ci], set())
                 if any(m not in valid for m in self.mixer_types[ci]):
                     self.is_spoiled[ci] = True
@@ -199,9 +196,7 @@ class CupTracker:
         cup off entirely.
         """
         candidates = [
-            (self.fill[i], i)
-            for i in (0, 1)
-            if self.can_spoil_with(i, spirit)
+            (self.fill[i], i) for i in (0, 1) if self.can_spoil_with(i, spirit)
         ]
         if not candidates:
             return None
@@ -546,8 +541,7 @@ def _smart_take_assignments(
             )
             if spirit_to_handle is not None:
                 would_overflow = (
-                    drunk_aware
-                    and spirits_drunk_so_far + 1 > spirit_drink_budget
+                    drunk_aware and spirits_drunk_so_far + 1 > spirit_drink_budget
                 )
                 if would_overflow:
                     # First option: spoil a stuck cup that can't be sold
@@ -657,9 +651,7 @@ def _smart_pending_assignments(
                 continue
         # Can't cup legally — drinking would raise drunk. Try spoiling a
         # stuck cup if drinking would now exceed the safe cap.
-        would_overflow = (
-            drunk_aware and spirits_drunk_so_far + 1 > spirit_drink_budget
-        )
+        would_overflow = drunk_aware and spirits_drunk_so_far + 1 > spirit_drink_budget
         if would_overflow:
             cup_to_spoil = cups.best_spoil_cup(spirit)
             if cup_to_spoil is not None:
@@ -715,9 +707,7 @@ def _safe_specials_take(
     return _find_action(valid_actions, "take_ingredients")
 
 
-def _safe_to_take(
-    gs: GameState, ps: PlayerState, drunk_cap: int = 3
-) -> bool:
+def _safe_to_take(gs: GameState, ps: PlayerState, drunk_cap: int = 3) -> bool:
     """Estimate whether take_ingredients keeps drunk_level ≤ drunk_cap.
 
     Conservative: SPECIAL tokens roll to the mat (no drunk cost), spirits
@@ -726,9 +716,7 @@ def _safe_to_take(
     they often sober — the bias is toward not taking when uncertain.
     """
     cup_slots = sum(MAX_CUP_INGREDIENTS - len(c.ingredients) for c in ps.cups)
-    specials_avail = sum(
-        1 for ing in gs.open_display if ing == Ingredient.SPECIAL
-    )
+    specials_avail = sum(1 for ing in gs.open_display if ing == Ingredient.SPECIAL)
 
     if ps.drunk_level >= drunk_cap:
         # At cap: only safe if every take can be absorbed with no drinks
@@ -1165,9 +1153,7 @@ class SafeSeller(Strategy):
     ) -> list[dict]:
         ps = gs.player_states[player_id]
         cups = CupTracker(ps)
-        return _smart_take_assignments(
-            gs, ps, count, cups, prioritize_specials=True
-        )
+        return _smart_take_assignments(gs, ps, count, cups, prioritize_specials=True)
 
 
 class AggressiveDrinker(Strategy):
@@ -1615,31 +1601,38 @@ class Mastermind(Strategy):
         drunk = ps.drunk_level
         score = pts * 10.0
 
+        # Penalize low-value sells — hold cups for higher value
+        # Kyle sells for 5.2 avg, bots sell for 2.3 avg (44% are 1-pt dumps)
+        if pts <= 1:
+            score -= 15.0  # Strong penalty for 1-pt sells
+        elif pts <= 2:
+            score -= 5.0
+
+        # Bonus for high-value sells (cocktails, doubled cups)
+        if pts >= 6:
+            score += 15.0
+        elif pts >= 4:
+            score += 8.0
+
         # Urgency: score faster when opponent is ahead
-        score += self._urgency(gs, pid) * 15
+        score += self._urgency(gs, pid) * 10
 
         # Relative score gap: sell faster when falling behind
         score_gap = self._max_opp_pts(gs, pid) - ps.points
         if score_gap > 5:
-            score += min(score_gap, 15)
+            score += min(score_gap, 10)
 
         # Drunk pressure: sell faster to avoid taking when drunk
-        if drunk >= 4:
-            score += 30
-        elif drunk >= 3:
-            score += 15
-        elif drunk >= 2:
-            score += 8
-
-        # Need cup space: bonus when both cups occupied
-        if not ps.cups[0].is_empty and not ps.cups[1].is_empty:
+        # (reduced from before — bots were panic-selling too much)
+        if drunk >= 5:
+            score += 20
+        elif drunk >= 4:
             score += 10
+        elif drunk >= 3:
+            score += 5
 
-        # Bladder pressure: selling frees cups, reducing future forced drinking
-        bladder_fill = (
-            len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
-        )
-        if bladder_fill >= 0.75:
+        # Need cup space: small bonus when both cups occupied
+        if not ps.cups[0].is_empty and not ps.cups[1].is_empty:
             score += 5
 
         # Dead-end cup: no matching spirits left in bag/display → sell now
@@ -1655,7 +1648,7 @@ class Mastermind(Strategy):
                     cup_spirit
                 )
                 if remaining == 0:
-                    score += 12  # No matching spirits exist — sell immediately
+                    score += 20  # No matching spirits exist — sell immediately
 
         return score
 
@@ -1671,22 +1664,28 @@ class Mastermind(Strategy):
             if cups.can_add(i) and cups.spirit_counts[i] < 2:
                 spirit_slots += 2 - cups.spirit_counts[i]
 
-        score = 15.0  # Baseline — taking is the default action
+        # Taking is how you build cups and score points — higher baseline.
+        # Kyle takes 42.7% of the time + draws from bag 16.5%.
+        score = 25.0  # Baseline — taking is the default productive action
         score += min(spirit_slots, 3) * 2.0  # Bonus for cup headroom
 
         # Risk penalty when cups can't absorb spirits
-        if spirit_slots == 0:
-            score -= 3.0 + drunk * 3.0
-        elif drunk >= 3:
-            score -= 3.0
+        if spirit_slots == 0 and drunk >= 4:
+            score -= 25.0  # Danger zone: very likely to die from forced spirit drink
+        elif spirit_slots == 0 and drunk >= 3:
+            score -= 12.0
+        elif spirit_slots == 0:
+            score -= 3.0 + drunk * 2.0
+        elif drunk >= 4:
+            score -= 5.0
 
         # Display quality bonus/penalty (rough estimate)
         mat_specials = len(ps.special_ingredients)
-        special_bonus = 1.5 + min(mat_specials, 3) * 0.5
+        special_bonus = 2.0 + min(mat_specials, 3) * 1.0
         for ing in gs.open_display:
             if ing in _SPIRITS:
                 if cups.best_cup_for_spirit(ing) is not None:
-                    score += 1.5  # Can cup it
+                    score += 2.0  # Can cup it
                 else:
                     score -= 1.0 + drunk * 0.5  # Forced to drink
             elif ing in _MIXERS:
@@ -1700,12 +1699,12 @@ class Mastermind(Strategy):
             bag_draws = max(0, ps.take_count - len(gs.open_display))
             score -= bag_draws * self._bag_spirit_frac(gs) * (2.0 + drunk * 1.5)
 
-        # Bladder overflow risk: taking adds items to bladder via drinking
+        # Bladder overflow risk: hard penalty only when truly at risk
         bladder_room = ps.bladder_capacity - len(ps.bladder)
         cup_room = sum(MAX_CUP_INGREDIENTS - cups.fill[i] for i in (0, 1))
         est_drunk = max(0, ps.take_count - cup_room)
         if est_drunk > bladder_room:
-            score -= (est_drunk - bladder_room) * 8  # Wet risk
+            score -= (est_drunk - bladder_room) * 10  # Wet risk — keep this hard
 
         return score
 
@@ -1716,27 +1715,34 @@ class Mastermind(Strategy):
         params = action.params
         has_spec = self._has_specialist(ps, focus)
         has_dbl = self._has_doubler(ps)
+        num_cards = len(ps.cards)
+
+        # Cards are the engine — kyle claims 3.2/game, bots claim 0.5/game.
+        # Every card claimed compounds value for the rest of the game.
+        # Base bonus scales with how few cards we have (early claims most impactful).
+        card_hunger = max(0, 3 - num_cards) * 8.0
 
         score = 0.0
         if "cup doubler" in desc:
-            score = 65.0
+            score = 90.0 + card_hunger
             if has_spec:
-                score += 20  # Specialist + doubler combo → 8-pt sells
+                score += 25  # Specialist + doubler combo → 8-pt sells
             ci = params.get("cup_index", 0)
             focus_ing = _SPIRIT_MAP.get(focus)
             if focus_ing and any(i == focus_ing for i in ps.cups[ci].ingredients):
                 score += 10  # Place on focus cup
         elif "specialist" in desc:
-            score = 55.0
+            score = 80.0 + card_hunger
             if has_dbl:
-                score += 15
+                score += 20
             if focus.lower() in desc:
                 score += 15  # Matches focus spirit
         elif "karaoke" in desc:
             kc = ps.karaoke_cards_claimed
             if kc >= 2:
                 return 200.0  # Instant win — always take this
-            score = 50.0 + self._urgency(gs, pid) * 20 if kc == 1 else 25.0
+            score = (70.0 + self._urgency(gs, pid) * 25) if kc == 1 else 40.0
+            score += card_hunger
         elif "store" in desc:
             card_id = params.get("card_id")
             is_focus = any(
@@ -1745,13 +1751,16 @@ class Mastermind(Strategy):
                 for card in row.cards
                 if card.id == card_id
             )
-            score = 40.0 if is_focus else (18.0 if ps.drunk_level < 3 else 8.0)
+            # Store cards enable spirit accumulation — the key to high-value sells
+            score = 65.0 + card_hunger if is_focus else 45.0 + card_hunger
+            if ps.drunk_level >= 4:
+                score -= 10  # Don't claim in danger zone
         elif "refresher" in desc:
-            score = 22.0
+            score = 50.0 + card_hunger
             if ps.drunk_level >= 2:
-                score += 8
+                score += 10  # More valuable when drunk
         else:
-            score = 10.0
+            score = 30.0 + card_hunger
 
         # Pre-wee bonus: claim before weeing flushes bladder spirits
         overflow = len(ps.bladder) + ps.take_count - ps.bladder_capacity
@@ -1762,24 +1771,20 @@ class Mastermind(Strategy):
 
     def _score_wee(self, ps: PlayerState) -> float:
         overflow = len(ps.bladder) + ps.take_count - ps.bladder_capacity
-        bladder_fill = (
-            len(ps.bladder) / ps.bladder_capacity if ps.bladder_capacity else 1
-        )
 
+        # Kyle wees rarely (2.6%) but survives. Key: wee when next take overflows.
         if overflow >= 3:
-            score = 80.0
+            score = 80.0  # Emergency
+        elif overflow >= 2:
+            score = 55.0  # Very likely to overflow
         elif overflow >= 1:
-            score = 55.0
+            score = 35.0  # At risk
         elif overflow == 0:
-            score = 38.0
-        elif overflow == -1:
-            score = 22.0
-        elif bladder_fill >= 0.75:
-            score = 12.0  # Proactive wee
+            score = 15.0  # Borderline
         else:
-            score = 3.0
+            score = -5.0  # Don't waste a turn
 
-        # Conserve last toilet token — only wee in true emergencies
+        # Conserve last toilet token
         if ps.toilet_tokens <= 1 and overflow < 2:
             score -= 15
 
@@ -2192,12 +2197,15 @@ STRATEGY_CLASSES: dict[str, type[Strategy]] = {
     "mastermind": Mastermind,
 }
 
+
 # Lazy-load MCTS to avoid circular imports and heavy deps in normal play
 def _register_mcts():
     try:
         from ml.mcts import MCTSStrategy
+
         STRATEGY_CLASSES["mcts"] = MCTSStrategy
     except ImportError:
         pass
+
 
 _register_mcts()
