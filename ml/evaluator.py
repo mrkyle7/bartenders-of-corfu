@@ -12,11 +12,15 @@ potential, with hard overrides for terminal/elimination states. The scale is
 roughly "points-equivalent": a cocktail (10 pts) and a near-fatal drunk level
 are deliberately the same order of magnitude so the search trades them off.
 
-All weights live at the top of the file so tuning happens in one place, gated
-by ml/gauntlet.py (win rate), never by eyeballing proxy stats.
+All tunable weights live in the ``EvalWeights`` dataclass below. Bundling them
+(instead of module globals) lets *multiple* weight sets coexist in one process,
+so the gauntlet can pit a candidate against frozen previous versions of this very
+bot as well as Mastermind (see ``ml/versions.py`` and ``ml/gauntlet.py``).
+Tuning is gated by win rate, never by eyeballing proxy stats.
 """
 
 from collections import Counter
+from dataclasses import dataclass
 from uuid import UUID
 
 from app.GameState import GameState
@@ -26,62 +30,70 @@ from app.actions import SCORE_TO_WIN
 from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, drink_points
 
 # --- Terminal overrides ---------------------------------------------------
+# Not version-tuned: a win is a win regardless of which weight set is playing.
 WIN_VALUE = 1000.0
 LOSS_VALUE = -1000.0
 
-# --- Potential weights (points-equivalent) --------------------------------
-POINTS_W = 1.0  # one realized point == one unit
-KARAOKE_CARD_W = 6.0  # each karaoke card already gives +5 pts; ongoing rarity value
-NEAR_KARAOKE_WIN = 25.0  # holding 2 karaoke cards: one claim from instant win
 
-# Cup potential: the realizable sale value of what's currently in each cup.
-CUP_SELL_W = 0.7
-# Progress toward a high-value (cocktail / doubled) sale that isn't complete yet.
-CUP_PROGRESS_W = 1.0
+@dataclass(frozen=True)
+class EvalWeights:
+    """A single bot "personality": every weight the evaluator trades off.
 
-SPECIAL_MAT_W = 1.2  # option value of an unused special on the mat (caps out)
+    One frozen instance == one tunable version of the lookahead bot. Defaults
+    are the current champion weights; ``ml/versions.py`` pins named snapshots so
+    future tuning can be gauntletted against them for progress / no-regression.
+    """
 
-# Ongoing engine value of held cards (their claim points are already counted).
-SPECIALIST_W = 4.0  # +2 per matching non-cocktail sell, repeatedly
-DOUBLER_W = 5.0  # doubles a non-cocktail cup, repeatedly
-STORE_W = 2.5  # spirit bank: flexibility + protects spirits from a wee
-REFRESHER_W = 1.5
+    # Potential weights (points-equivalent).
+    points: float = 1.0  # one realized point == one unit
+    karaoke_card: float = 6.0  # each karaoke card gives +5 pts; ongoing rarity value
+    near_karaoke_win: float = 25.0  # holding 2 karaoke cards: one claim from a win
 
-# Acquisition pull: how badly the search should *want* to set up a not-yet-held
-# engine card. This is deliberately larger than the static held-card weight
-# above, because a doubler/specialist compounds over every future sale — a held
-# doubler turned ~3-pt cups into 6-8 pt cups for the rest of a real game, which
-# bots kept losing for lack of. The static *_W is the residual value once held;
-# these drive the bot to drink the spirits needed to claim one in the first
-# place (the lever it was missing: doublers sat unclaimed in the row all game).
-DOUBLER_ACQUIRE_W = 11.0
-SPECIALIST_ACQUIRE_W = 7.0
-KARAOKE_ACQUIRE_W = 8.0
+    # Cup potential: realizable sale value of what's in each cup, plus progress
+    # toward a high-value (cocktail / doubled) sale that isn't complete yet.
+    cup_sell: float = 0.7
+    cup_progress: float = 1.0
 
-# Card-threshold proximity: a nudge toward unlocking a claimable card soon.
-# Still safety-gated (see SAFE_DRUNK_CAP) so the bot won't chase a card straight
-# off the elimination cliff — but no longer so timid that it never builds the
-# engine that actually wins games.
-THRESHOLD_W = 1.0
-# Reach of the proximity lure: a card up to this many matching ingredients away
-# still registers. A from-scratch cup-doubler needs 3 spirits, so a reach of 2
-# (the old value) made doublers invisible until you already had one in hand.
-THRESHOLD_REACH = 3
-# Don't let the lure push us toward a drunk level above this by drinking spirits.
-# Kept at 3: weeing only sobers one level *and* permanently shrinks bladder
-# capacity, so a drunk-3 doubler chase is slow and costly to unwind. The bot
-# should prefer engine cards it can reach without crossing into the danger zone,
-# not drink blindly toward one (which just trades reliable cup points for
-# self-elimination risk — the gauntlet punishes the latter hard).
-SAFE_DRUNK_CAP = 3
+    special_mat: float = 1.2  # option value of an unused special on the mat (caps)
 
-# --- Safety (convex penalties near the elimination cliffs) ----------------
-# drunk_level 0..5; a spirit drink at 5 is fatal, and take_count = drunk + 3, so
-# high drunk also forces large, dangerous takes. Penalties ramp up well before
-# the cliff so the search manages drunk/bladder proactively, like a human does.
-_DRUNK_PENALTY = [0.0, 0.5, 2.5, 7.0, 16.0, 32.0]
-# Bladder penalty keyed by remaining room (capacity - len(bladder)).
-_BLADDER_PENALTY_BY_ROOM = {0: 28.0, 1: 12.0, 2: 5.0, 3: 2.0}
+    # Ongoing engine value of *held* cards (their claim points already counted).
+    specialist: float = 4.0  # +2 per matching non-cocktail sell, repeatedly
+    doubler: float = 5.0  # doubles a non-cocktail cup, repeatedly
+    store: float = 2.5  # spirit bank: flexibility + protects spirits from a wee
+    refresher: float = 1.5
+
+    # Acquisition pull: how badly the search should *want* to set up a not-yet-
+    # held engine card. Deliberately larger than the held-card weight above,
+    # because a doubler/specialist compounds over every future sale — the lever
+    # the bot was missing when it walked past unclaimed doublers all game.
+    doubler_acquire: float = 11.0
+    specialist_acquire: float = 7.0
+    karaoke_acquire: float = 8.0
+
+    # Card-threshold proximity. ``reach`` is how many matching ingredients away
+    # a card can be and still register (a from-scratch doubler needs 3 spirits,
+    # so reach 2 made doublers invisible). ``discount`` falls off per missing
+    # step; gentle (0.6) so a 3-away doubler still outweighs the drunk cost of
+    # drinking toward it. ``safe_drunk_cap`` stops the lure pushing past a safe
+    # drunk level — weeing only sobers one level and shrinks bladder capacity,
+    # so a reckless doubler chase trades reliable points for self-elimination.
+    threshold: float = 1.0
+    threshold_reach: int = 3
+    threshold_discount: float = 0.6
+    safe_drunk_cap: int = 3
+
+    # Safety: convex penalties near the elimination cliffs. drunk_level 0..5; a
+    # spirit drink at 5 is fatal and take_count = drunk + 3, so high drunk also
+    # forces large dangerous takes. Penalties ramp well before the cliff so the
+    # search manages drunk/bladder proactively. ``bladder_penalty_by_room`` is
+    # indexed by remaining room (capacity - len(bladder)); rooms beyond it = 0.
+    drunk_penalty: tuple[float, ...] = (0.0, 0.5, 2.5, 7.0, 16.0, 32.0)
+    bladder_penalty_by_room: tuple[float, ...] = (28.0, 12.0, 5.0, 2.0)
+
+
+# The live champion weights. ``ml/versions.py`` imports this as the latest entry
+# in its registry; production and the bare ``lookahead`` strategy use it.
+DEFAULT_WEIGHTS = EvalWeights()
 
 
 _SPIRIT_NAME_TO_ING = {i.name: i for i in _SPIRITS}
@@ -99,7 +111,8 @@ def _best_cup_sale(ps: PlayerState, cup) -> int:
     """Best points obtainable by selling this cup right now.
 
     Considers cocktails (if the mat holds the required specials), the cup
-    doubler, and the specialist bonus. Returns 0 if nothing is sellable.
+    doubler, and the specialist bonus. Returns 0 if nothing is sellable. This is
+    raw game scoring — no evaluator weights involved.
     """
     ingredients = cup.ingredients
     if not ingredients:
@@ -169,7 +182,9 @@ def _cup_progress(ps: PlayerState, cup) -> float:
     return score
 
 
-def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
+def _threshold_proximity(
+    gs: GameState, ps: PlayerState, w: EvalWeights = DEFAULT_WEIGHTS
+) -> float:
     """Lure toward a claimable card the player is close to affording.
 
     Card costs are *threshold checks on bladder contents* (not consumed), so
@@ -188,14 +203,14 @@ def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
                 need, have, worth, spirit_cost = (
                     3,
                     _have_spirit(spirit_counts, card.spirit_type),
-                    KARAOKE_ACQUIRE_W,
+                    w.karaoke_acquire,
                     True,
                 )
             elif ct == "specialist":
                 need, have, worth, spirit_cost = (
                     2,
                     _have_spirit(spirit_counts, card.spirit_type),
-                    SPECIALIST_ACQUIRE_W,
+                    w.specialist_acquire,
                     True,
                 )
             elif ct == "cup_doubler":
@@ -203,14 +218,14 @@ def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
                 need, have, worth, spirit_cost = (
                     3,
                     max(spirit_counts.values(), default=0),
-                    DOUBLER_ACQUIRE_W,
+                    w.doubler_acquire,
                     True,
                 )
             elif ct == "store":
                 need, have, worth, spirit_cost = (
                     1,
                     _have_spirit(spirit_counts, card.spirit_type),
-                    STORE_W,
+                    w.store,
                     True,
                 )
             elif ct == "refresher":
@@ -218,7 +233,7 @@ def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
                 need, have, worth, spirit_cost = (
                     2,
                     mixer_counts.get(_mixer_ing(card.mixer_type), 0),
-                    REFRESHER_W,
+                    w.refresher,
                     False,
                 )
             else:
@@ -227,17 +242,17 @@ def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
             missing = need - have
             if missing <= 0:
                 continue  # already claimable — the search sees the claim directly
-            if missing > THRESHOLD_REACH:
+            if missing > w.threshold_reach:
                 continue  # too far to count as "proximity"
             # Don't lure into drinking spirits past a safe drunk level: claiming
             # this needs `missing` more spirits, each adding a drunk level.
-            if spirit_cost and ps.drunk_level + missing > SAFE_DRUNK_CAP:
+            if spirit_cost and ps.drunk_level + missing > w.safe_drunk_cap:
                 continue
             # Closer (and higher-worth) reachable cards score more. The discount
-            # is gentle (0.6 per missing step) on purpose: with the old 1/(1+m)
-            # falloff a 3-away doubler scored too little to overcome the drunk
-            # cost of drinking toward it, so the search never started climbing.
-            best = max(best, worth / (1.0 + 0.6 * missing))
+            # is gentle on purpose: with a steep 1/(1+m) falloff a 3-away doubler
+            # scored too little to overcome the drunk cost of drinking toward it,
+            # so the search never started climbing.
+            best = max(best, worth / (1.0 + w.threshold_discount * missing))
     return best
 
 
@@ -257,58 +272,65 @@ def _mixer_ing(mixer_type: str | None) -> Ingredient | None:
         return None
 
 
-def _safety_penalty(ps: PlayerState) -> float:
+def _safety_penalty(ps: PlayerState, w: EvalWeights = DEFAULT_WEIGHTS) -> float:
     drunk = max(0, min(ps.drunk_level, 5))
-    penalty = _DRUNK_PENALTY[drunk]
+    penalty = w.drunk_penalty[drunk]
     room = ps.bladder_capacity - len(ps.bladder)
-    penalty += _BLADDER_PENALTY_BY_ROOM.get(room, 0.0)
+    if 0 <= room < len(w.bladder_penalty_by_room):
+        penalty += w.bladder_penalty_by_room[room]
     return penalty
 
 
-def _card_engine_value(ps: PlayerState) -> float:
+def _card_engine_value(ps: PlayerState, w: EvalWeights = DEFAULT_WEIGHTS) -> float:
     value = 0.0
     for cd in ps.cards:
         ct = cd.get("card_type")
         if ct == "specialist":
-            value += SPECIALIST_W
+            value += w.specialist
         elif ct == "cup_doubler":
-            value += DOUBLER_W
+            value += w.doubler
         elif ct == "store":
-            value += STORE_W
+            value += w.store
             # Stored spirits are bankable future cup fillers / claim fodder.
             value += 0.5 * len(cd.get("stored_spirits", []))
         elif ct == "refresher":
-            value += REFRESHER_W
+            value += w.refresher
     return value
 
 
-def player_potential(gs: GameState, ps: PlayerState, *, full: bool) -> float:
+def player_potential(
+    gs: GameState,
+    ps: PlayerState,
+    w: EvalWeights = DEFAULT_WEIGHTS,
+    *,
+    full: bool,
+) -> float:
     """Estimate a player's total position value (points-equivalent).
 
     ``full`` enables the more expensive terms (cup progress, threshold
     proximity); opponents are valued with the cheaper core terms only.
     """
-    value = ps.points * POINTS_W
-    value += ps.karaoke_cards_claimed * KARAOKE_CARD_W
+    value = ps.points * w.points
+    value += ps.karaoke_cards_claimed * w.karaoke_card
     if ps.karaoke_cards_claimed >= 2:
-        value += NEAR_KARAOKE_WIN
+        value += w.near_karaoke_win
 
     for cup in ps.cups:
-        value += _best_cup_sale(ps, cup) * CUP_SELL_W
+        value += _best_cup_sale(ps, cup) * w.cup_sell
 
-    value += min(len(ps.special_ingredients), 4) * SPECIAL_MAT_W
-    value += _card_engine_value(ps)
-    value -= _safety_penalty(ps)
+    value += min(len(ps.special_ingredients), 4) * w.special_mat
+    value += _card_engine_value(ps, w)
+    value -= _safety_penalty(ps, w)
 
     if full:
         for cup in ps.cups:
-            value += _cup_progress(ps, cup) * CUP_PROGRESS_W
-        value += _threshold_proximity(gs, ps) * THRESHOLD_W
+            value += _cup_progress(ps, cup) * w.cup_progress
+        value += _threshold_proximity(gs, ps, w) * w.threshold
 
     return value
 
 
-def evaluate(gs: GameState, player_id: UUID) -> float:
+def evaluate(gs: GameState, player_id: UUID, w: EvalWeights = DEFAULT_WEIGHTS) -> float:
     """Scalar value of ``gs`` for ``player_id`` — higher is better.
 
     Terminal/elimination states are clamped to large +/- values; otherwise the
@@ -321,13 +343,13 @@ def evaluate(gs: GameState, player_id: UUID) -> float:
     if me is None or me.is_eliminated:
         return LOSS_VALUE
 
-    my_value = player_potential(gs, me, full=True)
+    my_value = player_potential(gs, me, w, full=True)
 
     best_opp = None
     for pid, opp in gs.player_states.items():
         if pid == player_id or opp.is_eliminated:
             continue
-        ov = player_potential(gs, opp, full=False)
+        ov = player_potential(gs, opp, w, full=False)
         if best_opp is None or ov > best_opp:
             best_opp = ov
 

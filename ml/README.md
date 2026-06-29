@@ -7,9 +7,11 @@ another, the current state of play, and the concrete next steps.
 ## The one rule
 
 **A bot/strategy/weight change ships only if it beats the current champion
-head-to-head in the gauntlet.** Not "the average sell value went up", not "it
-claims more cards" — *win rate*. The previous tuning round optimised proxy stats
-and regressed real games; the gauntlet exists so that can't happen again.
+head-to-head in the gauntlet** — and, for the lookahead bot, only if it also
+doesn't regress against the previous frozen version of itself (see Versioned
+gauntlet). Not "the average sell value went up", not "it claims more cards" —
+*win rate*. The previous tuning round optimised proxy stats and regressed real
+games; the gauntlet exists so that can't happen again.
 
 ```bash
 # Candidate vs champion, all optional rules on, 200 seeded games:
@@ -25,7 +27,39 @@ tweaked Mastermind can fight stock Mastermind), and PASS/FAILs on the **Wilson
 
 Strategy specs: any name in `STRATEGY_CLASSES`
 (`mastermind`, `cocktail`, `safe`, `specialist`, `aggressive`, `karaoke`,
-`random`, `lookahead`) or `mcts` / `mcts:sims=200,time=1.0`.
+`random`, `lookahead`) or `mcts` / `mcts:sims=200,time=1.0`. A **frozen previous
+version** of the lookahead bot is `lookahead:v0`, `lookahead:v1`, …, or
+`lookahead:latest` (see Versioned gauntlet).
+
+### Versioned gauntlet (progress + no regression)
+
+Mastermind is a *timid* opponent: it can't reward the engine play that beats a
+human in a long game (a real production loss the Mastermind-only gauntlet would
+never have flagged). So each tuned bot is **frozen as a numbered version** in
+`ml/versions.py`, and new tuning must beat **both** Mastermind *and* the version
+it replaces:
+
+```bash
+# Current DEFAULT_WEIGHTS vs Mastermind (must beat) + every frozen version
+# (must not regress), all in one run:
+uv run python -m ml.gauntlet --candidate lookahead --regression --games 200 --modes all
+```
+
+- Each version is an immutable `EvalWeights` snapshot. The newest is `latest`.
+- vs Mastermind (a **beat** target): PASS needs Wilson-lower > gate.
+- vs a previous version (a **noregress** target): FAIL only if the candidate is
+  *confidently worse* (Wilson-upper < 50%); flagged **progress** when
+  confidently better (Wilson-lower > 50%), else "no regression (even)".
+- **Workflow to ship a new version:** tune `evaluator.py`'s `DEFAULT_WEIGHTS`,
+  pass `--regression`, then append the new explicit weights to
+  `LOOKAHEAD_VERSIONS` (never edit an existing entry). It becomes the new
+  `latest` that the *next* round must beat.
+- **Caveat — version-vs-version is slow and drawish.** Two lookahead bots each
+  run the depth-limited search, so a `lookahead:vX` matchup is ~7× slower than
+  vs Mastermind (~5 s/game) and produces ~30% draws (both bots play cautiously
+  and neither closes out). Use fewer games for version matchups, and read the
+  Wilson *interval* — a wide one over few decisive games means "inconclusive",
+  not "even". Draws are excluded from win share (decisive games only).
 
 ## The strategies
 
@@ -42,7 +76,9 @@ Strategy specs: any name in `STRATEGY_CLASSES`
   cup sale value (cocktail/doubler/specialist aware), cocktail-in-progress, card
   engine value, and a **safety-gated** card-threshold-proximity lure, minus
   **convex drunk/bladder safety penalties**. Terminal/elimination states are
-  clamped to large ±values. All weights live at the top of `evaluator.py`.
+  clamped to large ±values. All tunable weights live in the `EvalWeights`
+  dataclass in `evaluator.py`; `evaluate(gs, pid, weights)` and
+  `LookaheadStrategy(weights=…)` take a weight set, so frozen versions coexist.
 - `LookaheadStrategy` does a shallow expectimax over **main actions only**:
   apply the action, play opponents (modelled as Mastermind) to the next
   decision, score the leaf with the evaluator; sample a few times to average
@@ -71,20 +107,25 @@ stops churning specials once two are banked. The safety penalties / `SAFE_DRUNK_
 were left untouched — softening them made the bot drink recklessly and *regressed*
 the gauntlet (more self-elimination). Same 200 seeds, all modes:
 
-| Weights | Win share | Wilson 95% low | Candidate avg pts | Candidate self-elim |
+| Weights (`v0`→`v1`) | Win share | Wilson 95% low | Candidate avg pts | Candidate self-elim |
 |---|---|---|---|---|
-| pre-tuning | 86.0% | 81.0% | 29.7 | 13.5% |
-| **tuned (current)** | **88.5–91.0%** | **83.3–86.2%** | 30.6 | **8.5–11.5%** |
+| pre-tuning (`v0`) | 86.0% | 81.0% | 29.7 | 13.5% |
+| **tuned (`v1`, current)** | **88.5–91.0%** | **83.3–86.2%** | 30.6 | **8.5–11.5%** |
 
-Takeaways: lookahead is **stronger and ~78× faster** than the shipped MCTS. The
-dominant failure mode of the old bots was **self-elimination** (~50% in a
-mastermind mirror); the evaluator's safety terms cut lookahead's to ~10%, and the
-engine-acquisition round shaved it further while raising win rate — the bot now
-claims the doublers it used to walk past. **Caveat:** the gauntlet only measures
-play vs the (timid) Mastermind; it cannot see the engine pay off against a human
-in a long game, which is the regime where the production loss happened. Versioned
-self-play in the gauntlet (see "Versioned gauntlet") is the guard against that
-blind spot going forward.
+**`v1` is a specialisation toward the production (modes-on) regime, not a strict
+upgrade** — and the versioned gauntlet is what made that legible:
+
+- vs Mastermind, **all modes**: clear progress (above) — the bot now claims the
+  doublers it used to walk past, in the exact regime the production loss happened.
+- vs Mastermind, **no modes**: **regressed** 80.8% → 75.8% (when `claim_card` is a
+  main action the engine chase costs tempo).
+- **`v1` vs `v0` head-to-head** (all modes): ~46% over 81 decisive games, CI
+  straddling 50% with ~32% draws — statistically **even**, no clear edge.
+
+So `v1` ships as `latest` because it targets the regime that actually broke in
+production, but the next round (`v2`) must pull ahead of `v1` *head-to-head*
+without giving back the no-modes ground. lookahead remains **~78× faster** than
+the shipped MCTS.
 
 ## Important gotchas
 

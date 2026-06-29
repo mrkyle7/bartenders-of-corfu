@@ -27,7 +27,7 @@ from app.actions import _advance_turn, _deep_copy_state
 from playtesting.strategy import Mastermind, Strategy
 from playtesting.valid_actions import Action, get_valid_actions
 
-from ml.evaluator import evaluate
+from ml.evaluator import DEFAULT_WEIGHTS, EvalWeights, evaluate
 from ml.mcts import RolloutExecutor
 
 
@@ -50,10 +50,12 @@ class LookaheadStrategy(Strategy):
         depth: int = 1,
         samples: int = 3,
         max_opponent_turns: int = 12,
+        weights: EvalWeights = DEFAULT_WEIGHTS,
     ):
         self.depth = depth
         self.samples = samples
         self.max_opponent_turns = max_opponent_turns
+        self.weights = weights
         self._executor = RolloutExecutor()
         self._fallback = Mastermind()
 
@@ -85,7 +87,7 @@ class LookaheadStrategy(Strategy):
             try:
                 sim = self._executor._exec(sim, player_id, action, self._fallback)
             except Exception:
-                total += evaluate(sim, player_id)
+                total += evaluate(sim, player_id, self.weights)
                 continue
             sim = self._advance_to_me(sim, player_id)
             total += self._evaluate_node(sim, player_id, depth)
@@ -94,23 +96,23 @@ class LookaheadStrategy(Strategy):
     def _evaluate_node(self, gs: GameState, player_id: UUID, depth: int) -> float:
         """Value of a state where it is (about to be) our turn again."""
         if gs.winner is not None:
-            return evaluate(gs, player_id)
+            return evaluate(gs, player_id, self.weights)
         ps = gs.player_states.get(player_id)
         if ps is None or ps.is_eliminated:
-            return evaluate(gs, player_id)
+            return evaluate(gs, player_id, self.weights)
         if depth <= 0 or gs.player_turn != player_id:
-            return evaluate(gs, player_id)
+            return evaluate(gs, player_id, self.weights)
 
         # Our turn: clear free actions with Mastermind, then search our best
         # follow-up main action one level shallower.
         gs = self._do_my_free_actions(gs, player_id)
         if gs.winner is not None:
-            return evaluate(gs, player_id)
+            return evaluate(gs, player_id, self.weights)
 
         all_acts = get_valid_actions(gs, player_id)
         main_acts = [a for a in all_acts if not a.is_free]
         if not main_acts:
-            return evaluate(gs, player_id)
+            return evaluate(gs, player_id, self.weights)
 
         return max(self._action_value(gs, player_id, a, depth - 1) for a in main_acts)
 

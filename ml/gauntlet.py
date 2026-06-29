@@ -88,6 +88,20 @@ def _parse_strategy_spec(spec: str) -> tuple[StrategyFactory, str]:
         label = f"mcts(sims={sims}{f',t={time_limit}' if time_limit else ''})"
         return factory, label
 
+    if name == "lookahead" and param_str.strip():
+        # `lookahead:v1` / `lookahead:latest` — a frozen weight snapshot, so a
+        # candidate can be gauntletted against previous versions of itself.
+        from ml.lookahead import LookaheadStrategy
+        from ml.versions import get_version
+
+        version = param_str.strip()
+        weights = get_version(version)
+
+        def factory() -> Strategy:
+            return LookaheadStrategy(weights=weights)
+
+        return factory, f"lookahead:{version}"
+
     cls = STRATEGY_CLASSES.get(name)
     if cls is None:
         raise ValueError(
@@ -118,19 +132,25 @@ def _resolve_modes(modes_arg: str | None) -> list[str]:
     return normalise_modes(requested)
 
 
-def wilson_lower_bound(wins: int, n: int, z: float = 1.96) -> float:
-    """Lower bound of the Wilson score interval for a win proportion.
+def wilson_bounds(wins: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """(lower, upper) bounds of the Wilson score interval for a win proportion.
 
-    Returns 0.0 for n == 0. With z=1.96 this is a ~95% one-sided-ish bound used
-    as a conservative estimate of true win rate.
+    Returns (0.0, 1.0) for n == 0. With z=1.96 this is a ~95% interval. The lower
+    bound is the conservative "is it really better?" estimate; the upper bound
+    powers the no-regression check ("are we confident it got worse?").
     """
     if n == 0:
-        return 0.0
+        return 0.0, 1.0
     phat = wins / n
     denom = 1 + z * z / n
     centre = phat + z * z / (2 * n)
     margin = z * math.sqrt((phat * (1 - phat) + z * z / (4 * n)) / n)
-    return max(0.0, (centre - margin) / denom)
+    return max(0.0, (centre - margin) / denom), min(1.0, (centre + margin) / denom)
+
+
+def wilson_lower_bound(wins: int, n: int, z: float = 1.96) -> float:
+    """Lower bound of the Wilson score interval (see ``wilson_bounds``)."""
+    return wilson_bounds(wins, n, z)[0]
 
 
 @dataclass
@@ -241,23 +261,44 @@ def run_gauntlet(
     return res
 
 
+def classify(res: GauntletResult, gate: float, kind: str) -> tuple[bool, str]:
+    """Decide PASS/FAIL for one matchup and a human-readable verdict.
+
+    ``kind`` is "beat" (the candidate must out-win the champion — used for
+    Mastermind and any explicit champion) or "noregress" (the champion is a
+    previous version of the candidate; we only FAIL if the candidate is
+    *confidently worse*, and flag genuine progress separately).
+    """
+    lower, upper = wilson_bounds(res.candidate_wins, res.decisive)
+    if kind == "noregress":
+        if upper < 0.5:
+            return False, "FAIL — regressed (confidently worse than this version)"
+        if lower > 0.5:
+            return True, "PASS — progress (confidently beats this version)"
+        return True, "PASS — no regression (statistically even)"
+    passed = lower > gate
+    verdict = "PASS — beats champion" if passed else "FAIL — does not beat champion"
+    return passed, verdict
+
+
 def print_report(
     res: GauntletResult,
     candidate_label: str,
     champion_label: str,
     modes: list[str],
     gate: float,
+    kind: str = "beat",
 ) -> bool:
-    """Print the gauntlet report and return True if the candidate PASSES."""
-    lower = wilson_lower_bound(res.candidate_wins, res.decisive)
-    passed = lower > gate
+    """Print one matchup's report and return True if the candidate PASSES."""
+    lower, upper = wilson_bounds(res.candidate_wins, res.decisive)
+    passed, verdict = classify(res, gate, kind)
 
     print()
     print("=" * 64)
     print("GAUNTLET REPORT")
     print("=" * 64)
     print(f"  Candidate : {candidate_label}")
-    print(f"  Champion  : {champion_label}")
+    print(f"  Champion  : {champion_label}  [{kind}]")
     print(f"  Modes     : {', '.join(modes) if modes else 'none'}")
     print(f"  Games     : {res.games} (errors: {res.errors}, draws: {res.draws})")
     print()
@@ -267,7 +308,10 @@ def print_report(
         f"    champion wins  : {res.champion_wins}"
     )
     print(f"  Candidate win share : {res.candidate_win_share * 100:.1f}%")
-    print(f"  Wilson 95% lower    : {lower * 100:.1f}%  (gate: >{gate * 100:.0f}%)")
+    print(
+        f"  Wilson 95% interval : [{lower * 100:.1f}%, {upper * 100:.1f}%]"
+        f"  (gate: >{gate * 100:.0f}%)"
+    )
     print()
     if res.candidate_first_games:
         cf_rate = res.candidate_first_wins / res.candidate_first_games
@@ -288,22 +332,51 @@ def print_report(
             f"{res.elim_rate(role) * 100:>11.1f}%"
         )
     print()
-    print(
-        f"  RESULT: {'PASS — candidate beats champion' if passed else 'FAIL — does not beat champion'}"
-    )
+    print(f"  RESULT: {verdict}")
     print("=" * 64)
     return passed
 
 
+def _regression_champions(candidate_label: str) -> list[tuple[str, str]]:
+    """Champions for --regression: Mastermind (beat) + every frozen version
+    (noregress), minus the candidate's own version (a v-vs-itself mirror).
+    """
+    from ml.versions import LOOKAHEAD_VERSIONS
+
+    champions: list[tuple[str, str]] = [("mastermind", "beat")]
+    own = (
+        candidate_label.split(":", 1)[1]
+        if candidate_label.startswith("lookahead:")
+        else None
+    )
+    for v in LOOKAHEAD_VERSIONS:
+        if v != own:
+            champions.append((f"lookahead:{v}", "noregress"))
+    return champions
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Win-rate gauntlet: gate a candidate bot vs the champion."
+        description="Win-rate gauntlet: gate a candidate bot vs champions."
     )
     parser.add_argument(
         "--candidate", default="mastermind", help="Candidate strategy spec"
     )
     parser.add_argument(
         "--champion", default="mastermind", help="Champion (baseline) strategy spec"
+    )
+    parser.add_argument(
+        "--champions",
+        default=None,
+        help="Comma-separated champion specs to run the candidate against "
+        "(each a 'beat' target). Overrides --champion.",
+    )
+    parser.add_argument(
+        "--regression",
+        action="store_true",
+        help="Play the candidate against Mastermind (must beat) AND every frozen "
+        "lookahead version in ml/versions.py (must not regress). Shows progress "
+        "and guards against regression in one run.",
     )
     parser.add_argument("--games", type=int, default=200, help="Number of games")
     parser.add_argument("--players", type=int, default=2, help="Players per game (>=2)")
@@ -317,7 +390,7 @@ def main():
         "--gate",
         type=float,
         default=0.5,
-        help="Min Wilson lower-bound win share to PASS (default 0.5)",
+        help="Min Wilson lower-bound win share to beat a 'beat' champion (0.5)",
     )
 
     args = parser.parse_args()
@@ -327,31 +400,59 @@ def main():
 
     try:
         candidate, candidate_label = _parse_strategy_spec(args.candidate)
-        champion, champion_label = _parse_strategy_spec(args.champion)
         modes = _resolve_modes(args.modes)
+        if args.regression:
+            champion_specs = _regression_champions(candidate_label)
+        elif args.champions:
+            champion_specs = [
+                (s.strip(), "beat") for s in args.champions.split(",") if s.strip()
+            ]
+        else:
+            champion_specs = [(args.champion, "beat")]
+        # Resolve all champion factories up front so a bad spec fails fast.
+        champions = [
+            (*_parse_strategy_spec(spec), kind) for spec, kind in champion_specs
+        ]
     except ValueError as e:
         parser.error(str(e))
 
     print("Win-rate gauntlet")
-    print(f"  candidate={candidate_label} vs champion={champion_label}")
+    print(f"  candidate = {candidate_label}")
+    print(f"  champions = {', '.join(f'{lbl} [{k}]' for _, lbl, k in champions)}")
     print(f"  games={args.games} players={args.players} modes={modes or 'none'}")
-    print()
 
+    all_passed = True
+    summary: list[tuple[str, str, float, bool]] = []
     start = time.time()
-    res = run_gauntlet(
-        candidate,
-        champion,
-        games=args.games,
-        num_players=args.players,
-        base_seed=args.seed,
-        game_modes=modes,
-    )
+    for champion, champion_label, kind in champions:
+        res = run_gauntlet(
+            candidate,
+            champion,
+            games=args.games,
+            num_players=args.players,
+            base_seed=args.seed,
+            game_modes=modes,
+        )
+        passed = print_report(
+            res, candidate_label, champion_label, modes, args.gate, kind
+        )
+        all_passed = all_passed and passed
+        summary.append((champion_label, kind, res.candidate_win_share, passed))
     elapsed = time.time() - start
 
-    passed = print_report(res, candidate_label, champion_label, modes, args.gate)
-    print(f"  Time: {elapsed:.1f}s ({elapsed / max(1, res.games):.2f}s/game)")
+    if len(summary) > 1:
+        print()
+        print("=" * 64)
+        print(f"SUMMARY — candidate {candidate_label}")
+        print("=" * 64)
+        for label, kind, share, passed in summary:
+            mark = "PASS" if passed else "FAIL"
+            print(f"  vs {label:<18} [{kind:<9}] {share * 100:5.1f}%  {mark}")
+        print("=" * 64)
+        print(f"  OVERALL: {'PASS' if all_passed else 'FAIL'}")
+    print(f"  Time: {elapsed:.1f}s")
 
-    sys.exit(0 if passed else 1)
+    sys.exit(0 if all_passed else 1)
 
 
 if __name__ == "__main__":
