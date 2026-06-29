@@ -120,13 +120,15 @@ upgrade** — and the versioned gauntlet is what made that legible:
   doublers it used to walk past, in the exact regime the production loss happened.
 - vs Mastermind, **no modes**: **regressed** 80.8% → 75.8% (when `claim_card` is a
   main action the engine chase costs tempo).
-- **`v1` vs `v0` head-to-head** (all modes): ~46% over 81 decisive games, CI
-  straddling 50% with ~32% draws — statistically **even**, no clear edge.
+- **`v1` vs `v0` head-to-head** (all modes, 120 games, after the runner-draw
+  fix): **51.7%**, CI [42.8%, 60.4%] — a slight edge that isn't yet significant,
+  but `v1` self-eliminates less (8.3% vs 13.3%). A modest real upgrade, not the
+  sidegrade the buggy runner first suggested (~46% with 32% bogus draws).
 
 So `v1` ships as `latest` because it targets the regime that actually broke in
-production, but the next round (`v2`) must pull ahead of `v1` *head-to-head*
-without giving back the no-modes ground. lookahead remains **~78× faster** than
-the shipped MCTS.
+production, but the next round (`v2`) must pull *significantly* ahead of `v1`
+*head-to-head* without giving back the no-modes ground. lookahead remains **~78×
+faster** than the shipped MCTS.
 
 ## Important gotchas
 

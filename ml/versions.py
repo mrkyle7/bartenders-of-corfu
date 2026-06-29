@@ -50,10 +50,12 @@ LOOKAHEAD_VERSIONS: dict[str, EvalWeights] = {
     #     (clear progress in the regime where the production loss happened).
     #   - vs Mastermind, NO modes: 80.8% -> 75.8% (regressed — when claim is a
     #     main action the engine chase costs tempo).
-    #   - v1 vs v0 head-to-head, all modes: ~46% over 81 decisive games (CI
-    #     straddles 50%, ~32% draws) — statistically EVEN, no clear edge.
-    # The bar for v2 is to actually pull ahead of v1 head-to-head without giving
-    # back the no-modes ground.
+    #   - v1 vs v0 head-to-head, all modes (120 games, post runner-draw fix):
+    #     51.7%, CI [42.8%, 60.4%] — a slight edge that isn't yet significant,
+    #     but v1 self-eliminates less (8.3% vs 13.3%). So a modest real upgrade,
+    #     not the sidegrade the buggy runner first suggested (~46% w/ 32% draws).
+    # The bar for v2 is to pull *significantly* ahead of v1 head-to-head without
+    # giving back the no-modes ground.
     "v1": EvalWeights(
         doubler_acquire=11.0,
         specialist_acquire=7.0,
