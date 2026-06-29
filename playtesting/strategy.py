@@ -2209,3 +2209,16 @@ def _register_mcts():
 
 
 _register_mcts()
+
+
+# Lazy-load the lookahead bot (depends on ml.evaluator + ml.mcts helpers).
+def _register_lookahead():
+    try:
+        from ml.lookahead import LookaheadStrategy
+
+        STRATEGY_CLASSES["lookahead"] = LookaheadStrategy
+    except ImportError:
+        pass
+
+
+_register_lookahead()
