@@ -54,13 +54,37 @@ Strategy specs: any name in `STRATEGY_CLASSES`
 
 | Matchup | Modes | Win rate | Wilson 95% low | Self-elim | Speed |
 |---|---|---|---|---|---|
-| lookahead vs mastermind | all | **90.5%** (181/200) | 85.6% | 9.5% | 0.68 s/game |
-| lookahead vs mastermind | none | **82.5%** (99/120) | 74.7% | 16.7% | 10.1 s/game |
+| lookahead vs mastermind | all | **90.5–91.0%** (seeds 1000/2000) | 85.6–86.2% | 8.5% | 0.7 s/game |
 | mcts(100) vs mastermind | all | 75.0% (45/60) | 62.8% | 25% | **52.9 s/game** |
+
+### Engine-acquisition tuning round (this round)
+
+A real production loss (`lookahead` lost a 2-player game to a human 28–40) showed
+the bot **never built the scoring engine**: two cup-doublers sat unclaimed in the
+row the entire game while it sold un-multiplied ~3-pt cups and rerolled specials
+17 times to no effect. The doubler-proximity lure was invisible (a from-scratch
+doubler needs 3 spirits, but the lure's reach was 2 and the worth too small to
+overcome the drunk cost of drinking toward it). Fix: a dedicated **acquisition
+pull** for doubler/specialist/karaoke cards (`*_ACQUIRE_W`), a longer
+`THRESHOLD_REACH=3`, a gentler distance discount, and a **reroll gate** that
+stops churning specials once two are banked. The safety penalties / `SAFE_DRUNK_CAP`
+were left untouched — softening them made the bot drink recklessly and *regressed*
+the gauntlet (more self-elimination). Same 200 seeds, all modes:
+
+| Weights | Win share | Wilson 95% low | Candidate avg pts | Candidate self-elim |
+|---|---|---|---|---|
+| pre-tuning | 86.0% | 81.0% | 29.7 | 13.5% |
+| **tuned (current)** | **88.5–91.0%** | **83.3–86.2%** | 30.6 | **8.5–11.5%** |
 
 Takeaways: lookahead is **stronger and ~78× faster** than the shipped MCTS. The
 dominant failure mode of the old bots was **self-elimination** (~50% in a
-mastermind mirror); the evaluator's safety terms cut lookahead's to ~10%.
+mastermind mirror); the evaluator's safety terms cut lookahead's to ~10%, and the
+engine-acquisition round shaved it further while raising win rate — the bot now
+claims the doublers it used to walk past. **Caveat:** the gauntlet only measures
+play vs the (timid) Mastermind; it cannot see the engine pay off against a human
+in a long game, which is the regime where the production loss happened. Versioned
+self-play in the gauntlet (see "Versioned gauntlet") is the guard against that
+blind spot going forward.
 
 ## Important gotchas
 

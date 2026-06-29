@@ -47,11 +47,32 @@ DOUBLER_W = 5.0  # doubles a non-cocktail cup, repeatedly
 STORE_W = 2.5  # spirit bank: flexibility + protects spirits from a wee
 REFRESHER_W = 1.5
 
-# Card-threshold proximity: a *gentle* nudge toward unlocking a claimable card
-# soon. Kept small and safety-gated — chasing thresholds by drinking spirits
-# into the danger zone is how the bot used to kill itself.
+# Acquisition pull: how badly the search should *want* to set up a not-yet-held
+# engine card. This is deliberately larger than the static held-card weight
+# above, because a doubler/specialist compounds over every future sale — a held
+# doubler turned ~3-pt cups into 6-8 pt cups for the rest of a real game, which
+# bots kept losing for lack of. The static *_W is the residual value once held;
+# these drive the bot to drink the spirits needed to claim one in the first
+# place (the lever it was missing: doublers sat unclaimed in the row all game).
+DOUBLER_ACQUIRE_W = 11.0
+SPECIALIST_ACQUIRE_W = 7.0
+KARAOKE_ACQUIRE_W = 8.0
+
+# Card-threshold proximity: a nudge toward unlocking a claimable card soon.
+# Still safety-gated (see SAFE_DRUNK_CAP) so the bot won't chase a card straight
+# off the elimination cliff — but no longer so timid that it never builds the
+# engine that actually wins games.
 THRESHOLD_W = 1.0
+# Reach of the proximity lure: a card up to this many matching ingredients away
+# still registers. A from-scratch cup-doubler needs 3 spirits, so a reach of 2
+# (the old value) made doublers invisible until you already had one in hand.
+THRESHOLD_REACH = 3
 # Don't let the lure push us toward a drunk level above this by drinking spirits.
+# Kept at 3: weeing only sobers one level *and* permanently shrinks bladder
+# capacity, so a drunk-3 doubler chase is slow and costly to unwind. The bot
+# should prefer engine cards it can reach without crossing into the danger zone,
+# not drink blindly toward one (which just trades reliable cup points for
+# self-elimination risk — the gauntlet punishes the latter hard).
 SAFE_DRUNK_CAP = 3
 
 # --- Safety (convex penalties near the elimination cliffs) ----------------
@@ -167,14 +188,14 @@ def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
                 need, have, worth, spirit_cost = (
                     3,
                     _have_spirit(spirit_counts, card.spirit_type),
-                    8.0,
+                    KARAOKE_ACQUIRE_W,
                     True,
                 )
             elif ct == "specialist":
                 need, have, worth, spirit_cost = (
                     2,
                     _have_spirit(spirit_counts, card.spirit_type),
-                    SPECIALIST_W,
+                    SPECIALIST_ACQUIRE_W,
                     True,
                 )
             elif ct == "cup_doubler":
@@ -182,7 +203,7 @@ def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
                 need, have, worth, spirit_cost = (
                     3,
                     max(spirit_counts.values(), default=0),
-                    DOUBLER_W,
+                    DOUBLER_ACQUIRE_W,
                     True,
                 )
             elif ct == "store":
@@ -206,14 +227,17 @@ def _threshold_proximity(gs: GameState, ps: PlayerState) -> float:
             missing = need - have
             if missing <= 0:
                 continue  # already claimable — the search sees the claim directly
-            if missing > 2:
+            if missing > THRESHOLD_REACH:
                 continue  # too far to count as "proximity"
             # Don't lure into drinking spirits past a safe drunk level: claiming
             # this needs `missing` more spirits, each adding a drunk level.
             if spirit_cost and ps.drunk_level + missing > SAFE_DRUNK_CAP:
                 continue
-            # Closer (and higher-worth) reachable cards score more.
-            best = max(best, worth / (1.0 + missing))
+            # Closer (and higher-worth) reachable cards score more. The discount
+            # is gentle (0.6 per missing step) on purpose: with the old 1/(1+m)
+            # falloff a 3-away doubler scored too little to overcome the drunk
+            # cost of drinking toward it, so the search never started climbing.
+            best = max(best, worth / (1.0 + 0.6 * missing))
     return best
 
 

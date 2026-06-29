@@ -790,10 +790,15 @@ def _free_reroll_action(
 ) -> Action | None:
     """Pick a free reroll_specials action when worthwhile.
 
-    Only present when reroll_specials_free_action mode is on. Worthwhile when
-    the player has at least one special on their mat — the action itself is
-    free under mode, so bots can opportunistically try to upgrade their mat.
+    Only present when reroll_specials_free_action mode is on. A reroll is not
+    free of risk: a special that rolls "nothing" is lost outright, so churning
+    the mat every turn (bots used to reroll on 17 of ~20 turns) just gambles away
+    option value. Reroll only while the mat is thin — fewer than 2 specials —
+    when there's upside in fishing for a useful pair and little to lose. Once two
+    specials are banked, keep them (the evaluator already values the option).
     """
+    if ps is not None and len(ps.special_ingredients) >= 2:
+        return None
     if ps is not None and not ps.special_ingredients:
         return None
     for a in free_actions:
