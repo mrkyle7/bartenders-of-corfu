@@ -407,7 +407,7 @@ async def list_bot_strategies():
     """Return available bot strategies for the UI."""
     from app.UserManager import UserManager
 
-    strategies = sorted(UserManager._VALID_BOT_STRATEGIES)
+    strategies = sorted(UserManager.available_bot_strategies())
     return JSONResponse(content={"strategies": strategies})
 
 

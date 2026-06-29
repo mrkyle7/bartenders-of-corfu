@@ -106,18 +106,6 @@ class UserManager:
             raise UserValidationError("Target user not found or is not active")
         db.deactivate_user(target_id, admin_id)
 
-    _VALID_BOT_STRATEGIES = {
-        "random",
-        "karaoke",
-        "cocktail",
-        "safe",
-        "aggressive",
-        "specialist",
-        "mastermind",
-        "mcts",
-        "lookahead",
-    }
-
     _BOT_DISPLAY_NAMES = {
         "random": "Randy Random",
         "karaoke": "Karaoke Kyle",
@@ -130,11 +118,27 @@ class UserManager:
         "lookahead": "Lookahead Lucy",
     }
 
+    @staticmethod
+    def available_bot_strategies() -> set[str]:
+        """Bot strategies that are actually loaded and therefore selectable.
+
+        Derived from the live strategy registry (not a hardcoded list) so a
+        strategy that fails to load is never offered or accepted — closing the
+        gap that let bots silently fall back to random in production. Importing
+        ml registers the ml-backed strategies and fails loudly if ml is missing.
+        """
+        import ml  # noqa: F401  — registers mcts/lookahead (hard import)
+
+        from playtesting.strategy import STRATEGY_CLASSES
+
+        return set(STRATEGY_CLASSES)
+
     def get_or_create_bot(self, strategy: str) -> User:
         """Get an existing bot user for the strategy, or create one."""
-        if strategy not in self._VALID_BOT_STRATEGIES:
+        valid = self.available_bot_strategies()
+        if strategy not in valid:
             raise UserValidationError(
-                f"Invalid bot strategy. Must be one of: {', '.join(sorted(self._VALID_BOT_STRATEGIES))}"
+                f"Invalid bot strategy. Must be one of: {', '.join(sorted(valid))}"
             )
         existing = db.get_bot_by_strategy(strategy)
         if existing:
