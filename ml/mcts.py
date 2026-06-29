@@ -556,7 +556,11 @@ class MCTSStrategy(Strategy):
         time_limit: Optional time limit in seconds per move
         exploration: UCB1 exploration constant
         rollout_depth: Max turns to simulate per rollout
-        learn: Whether to update the persistent policy from search results
+        learn: Whether to update the persistent policy from search results.
+            Defaults to False: production play must NOT silently mutate the
+            shared OnlinePolicy. Policy changes are made offline and gated on
+            head-to-head win rate (see ml/gauntlet.py). Set learn=True only in
+            an explicit, evaluated training loop.
     """
 
     name = "MCTS"
@@ -567,7 +571,7 @@ class MCTSStrategy(Strategy):
         time_limit: float | None = None,
         exploration: float = 1.41,
         rollout_depth: int = 25,
-        learn: bool = True,
+        learn: bool = False,
     ):
         self.search_engine = MCTSSearch(
             num_simulations=num_simulations,
