@@ -55,7 +55,7 @@ Strategy specs: any name in `STRATEGY_CLASSES`
 | Matchup | Modes | Win rate | Wilson 95% low | Self-elim | Speed |
 |---|---|---|---|---|---|
 | lookahead vs mastermind | all | **90.5%** (181/200) | 85.6% | 9.5% | 0.68 s/game |
-| lookahead vs mastermind | none | ~84% (preliminary) | — | — | — |
+| lookahead vs mastermind | none | **82.5%** (99/120) | 74.7% | 16.7% | 10.1 s/game |
 | mcts(100) vs mastermind | all | 75.0% (45/60) | 62.8% | 25% | **52.9 s/game** |
 
 Takeaways: lookahead is **stronger and ~78× faster** than the shipped MCTS. The
