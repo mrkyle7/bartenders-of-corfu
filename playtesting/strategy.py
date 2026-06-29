@@ -2198,27 +2198,11 @@ STRATEGY_CLASSES: dict[str, type[Strategy]] = {
 }
 
 
-# Lazy-load MCTS to avoid circular imports and heavy deps in normal play
-def _register_mcts():
-    try:
-        from ml.mcts import MCTSStrategy
-
-        STRATEGY_CLASSES["mcts"] = MCTSStrategy
-    except ImportError:
-        pass
-
-
-_register_mcts()
-
-
-# Lazy-load the lookahead bot (depends on ml.evaluator + ml.mcts helpers).
-def _register_lookahead():
-    try:
-        from ml.lookahead import LookaheadStrategy
-
-        STRATEGY_CLASSES["lookahead"] = LookaheadStrategy
-    except ImportError:
-        pass
-
-
-_register_lookahead()
+# NOTE: the ml-backed strategies (mcts, lookahead) are NOT registered here.
+# Importing ml from this module would create a circular import (ml.* imports
+# playtesting.strategy), and the old try/except hook silently swallowed failures
+# — which is exactly how the production bots degraded to random when ml/ was
+# missing from the image. Instead, those modules self-register when imported
+# (see ml/__init__.py), and the app imports ml at startup so a missing ml fails
+# loudly. Selectable bots are derived from STRATEGY_CLASSES, so a strategy that
+# fails to load is never offered.

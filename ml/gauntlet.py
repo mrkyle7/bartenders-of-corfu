@@ -49,6 +49,7 @@ from uuid import UUID, uuid4
 
 from app.game_modes import VALID_GAME_MODES, normalise_modes
 
+import ml  # noqa: F401  — registers ml-backed strategies (mcts, lookahead)
 from playtesting.runner import GameRunner
 from playtesting.strategy import STRATEGY_CLASSES, Strategy
 

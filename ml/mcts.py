@@ -655,3 +655,10 @@ class MCTSStrategy(Strategy):
         self, gs: GameState, player_id: UUID, drawn: list[Ingredient]
     ) -> list[dict]:
         return self._fallback.choose_pending_assignments(gs, player_id, drawn)
+
+
+# Self-register so importing this module makes the strategy selectable. See
+# ml/__init__.py for why registration lives in the ml modules (and fails loud).
+from playtesting.strategy import STRATEGY_CLASSES  # noqa: E402
+
+STRATEGY_CLASSES.setdefault("mcts", MCTSStrategy)

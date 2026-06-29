@@ -11,6 +11,13 @@ from uuid import UUID
 from app.db import db
 from app.game import Game, GameException
 
+# Importing ml registers the ml-backed bot strategies (mcts, lookahead) into
+# STRATEGY_CLASSES. This is intentionally a hard import with no try/except: if
+# ml/ is missing from the deployment (as it once was from the Docker image),
+# the app must fail to start loudly rather than silently run those bots as
+# random. bot_player is imported at app startup (api -> gameManager ->
+# bot_player), so a broken deploy surfaces immediately.
+import ml  # noqa: F401
 from playtesting.strategy import STRATEGY_CLASSES, Strategy
 from playtesting.valid_actions import Action, get_valid_actions
 
@@ -24,7 +31,18 @@ MAX_RETRIES = 3
 def _get_strategy(strategy_name: str) -> Strategy:
     cls = STRATEGY_CLASSES.get(strategy_name)
     if cls is None:
-        cls = STRATEGY_CLASSES["random"]
+        # Do NOT silently fall back to random — that hid the production bug
+        # where ml-backed bots weren't loaded. Surface it loudly. Selectability
+        # is gated on STRATEGY_CLASSES, so a registered bot reaching this branch
+        # means the deploy is inconsistent and should be investigated.
+        logger.error(
+            "Bot strategy %r is not registered (loaded: %s)",
+            strategy_name,
+            sorted(STRATEGY_CLASSES),
+        )
+        raise GameException(
+            f"Bot strategy '{strategy_name}' is not available", status_code=500
+        )
     return cls()
 
 
