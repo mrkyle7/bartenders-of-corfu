@@ -337,21 +337,20 @@ def print_report(
     return passed
 
 
-def _regression_champions(candidate_label: str) -> list[tuple[str, str]]:
+def _regression_champions(candidate_weights) -> list[tuple[str, str]]:
     """Champions for --regression: Mastermind (beat) + every frozen version
-    (noregress), minus the candidate's own version (a v-vs-itself mirror).
+    (noregress), skipping any version whose weights equal the candidate's (a
+    pointless — and slow — mirror match). Dedup is by weights, not label, so a
+    bare ``lookahead`` candidate (== the latest version) drops the mirror while a
+    freshly-tuned ``DEFAULT_WEIGHTS`` still gets tested against every version.
     """
     from ml.versions import LOOKAHEAD_VERSIONS
 
     champions: list[tuple[str, str]] = [("mastermind", "beat")]
-    own = (
-        candidate_label.split(":", 1)[1]
-        if candidate_label.startswith("lookahead:")
-        else None
-    )
-    for v in LOOKAHEAD_VERSIONS:
-        if v != own:
-            champions.append((f"lookahead:{v}", "noregress"))
+    for v, weights in LOOKAHEAD_VERSIONS.items():
+        if candidate_weights is not None and weights == candidate_weights:
+            continue
+        champions.append((f"lookahead:{v}", "noregress"))
     return champions
 
 
@@ -402,7 +401,8 @@ def main():
         candidate, candidate_label = _parse_strategy_spec(args.candidate)
         modes = _resolve_modes(args.modes)
         if args.regression:
-            champion_specs = _regression_champions(candidate_label)
+            candidate_weights = getattr(candidate(), "weights", None)
+            champion_specs = _regression_champions(candidate_weights)
         elif args.champions:
             champion_specs = [
                 (s.strip(), "beat") for s in args.champions.split(",") if s.strip()
