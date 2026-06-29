@@ -136,12 +136,7 @@ class GameRunner:
                     print(
                         f"  {self.strategies[player_id].name}: NO VALID ACTIONS - skipping turn"
                     )
-                from app.actions import _advance_turn, _deep_copy_state
-
-                gs = _deep_copy_state(gs)
-                gs.turn_number += 1
-                _advance_turn(gs)
-                return gs
+                return self._force_advance_turn(gs)
 
             chosen = strategy.choose_action(gs, player_id, turn_actions)
 
@@ -163,11 +158,32 @@ class GameRunner:
             print(
                 f"  {self.strategies[player_id].name}: all retries exhausted, skipping turn"
             )
-        from app.actions import _advance_turn, _deep_copy_state
+        return self._force_advance_turn(gs)
+
+    @staticmethod
+    def _force_advance_turn(gs: GameState) -> GameState:
+        """Advance the turn when the current player can't (or won't) act further.
+
+        Mirrors the real end-of-turn path in ``app.actions``: after advancing we
+        must run the last-round and last-player-standing checks. Skipping them
+        (the old behaviour) meant that once a player passed the points threshold
+        and ``last_round`` was set, the round was never detected as complete when
+        turns advanced via this fallback — which, with optional modes on (free
+        actions almost always remain, so this *is* the normal advance path), let
+        games run to MAX_TURNS with no winner and show up as bogus "draws".
+        """
+        from app.actions import (
+            _advance_turn,
+            _check_last_player_standing,
+            _check_last_round_complete,
+            _deep_copy_state,
+        )
 
         gs = _deep_copy_state(gs)
         gs.turn_number += 1
         _advance_turn(gs)
+        _check_last_round_complete(gs)
+        _check_last_player_standing(gs)
         return gs
 
     def _execute_action(

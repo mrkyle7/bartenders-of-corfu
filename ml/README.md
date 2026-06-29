@@ -54,12 +54,13 @@ uv run python -m ml.gauntlet --candidate lookahead --regression --games 200 --mo
   pass `--regression`, then append the new explicit weights to
   `LOOKAHEAD_VERSIONS` (never edit an existing entry). It becomes the new
   `latest` that the *next* round must beat.
-- **Caveat — version-vs-version is slow and drawish.** Two lookahead bots each
-  run the depth-limited search, so a `lookahead:vX` matchup is ~7× slower than
-  vs Mastermind (~5 s/game) and produces ~30% draws (both bots play cautiously
-  and neither closes out). Use fewer games for version matchups, and read the
+- **Caveat — version-vs-version is slow.** Two lookahead bots each run the
+  depth-limited search, so a `lookahead:vX` matchup is ~7× slower than vs
+  Mastermind (~5 s/game). Use fewer games for version matchups and read the
   Wilson *interval* — a wide one over few decisive games means "inconclusive",
-  not "even". Draws are excluded from win share (decisive games only).
+  not "even". (Earlier these matchups also showed ~30% bogus "draws"; that was a
+  runner bug — turns force-advanced past the last-round check — now fixed, so
+  games resolve by points as they should.)
 
 ## The strategies
 
