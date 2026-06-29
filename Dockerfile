@@ -26,6 +26,12 @@ COPY log_conf.yaml .
 COPY app ./app
 COPY static ./static
 COPY playtesting ./playtesting
+# ml/ holds the bot strategies registered lazily by playtesting.strategy
+# (mcts, lookahead). Without it those registrations ModuleNotFound-fail and the
+# bots silently fall back to "random" at runtime. The runtime-imported modules
+# (ml.mcts, ml.evaluator, ml.lookahead) pull only app/playtesting + stdlib, so
+# this is safe under UV_NO_DEV=1 (no numpy/gymnasium needed).
+COPY ml ./ml
 
 EXPOSE 8080
 

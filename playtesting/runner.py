@@ -37,16 +37,22 @@ class GameResult:
 
 
 class GameRunner:
-    def __init__(self, strategies: dict[UUID, Strategy], seed: int | None = None):
+    def __init__(
+        self,
+        strategies: dict[UUID, Strategy],
+        seed: int | None = None,
+        game_modes: list[str] | None = None,
+    ):
         self.strategies = strategies
         self.seed = seed
+        self.game_modes = list(game_modes) if game_modes else []
 
     def run(self, verbose: bool = False) -> GameResult:
         if self.seed is not None:
             _random.seed(self.seed)
 
         player_ids = list(self.strategies.keys())
-        gs = GameState.start_game(player_ids)
+        gs = GameState.start_game(player_ids, game_modes=self.game_modes)
 
         if verbose:
             strategy_names = {pid: self.strategies[pid].name for pid in player_ids}
@@ -178,7 +184,11 @@ class GameRunner:
             return self._execute_take(gs, player_id, strategy)
         elif t == "sell_cup":
             gs, _ = actions.sell_cup(
-                gs, player_id, p["cup_index"], p.get("declared_specials", [])
+                gs,
+                player_id,
+                p["cup_index"],
+                p.get("declared_specials", []),
+                additional_cups=p.get("additional_cups"),
             )
         elif t == "drink_cup":
             gs, _ = actions.drink_cup(gs, player_id, p["cup_index"])
@@ -202,6 +212,8 @@ class GameRunner:
             )
         elif t == "refresh_card_row":
             gs, _ = actions.refresh_card_row(gs, player_id, p["row_position"])
+        elif t == "reroll_specials":
+            gs, _ = actions.reroll_specials(gs, player_id, p["chosen_specials"])
         else:
             raise GameException(f"Unknown action type: {t}", status_code=500)
 
