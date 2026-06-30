@@ -75,17 +75,18 @@ LATEST_VERSION = next(reversed(LOOKAHEAD_VERSIONS))
 # they don't beat `latest` across the board. Kept here so the work is first-class
 # and runnable instead of buried behind a hand-edited weight.
 ALT_BUILDS: dict[str, EvalWeights] = {
-    # cocktail — engine-acquisition (v1) PLUS *situational* recipe-directed
-    # cocktail building (see ml/cocktail.py + cocktail_progress): bank specials,
-    # let held specials pick the recipe, build only when the rest is obtainable
-    # and (for cup-stranding recipes) only when behind/threatened. A long-game
-    # specialist that still trails on the gauntlet — ~75% vs Mastermind (v1 ~90%)
-    # and ~even vs v1 head-to-head. The ceiling is structural: the forced ~5-item
-    # take economy makes multi-take builds inefficient, and the cocktails that
-    # DON'T need building (Margarita/Manhattan/Cosmopolitan) are free declare-at-
-    # sale upgrades v1 already takes — so the build code only adds the costly
-    # cocktails. Off by default; flip cocktail_progress into DEFAULT_WEIGHTS to
-    # promote it.
+    # cocktail — engine-acquisition (v1) PLUS recipe-directed cocktail building,
+    # driven by *value and probability*, not hand-written rules (see ml/cocktail.py
+    # best_cocktail: EV = P(complete) * (points - a normal sale); the search weighs
+    # it via cocktail_progress, so "only when behind", "don't strand a cup" and
+    # "play safe" emerge from the evaluation rather than if-statements). It builds
+    # real cocktails but still trails on the gauntlet — ~76% vs Mastermind (v1
+    # ~90%) and ~46% vs v1 head-to-head; a weight sweep (0.3/0.5/1.0) only ever
+    # makes it worse, so the ceiling is structural: the forced ~5-item take economy
+    # makes multi-take builds inefficient, and the cocktails that DON'T need
+    # building (Margarita/Manhattan/Cosmopolitan) are free declare-at-sale upgrades
+    # v1 already takes. Off by default; flip cocktail_progress into DEFAULT_WEIGHTS
+    # to promote it.
     "cocktail": EvalWeights(
         doubler_acquire=11.0,
         specialist_acquire=7.0,

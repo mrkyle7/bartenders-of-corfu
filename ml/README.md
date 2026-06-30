@@ -138,24 +138,26 @@ every other drink at 3), and the bot ignored them. The full feature is now built
 - **Evaluator** (`_cocktail_progress` + `cocktail_progress` weight): values a cup
   a few ingredients from a *completable* cocktail (recipe sub-multiset + specials
   on the mat).
-- **Disposition** (`ml/cocktail.py`, `plan_cocktail`): the missing half, and
-  *situational* — cocktails are not the primary plan. It returns a target only
-  when (1) survival is fine, (2) the recipe's specials are already on the mat,
-  (3) the missing spirits/mixers are actually **obtainable** from display+bag
-  (else hang on and wait), and (4) for *cup-stranding* recipes — anything but the
-  single-spirit/valid-pairing ones (Martini, Manhattan, Old Fashioned, Margarita,
-  Cosmopolitan) — only when **behind or an opponent is near a win**. It then
-  builds one cup from the display, stacking the 3rd/4th spirit (the 2-spirit cap
-  is a *sale* rule, not a take rule), spoiling off-plan spirits rather than
-  drinking into the cliff. The evaluator term delegates to this same planner, so
-  search and play agree (no generic "near-complete" gradient — an unbuildable
-  half-cup is a liability, not progress).
-- **Search**: `LookaheadStrategy` simulates its *own* disposition so the safety
-  penalty sees a build-take's real drunk/bladder cost.
+- **Decision is value/probability-driven, not rule-driven** (`ml/cocktail.py`
+  `best_cocktail`): for every recipe whose specials are banked and every cup
+  that's a sub-multiset of it, **EV = P(complete) × (points − a normal sale)**,
+  where `P(complete)` is a cheap proxy on how comfortably the missing ingredients
+  are obtainable from display+bag. The evaluator's cocktail term *is* that EV, so
+  the search trades it off against everything else — "only when behind" (points
+  are worth more head-to-head when behind), "don't strand a cup" (a stranded cup
+  loses its `_best_cup_sale` value), and "play safe" (the safety penalty) all
+  **emerge from the evaluation**, not from `if` statements. The knobs (`_HEADROOM`,
+  display weight, the EV build threshold) are tunable weights.
+- **Disposition**: when the best EV clears the build bar, it builds that cup from
+  the display, stacking the 3rd/4th spirit (the 2-spirit cap is a *sale* rule,
+  not a take rule) and spoiling off-plan spirits rather than drinking into the
+  cliff. `LookaheadStrategy` simulates its *own* disposition so the safety penalty
+  sees a build-take's real cost.
 
 Honest gauntlet result (120-game, all modes): it builds real cocktails but
-**still trails** — ~75% vs Mastermind (`v1` ~90%) and ~even-to-slightly-behind
-vs `v1` head-to-head. The ceiling is structural, not a tuning miss:
+**still trails** — ~76% vs Mastermind (`v1` ~90%) and ~46% vs `v1` head-to-head,
+and a weight sweep (0.3 / 0.5 / 1.0) only makes it worse. The ceiling is
+structural, not a tuning miss:
 
 - The **forced ~5-item take economy** makes a multi-take build (e.g. a 3-gin
   Martini) inefficient — most of each take is off-plan.

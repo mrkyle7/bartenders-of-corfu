@@ -29,7 +29,7 @@ from app.PlayerState import PlayerState
 from app.actions import SCORE_TO_WIN
 from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, drink_points
 
-from ml.cocktail import plan_cocktail
+from ml.cocktail import best_cocktail
 
 # --- Terminal overrides ---------------------------------------------------
 # Not version-tuned: a win is a win regardless of which weight set is playing.
@@ -194,23 +194,15 @@ def _cup_progress(ps: PlayerState, cup) -> float:
 
 
 def _cocktail_progress(gs: GameState, ps: PlayerState) -> float:
-    """Value of a cocktail this player should be building right now.
+    """Expected value of this player's best cocktail opportunity.
 
-    Delegates to ``ml.cocktail.plan_cocktail`` — the same situational, buildability-
-    and opponent-aware decision the bot's disposition uses — so the search and the
-    actual play agree on when a cocktail is worth chasing. Returns the target's
-    points discounted by how many ingredients are still needed, or 0.0 when there
-    is no cocktail worth pursuing.
-
-    There is deliberately no generic "near complete" gradient: most recipes don't
-    overlap with normal drinks (only the single-spirit / valid-pairing ones do), so
-    an unbuildable half-cup is a stranded liability, not progress. ``plan_cocktail``
-    only returns a target when the specials are in hand AND the rest is obtainable.
+    Delegates to ``ml.cocktail.best_cocktail``: P(complete) * (cocktail points - a
+    normal sale), shared with the bot's disposition so search and play agree. It's
+    a value, not a rule — the search weighs it against safety, the cup's lost sale
+    value when stranded, and the opponent gap, so *when* to chase a cocktail (and
+    which) falls out of the evaluation rather than hand-written conditions.
     """
-    plan = plan_cocktail(gs, ps)
-    if plan is None:
-        return 0.0
-    return plan.points / (1.0 + plan.needed_count)
+    return best_cocktail(gs, ps)[1]
 
 
 def _threshold_proximity(

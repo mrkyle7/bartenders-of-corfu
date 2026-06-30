@@ -23,7 +23,6 @@ LookaheadStrategy wires this into ``choose_take_assignments`` /
 from collections import Counter
 from dataclasses import dataclass
 
-from app.actions import SCORE_TO_WIN
 from app.GameState import GameState
 from app.Ingredient import Ingredient
 from app.PlayerState import MAX_CUP_INGREDIENTS, PlayerState
@@ -32,99 +31,75 @@ from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, VALID_PAIRINGS
 
 @dataclass
 class CocktailPlan:
-    """A concrete, buildable cocktail target for one cup."""
+    """A buildable cocktail target for one cup, with its completion probability."""
 
     cup_index: int
     needed: Counter  # Ingredient -> how many more to put in the target cup
     points: int
     name: str
-    overlap_safe: bool
+    probability: float  # rough chance of obtaining the missing ingredients
 
     @property
     def needed_count(self) -> int:
         return sum(self.needed.values())
 
 
-# Don't chase a cocktail when survival is at stake: building one means taking
-# extra ingredients (off-plan ones get drunk, raising drunk/bladder), so a
-# multi-turn build from a dangerous position is how the cocktail bot used to
-# self-eliminate. Above these thresholds, fall back to Mastermind's safe play.
+# Cocktail pursuit is value-driven, not rule-driven. The expected value of an
+# opportunity is P(complete) * (cocktail points - what the cup would sell for as a
+# normal drink). The search then trades that EV off against everything else via
+# the cocktail_progress weight — so "only when behind", "don't strand a cup", and
+# "play safe" all emerge from the evaluation (points are worth more head-to-head
+# when behind; a stranded cup loses its _best_cup_sale value; a dangerous take is
+# crushed by the safety penalty) rather than from hand-written rules. These are
+# the tunable knobs of that model.
+_HEADROOM = 2.0  # want ~2x the needed units available before calling it "likely"
+_DISPLAY_WEIGHT = 2.0  # display units count for more — they're grabbable now
+_NORMAL_SALE_BASELINE = 3.0  # a built cup would otherwise sell for ~3 (a double)
+_BUILD_EV_THRESHOLD = 2.5  # the disposition only commits to a build above this EV
+# Disposition drink-safety budget (mechanical, not strategy): while assembling a
+# cocktail, never drink off-plan spirits past this drunk level — spoil instead.
 _COCKTAIL_DRUNK_CAP = 2
-_COCKTAIL_MIN_BLADDER_ROOM = 2
-# An opponent at/above this score is "near a win" (40 to win) → time to gamble on
-# the big cocktail swing even from a cup-stranding recipe.
-_OPPONENT_THREAT_SCORE = 0.65 * SCORE_TO_WIN
 
 
-def _overlap_safe(r_spirits: Counter, r_mixers: Counter) -> bool:
-    """Does this recipe build through *sellable* intermediate cups?
+def _completion_probability(needed: Counter, obtainable: Counter) -> float:
+    """Rough chance of obtaining the missing ingredients from the display + bag.
 
-    True only for single-spirit recipes whose mixers (if any) are a valid normal
-    pairing — Martini, Manhattan, Old Fashioned, Margarita, Cosmopolitan. For
-    those, every partial cup is still a 1/3-pt normal drink, so building toward
-    the cocktail strands nothing. Multi-spirit (Long Island) or invalid-mixer
-    (Mojito's rum+soda, Tom Collins' gin+soda) recipes spoil the cup until the
-    recipe is complete, so they're only worth committing to when behind.
+    Per ingredient: ``supply / (need * HEADROOM)`` clamped to [0, 1] — you want a
+    comfortable surplus to actually draw enough against bag randomness and rivals
+    taking the same items. Product across ingredients. Display units are weighted
+    up (you can grab them this turn). Not a true combinatorial probability — a
+    cheap, monotonic proxy the weights are tuned against.
     """
-    if len(r_spirits) != 1:
-        return False
-    spirit = next(iter(r_spirits))
-    valid = VALID_PAIRINGS.get(spirit, set())
-    return all(m in valid for m in r_mixers)
+    p = 1.0
+    for ing, n in needed.items():
+        supply = obtainable.get(ing, 0.0)
+        if supply < n:
+            return 0.0  # not even enough in existence to finish — impossible
+        p *= min(1.0, supply / (n * _HEADROOM))
+    return p
 
 
-def _under_pressure(gs: GameState, ps: PlayerState) -> bool:
-    """Is an opponent ahead of us, or close enough to winning to force a gamble?
+def best_cocktail(gs: GameState, ps: PlayerState) -> tuple[CocktailPlan | None, float]:
+    """The highest expected-value cocktail this player could build, and its EV.
 
-    Cocktails are a high-variance catch-up play, so the cup-stranding recipes are
-    only worth it when we're not comfortably in front.
+    Pure value/probability: for every recipe whose specials are already banked and
+    every cup that's a sub-multiset of it, EV = P(complete) * (points - a normal
+    sale). No situational rules — the caller (search via the evaluator, or the
+    disposition) decides what to do with the EV. Returns (None, 0.0) if nothing.
     """
-    opp_best = max(
-        (
-            o.points
-            for pid, o in gs.player_states.items()
-            if pid != ps.player_id and not o.is_eliminated
-        ),
-        default=0,
-    )
-    return opp_best > ps.points or opp_best >= _OPPONENT_THREAT_SCORE
-
-
-def plan_cocktail(gs: GameState, ps: PlayerState) -> CocktailPlan | None:
-    """Pick a cocktail worth building right now, or None — the situational call.
-
-    Cocktails are *not* the primary plan; this returns a target only when it is
-    genuinely worth diverting from normal selling:
-
-    1. **Survival first** — None when drunk/bladder is in the danger zone.
-    2. **Specials in hand** — only recipes whose specials are already on the mat
-       (the human banks specials, then commits). No speculative builds.
-    3. **A real chance to build** — the missing spirits/mixers must actually be
-       obtainable from the display + bag; otherwise hang on and wait.
-    4. **Stranding risk vs. opponents** — overlap-safe recipes (sellable partials)
-       can be built anytime; cup-stranding ones only when behind / under threat.
-
-    Among the survivors, prefer overlap-safe, then more points, then fewer
-    ingredients still needed, then the cup with the most progress.
-    """
-    if ps.drunk_level > _COCKTAIL_DRUNK_CAP:
-        return None
-    if ps.bladder_capacity - len(ps.bladder) < _COCKTAIL_MIN_BLADDER_ROOM:
-        return None
-
     held = Counter(ps.special_ingredients)
-    obtainable = Counter(gs.open_display) + Counter(gs.bag_contents)
-    behind = _under_pressure(gs, ps)
+    obtainable: Counter = Counter()
+    for ing in gs.open_display:
+        obtainable[ing] += _DISPLAY_WEIGHT
+    for ing in gs.bag_contents:
+        obtainable[ing] += 1.0
 
-    best: CocktailPlan | None = None
-    best_key: tuple | None = None
+    best_plan: CocktailPlan | None = None
+    best_ev = 0.0
 
     for r_spirits, r_mixers, r_specials, pts, name in _RECIPES:
         if any(held.get(st.value, 0) < n for st, n in r_specials.items()):
             continue
-        safe = _overlap_safe(r_spirits, r_mixers)
-        if not safe and not behind:
-            continue  # don't strand a cup on a risky cocktail while in front
         recipe_total = sum(r_spirits.values()) + sum(r_mixers.values())
 
         for ci in (0, 1):
@@ -140,7 +115,7 @@ def plan_cocktail(gs: GameState, ps: PlayerState) -> CocktailPlan | None:
             cup_total = len(cup.ingredients)
             needed_count = recipe_total - cup_total
             if needed_count <= 0:
-                continue  # already a complete cocktail — just sell it
+                continue  # already complete — _best_cup_sale handles the sale
             if needed_count > MAX_CUP_INGREDIENTS - cup_total:
                 continue  # won't fit
 
@@ -152,16 +127,23 @@ def plan_cocktail(gs: GameState, ps: PlayerState) -> CocktailPlan | None:
                 if (d := n - c_mixers.get(k, 0)) > 0:
                     needed[k] = d
 
-            # A real chance to build: every missing ingredient must be obtainable.
-            if any(obtainable.get(ing, 0) < n for ing, n in needed.items()):
-                continue
+            p = _completion_probability(needed, obtainable)
+            ev = p * max(0.0, pts - _NORMAL_SALE_BASELINE)
+            if ev > best_ev:
+                best_ev = ev
+                best_plan = CocktailPlan(ci, needed, pts, name, p)
 
-            key = (safe, pts, -needed_count, cup_total)
-            if best_key is None or key > best_key:
-                best_key = key
-                best = CocktailPlan(ci, needed, pts, name, safe)
+    return best_plan, best_ev
 
-    return best
+
+def plan_cocktail(gs: GameState, ps: PlayerState) -> CocktailPlan | None:
+    """The build target for the disposition: the best-EV cocktail, but only when
+    its expected value clears the build bar (otherwise play normal). No
+    ``if behind`` / ``overlap-safe`` rules — the EV and the search's evaluation do
+    the judging.
+    """
+    plan, ev = best_cocktail(gs, ps)
+    return plan if ev >= _BUILD_EV_THRESHOLD else None
 
 
 def cocktail_display_assignments(

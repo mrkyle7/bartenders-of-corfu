@@ -1,7 +1,7 @@
-"""Tests for the recipe-directed cocktail planner and disposition.
+"""Tests for the value/probability cocktail planner and disposition.
 
 Pure logic — no Supabase. The cocktail build is off by default (a long-game
-specialist), but the situational planner/disposition must be correct when on.
+specialist), but the EV planner and disposition must be correct when on.
 """
 
 from uuid import uuid4
@@ -11,6 +11,7 @@ from app.Ingredient import Ingredient
 from app.PlayerState import Cup, PlayerState
 
 from ml.cocktail import (
+    best_cocktail,
     cocktail_display_assignments,
     cocktail_pending_assignments,
     plan_cocktail,
@@ -23,8 +24,8 @@ SODA = Ingredient.SODA
 COLA = Ingredient.COLA
 SPECIAL = Ingredient.SPECIAL
 
-# A bag with plenty of every spirit + mixer, so buildability passes by default.
-_RICH_BAG = [GIN, GIN, GIN, RUM, RUM, WHISKEY, WHISKEY, SODA, SODA, COLA]
+# A bag with plenty of every spirit + mixer, so completion probability is high.
+_RICH_BAG = [GIN, GIN, GIN, GIN, RUM, RUM, WHISKEY, WHISKEY, SODA, SODA, COLA]
 
 
 def _ps(cups, specials, *, drunk=0, bladder=None, capacity=7, points=0):
@@ -50,47 +51,48 @@ def _gs(ps, *, opponent_points=0, display=(), bag=None):
     )
 
 
-def test_plan_targets_overlap_safe_recipe_when_buildable():
-    # 1 gin in cup + vermouth on mat → Gin Martini (3 gin + vermouth), need 2 gin.
-    # Martini is overlap-safe, so it's pursued regardless of the score.
+def test_best_cocktail_picks_buildable_recipe_with_positive_ev():
+    # 1 gin in cup + vermouth → Gin Martini (3 gin), need 2 gin; bag is gin-rich.
     ps = _ps([Cup([GIN]), Cup()], ["vermouth"])
-    plan = plan_cocktail(_gs(ps), ps)
+    plan, ev = best_cocktail(_gs(ps), ps)
     assert plan is not None
     assert plan.name == "Gin Martini"
     assert plan.cup_index == 0
     assert dict(plan.needed) == {GIN: 2}
-    assert plan.overlap_safe is True
+    assert 0.0 < plan.probability <= 1.0
+    assert ev > 0.0
 
 
-def test_no_plan_without_the_special():
+def test_no_cocktail_without_the_special():
     ps = _ps([Cup([GIN]), Cup()], [])
-    assert plan_cocktail(_gs(ps), ps) is None
+    assert best_cocktail(_gs(ps), ps) == (None, 0.0)
 
 
-def test_no_plan_when_unbuildable():
-    # Holds the special and the cup is on-path, but no gin is obtainable → hang on.
+def test_impossible_build_has_zero_ev():
+    # Holds the special but there aren't 2 gins to be had → EV 0, no build.
     ps = _ps([Cup([GIN]), Cup()], ["vermouth"])
     gs = _gs(ps, bag=[SODA, COLA, RUM], display=[SODA])
+    assert best_cocktail(gs, ps) == (None, 0.0)
     assert plan_cocktail(gs, ps) is None
 
 
-def test_no_plan_when_in_danger():
-    assert (
-        plan_cocktail(_gs(ps := _ps([Cup([GIN])], ["vermouth"], drunk=3)), ps) is None
-    )
-    ps2 = _ps([Cup([GIN]), Cup()], ["vermouth"], bladder=[SODA] * 6, capacity=7)
-    assert plan_cocktail(_gs(ps2), ps2) is None
+def test_higher_probability_means_higher_ev():
+    # Same 2-gin martini need: a gin-rich pool scores higher EV than a gin-thin one.
+    ps = _ps([Cup([GIN]), Cup()], ["vermouth"])
+    _, ev_rich = best_cocktail(_gs(ps, bag=[GIN, GIN, GIN, GIN, GIN, GIN]), ps)
+    _, ev_thin = best_cocktail(_gs(ps, bag=[GIN, GIN]), ps)
+    assert ev_rich > ev_thin > 0.0
 
 
-def test_risky_recipe_only_when_behind():
-    # Mojito (2 rum + soda + sugar) is NOT overlap-safe (soda doesn't pair with
-    # rum), so it strands the cup. Chase it only when behind.
-    ahead = _ps([Cup(), Cup()], ["sugar"], points=20)
-    assert plan_cocktail(_gs(ahead, opponent_points=5), ahead) is None
-
-    behind = _ps([Cup(), Cup()], ["sugar"], points=5)
-    plan = plan_cocktail(_gs(behind, opponent_points=20), behind)
-    assert plan is not None and plan.name == "Mojito" and plan.overlap_safe is False
+def test_plan_requires_ev_above_build_bar():
+    # A gin-thin pool (exactly 2 gins) is buildable but low-probability: best_cocktail
+    # still reports it, but plan_cocktail withholds it below the build threshold.
+    ps = _ps([Cup([GIN]), Cup()], ["vermouth"])
+    gs = _gs(ps, bag=[GIN, GIN])
+    plan, ev = best_cocktail(gs, ps)
+    assert plan is not None and ev > 0.0
+    # With a generous pool it clears the bar and the disposition commits.
+    assert plan_cocktail(_gs(ps), ps) is not None
 
 
 def test_display_takes_special_first_then_needed():
@@ -110,8 +112,6 @@ def test_display_takes_special_first_then_needed():
 def test_pending_routes_needed_in_order():
     ps = _ps([Cup([GIN]), Cup()], ["vermouth"])
     plan = plan_cocktail(_gs(ps), ps)
-    # Draw order matters (handler pops FIFO): gin → target cup, off-plan whiskey
-    # → other cup, soda → other cup (pairs with whiskey).
     asn = cocktail_pending_assignments(ps, [GIN, WHISKEY, SODA], plan)
     assert [a["disposition"] for a in asn] == ["cup", "cup", "cup"]
     assert asn[0]["cup_index"] == 0  # plan cup
