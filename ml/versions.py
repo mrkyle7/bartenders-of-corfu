@@ -66,16 +66,41 @@ LOOKAHEAD_VERSIONS: dict[str, EvalWeights] = {
 }
 
 # The newest registered version (last inserted). New tuning is gated against it.
+# Deliberately the last entry of the *progression* dict above — experimental
+# alternates (below) are not part of the line and never become `latest`.
 LATEST_VERSION = next(reversed(LOOKAHEAD_VERSIONS))
+
+# Experimental / alternate builds — selectable (e.g. `lookahead:cocktail`) and
+# gauntlet-comparable, but NOT in the progression and NOT the default, because
+# they don't beat `latest` across the board. Kept here so the work is first-class
+# and runnable instead of buried behind a hand-edited weight.
+ALT_BUILDS: dict[str, EvalWeights] = {
+    # cocktail — engine-acquisition (v1) PLUS recipe-directed cocktail building
+    # (see ml/cocktail.py + cocktail_progress). A long-game specialist: it
+    # assembles real 3-spirit cocktails and out-scores v1, edging it ~54%
+    # head-to-head (120g, CI straddles 50% — not significant), but drops to ~75%
+    # vs Mastermind (v1 is ~90%) because short, elimination-decided games don't
+    # repay a multi-turn build. Off by default; flip cocktail_progress into
+    # DEFAULT_WEIGHTS to promote it.
+    "cocktail": EvalWeights(
+        doubler_acquire=11.0,
+        specialist_acquire=7.0,
+        karaoke_acquire=8.0,
+        threshold_reach=3,
+        threshold_discount=0.6,
+        cocktail_progress=0.5,
+    ),
+}
 
 
 def get_version(version: str) -> EvalWeights:
-    """Resolve a version id (e.g. ``"v1"``, or ``"latest"``) to its weights."""
+    """Resolve a version id (``"v1"``, ``"latest"``, or an alt build) to weights."""
     key = LATEST_VERSION if version.lower() == "latest" else version
-    try:
+    if key in LOOKAHEAD_VERSIONS:
         return LOOKAHEAD_VERSIONS[key]
-    except KeyError:
-        raise ValueError(
-            f"Unknown lookahead version {version!r}. "
-            f"Known: {', '.join(LOOKAHEAD_VERSIONS)}, latest"
-        ) from None
+    if key in ALT_BUILDS:
+        return ALT_BUILDS[key]
+    raise ValueError(
+        f"Unknown lookahead version {version!r}. Known: "
+        f"{', '.join((*LOOKAHEAD_VERSIONS, *ALT_BUILDS))}, latest"
+    )

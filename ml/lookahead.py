@@ -27,6 +27,11 @@ from app.actions import _advance_turn, _deep_copy_state
 from playtesting.strategy import Mastermind, Strategy
 from playtesting.valid_actions import Action, get_valid_actions
 
+from ml.cocktail import (
+    cocktail_display_assignments,
+    cocktail_pending_assignments,
+    plan_cocktail,
+)
 from ml.evaluator import DEFAULT_WEIGHTS, EvalWeights, evaluate
 from ml.mcts import RolloutExecutor
 
@@ -85,7 +90,12 @@ class LookaheadStrategy(Strategy):
         for _ in range(self.samples):
             sim = _deep_copy_state(gs)
             try:
-                sim = self._executor._exec(sim, player_id, action, self._fallback)
+                # Simulate the action with *our own* disposition (self), not
+                # Mastermind's: when cocktail building is on, that's what makes the
+                # search see a build-take's real drunk/bladder cost, so the safety
+                # penalty discourages reckless builds. For v1 (cocktail off) self
+                # delegates to Mastermind, so behaviour is unchanged.
+                sim = self._executor._exec(sim, player_id, action, self)
             except Exception:
                 total += evaluate(sim, player_id, self.weights)
                 continue
@@ -154,7 +164,7 @@ class LookaheadStrategy(Strategy):
                 break
         return gs
 
-    # -- micro-decisions: delegate to Mastermind ----------------------------
+    # -- micro-decisions: delegate to Mastermind, except cocktail building --
 
     def choose_free_action(
         self, gs: GameState, player_id: UUID, free_actions: list[Action]
@@ -164,11 +174,26 @@ class LookaheadStrategy(Strategy):
     def choose_take_assignments(
         self, gs: GameState, player_id: UUID, count: int
     ) -> list[dict]:
+        # When cocktail knowledge is on, build a held-specials recipe straight
+        # from the display before falling back to Mastermind's generic disposition
+        # (which caps cups at 2 spirits and can't assemble a cocktail).
+        if self.weights.cocktail_progress:
+            ps = gs.player_states[player_id]
+            plan = plan_cocktail(ps)
+            if plan is not None:
+                asn = cocktail_display_assignments(gs.open_display, count, plan)
+                if asn:
+                    return asn
         return self._fallback.choose_take_assignments(gs, player_id, count)
 
     def choose_pending_assignments(
         self, gs: GameState, player_id: UUID, drawn: list[Ingredient]
     ) -> list[dict]:
+        if self.weights.cocktail_progress:
+            ps = gs.player_states[player_id]
+            plan = plan_cocktail(ps)  # re-plan from live state (display picks applied)
+            if plan is not None:
+                return cocktail_pending_assignments(ps, drawn, plan)
         return self._fallback.choose_pending_assignments(gs, player_id, drawn)
 
 

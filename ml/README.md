@@ -130,20 +130,37 @@ production, but the next round (`v2`) must pull *significantly* ahead of `v1`
 *head-to-head* without giving back the no-modes ground. lookahead remains **~78×
 faster** than the shipped MCTS.
 
-### Cocktail knowledge (implemented, parked off)
+### Cocktail knowledge (`lookahead:cocktail`) — a long-game specialist, off by default
 
 Cocktails are the big scores (10–15 pts, exempt from the 2-spirit cap that caps
-every other drink at 3), and the bot ignored them. `_cocktail_progress` +
-the `cocktail_progress` weight teach the evaluator to value a cup that's a few
-ingredients from a *completable* cocktail (recipe sub-multiset + specials already
-on the mat). It's correct and unit-tested — but **defaults to 0.0 because turning
-it on regresses the gauntlet**: ~90% → ~76% vs Mastermind (avg points 30 → 19)
-and 48% head-to-head vs `v1`. The cause is structural, not a weight — the *search*
-values a cocktail-in-progress, but ingredient *disposition* is delegated to
-Mastermind, which never stacks a cup toward a recipe, so the bot just stops
-selling cups it can't finish. Making cocktail knowledge pay off needs
-**cocktail-aware take assignment** in `LookaheadStrategy` (the missing half); the
-evaluator term is kept, off, ready for that follow-up.
+every other drink at 3), and the bot ignored them. The full feature is now built:
+
+- **Evaluator** (`_cocktail_progress` + `cocktail_progress` weight): values a cup
+  a few ingredients from a *completable* cocktail (recipe sub-multiset + specials
+  on the mat).
+- **Disposition** (`ml/cocktail.py`): the missing half. Follows the human plan —
+  bank specials first, let held specials pick the recipe, then build one cup
+  toward it, taking the needed spirits/mixers from the **display**, not just the
+  bag. It stacks a 3rd/4th spirit into a cup (the 2-spirit cap is a *sale* rule,
+  not a take rule) only when the special is held, so the cup is sellable as the
+  cocktail; off-plan spirits are spoiled rather than drunk into the cliff, and the
+  whole plan is abandoned when drunk/bladder is dangerous.
+- **Search**: `LookaheadStrategy` simulates its *own* disposition (not Mastermind's)
+  so the safety penalty sees a build-take's real drunk/bladder cost.
+
+Result (120-game gauntlets, all modes): it assembles real cocktails and
+**out-scores `v1`** (33 vs 32), edging it **~54% head-to-head** (CI straddles
+50% — not significant) with the runner-draw fix in place. But vs **Mastermind**
+it drops to **~75%** (`v1` is ~90%): short, elimination-decided games don't repay
+a multi-turn build, so the steady-seller wins there. It's a **long-game / vs-human
+specialist**.
+
+Because it regresses against the Mastermind baseline it is **not** the default
+(`cocktail_progress` stays 0.0; `DEFAULT_WEIGHTS == v1`). It's a first-class,
+selectable build — `lookahead:cocktail` (see `ALT_BUILDS` in `ml/versions.py`) —
+runnable in the gauntlet and ready to promote (flip `cocktail_progress` into
+`DEFAULT_WEIGHTS`) if you decide the long-game regime is what matters. Closing the
+Mastermind gap (e.g. only pursuing cocktails when ahead/safe) is the open lead.
 
 ## Important gotchas
 
