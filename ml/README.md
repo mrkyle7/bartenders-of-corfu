@@ -130,6 +130,21 @@ production, but the next round (`v2`) must pull *significantly* ahead of `v1`
 *head-to-head* without giving back the no-modes ground. lookahead remains **~78×
 faster** than the shipped MCTS.
 
+### Cocktail knowledge (implemented, parked off)
+
+Cocktails are the big scores (10–15 pts, exempt from the 2-spirit cap that caps
+every other drink at 3), and the bot ignored them. `_cocktail_progress` +
+the `cocktail_progress` weight teach the evaluator to value a cup that's a few
+ingredients from a *completable* cocktail (recipe sub-multiset + specials already
+on the mat). It's correct and unit-tested — but **defaults to 0.0 because turning
+it on regresses the gauntlet**: ~90% → ~76% vs Mastermind (avg points 30 → 19)
+and 48% head-to-head vs `v1`. The cause is structural, not a weight — the *search*
+values a cocktail-in-progress, but ingredient *disposition* is delegated to
+Mastermind, which never stacks a cup toward a recipe, so the bot just stops
+selling cups it can't finish. Making cocktail knowledge pay off needs
+**cocktail-aware take assignment** in `LookaheadStrategy` (the missing half); the
+evaluator term is kept, off, ready for that follow-up.
+
 ## Important gotchas
 
 - **`ml/` must be in the Docker image.** `playtesting.strategy` registers `mcts`
