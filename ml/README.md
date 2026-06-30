@@ -210,9 +210,19 @@ Do **not** resurrect per-move live mutation in production.
 1. **Promote lookahead to the production default / retire MCTS.** It is faster
    and stronger. Decide whether `mcts` stays selectable at all. Consider making
    bot games default the optional rules on (host still controls them today).
-2. **`depth=2` + a weight pass.** Bump search depth and tune the `evaluator.py`
-   weight block; gauntlet each change. Watch per-move latency (depth grows cost
-   ~quadratically but is far under MCTS).
+2. **`depth=2` *needs* a weight pass — it regresses on its own.** Depth is now
+   selectable in the gauntlet (`lookahead:depth=2`, `lookahead:cocktail,depth=2`).
+   Note the naming: the default `depth=1` already searches *two* of the bot's
+   turns (action → opponents → follow-up → opponents → evaluate), so `depth=2` is
+   a three-turn search. Measured (120/60g, all modes): `depth=2` with v1 weights
+   is **~74% vs Mastermind** (down from ~90%) and **~50% vs v1** head-to-head —
+   i.e. no better head-to-head, worse vs Mastermind, and ~10× slower. The
+   evaluator is tuned for the 2-ply horizon, so a 3rd ply amplifies the
+   "holding/potential looks good → defer the sale" bias and adds sampling noise.
+   To make depth pay off, re-tune the `evaluator.py` weight block *for that depth*
+   (less `cup_sell`/potential, more realized points, more `samples`) and gauntlet
+   each change — but the flat head-to-head suggests the 3rd ply has marginal value
+   in a game this tactical, so weigh the effort.
 3. **`ml/fit_evaluator.py`** — replay history, fit evaluator weights, auto-run
    the gauntlet to accept/reject. Versioned, gated, offline.
 4. **Better opponent model.** The search assumes opponents play Mastermind;

@@ -89,18 +89,38 @@ def _parse_strategy_spec(spec: str) -> tuple[StrategyFactory, str]:
         return factory, label
 
     if name == "lookahead" and param_str.strip():
-        # `lookahead:v1` / `lookahead:latest` — a frozen weight snapshot, so a
-        # candidate can be gauntletted against previous versions of itself.
+        # Comma-separated params after the colon: a bare token is a weight version
+        # (`lookahead:v1`, `lookahead:cocktail`), and key=value sets a search knob.
+        # e.g. `lookahead:depth=2`, `lookahead:cocktail,depth=2`.
         from ml.lookahead import LookaheadStrategy
         from ml.versions import get_version
 
-        version = param_str.strip()
-        weights = get_version(version)
+        from ml.evaluator import DEFAULT_WEIGHTS
+
+        version = "latest"
+        kwargs: dict = {}
+        for tok in param_str.split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            if "=" in tok:
+                key, _, value = tok.partition("=")
+                key = key.strip()
+                if key == "depth":
+                    kwargs["depth"] = int(value)
+                elif key == "samples":
+                    kwargs["samples"] = int(value)
+                else:
+                    raise ValueError(f"Unknown lookahead param {key!r}")
+            else:
+                version = tok
+        weights = DEFAULT_WEIGHTS if version == "latest" else get_version(version)
 
         def factory() -> Strategy:
-            return LookaheadStrategy(weights=weights)
+            return LookaheadStrategy(weights=weights, **kwargs)
 
-        return factory, f"lookahead:{version}"
+        label_parts = [version] + [f"{k}={v}" for k, v in kwargs.items()]
+        return factory, "lookahead:" + ",".join(label_parts)
 
     cls = STRATEGY_CLASSES.get(name)
     if cls is None:
