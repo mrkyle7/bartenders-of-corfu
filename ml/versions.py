@@ -75,13 +75,17 @@ LATEST_VERSION = next(reversed(LOOKAHEAD_VERSIONS))
 # they don't beat `latest` across the board. Kept here so the work is first-class
 # and runnable instead of buried behind a hand-edited weight.
 ALT_BUILDS: dict[str, EvalWeights] = {
-    # cocktail — engine-acquisition (v1) PLUS recipe-directed cocktail building
-    # (see ml/cocktail.py + cocktail_progress). A long-game specialist: it
-    # assembles real 3-spirit cocktails and out-scores v1, edging it ~54%
-    # head-to-head (120g, CI straddles 50% — not significant), but drops to ~75%
-    # vs Mastermind (v1 is ~90%) because short, elimination-decided games don't
-    # repay a multi-turn build. Off by default; flip cocktail_progress into
-    # DEFAULT_WEIGHTS to promote it.
+    # cocktail — engine-acquisition (v1) PLUS *situational* recipe-directed
+    # cocktail building (see ml/cocktail.py + cocktail_progress): bank specials,
+    # let held specials pick the recipe, build only when the rest is obtainable
+    # and (for cup-stranding recipes) only when behind/threatened. A long-game
+    # specialist that still trails on the gauntlet — ~75% vs Mastermind (v1 ~90%)
+    # and ~even vs v1 head-to-head. The ceiling is structural: the forced ~5-item
+    # take economy makes multi-take builds inefficient, and the cocktails that
+    # DON'T need building (Margarita/Manhattan/Cosmopolitan) are free declare-at-
+    # sale upgrades v1 already takes — so the build code only adds the costly
+    # cocktails. Off by default; flip cocktail_progress into DEFAULT_WEIGHTS to
+    # promote it.
     "cocktail": EvalWeights(
         doubler_acquire=11.0,
         specialist_acquire=7.0,

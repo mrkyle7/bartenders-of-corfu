@@ -138,29 +138,37 @@ every other drink at 3), and the bot ignored them. The full feature is now built
 - **Evaluator** (`_cocktail_progress` + `cocktail_progress` weight): values a cup
   a few ingredients from a *completable* cocktail (recipe sub-multiset + specials
   on the mat).
-- **Disposition** (`ml/cocktail.py`): the missing half. Follows the human plan —
-  bank specials first, let held specials pick the recipe, then build one cup
-  toward it, taking the needed spirits/mixers from the **display**, not just the
-  bag. It stacks a 3rd/4th spirit into a cup (the 2-spirit cap is a *sale* rule,
-  not a take rule) only when the special is held, so the cup is sellable as the
-  cocktail; off-plan spirits are spoiled rather than drunk into the cliff, and the
-  whole plan is abandoned when drunk/bladder is dangerous.
-- **Search**: `LookaheadStrategy` simulates its *own* disposition (not Mastermind's)
-  so the safety penalty sees a build-take's real drunk/bladder cost.
+- **Disposition** (`ml/cocktail.py`, `plan_cocktail`): the missing half, and
+  *situational* — cocktails are not the primary plan. It returns a target only
+  when (1) survival is fine, (2) the recipe's specials are already on the mat,
+  (3) the missing spirits/mixers are actually **obtainable** from display+bag
+  (else hang on and wait), and (4) for *cup-stranding* recipes — anything but the
+  single-spirit/valid-pairing ones (Martini, Manhattan, Old Fashioned, Margarita,
+  Cosmopolitan) — only when **behind or an opponent is near a win**. It then
+  builds one cup from the display, stacking the 3rd/4th spirit (the 2-spirit cap
+  is a *sale* rule, not a take rule), spoiling off-plan spirits rather than
+  drinking into the cliff. The evaluator term delegates to this same planner, so
+  search and play agree (no generic "near-complete" gradient — an unbuildable
+  half-cup is a liability, not progress).
+- **Search**: `LookaheadStrategy` simulates its *own* disposition so the safety
+  penalty sees a build-take's real drunk/bladder cost.
 
-Result (120-game gauntlets, all modes): it assembles real cocktails and
-**out-scores `v1`** (33 vs 32), edging it **~54% head-to-head** (CI straddles
-50% — not significant) with the runner-draw fix in place. But vs **Mastermind**
-it drops to **~75%** (`v1` is ~90%): short, elimination-decided games don't repay
-a multi-turn build, so the steady-seller wins there. It's a **long-game / vs-human
-specialist**.
+Honest gauntlet result (120-game, all modes): it builds real cocktails but
+**still trails** — ~75% vs Mastermind (`v1` ~90%) and ~even-to-slightly-behind
+vs `v1` head-to-head. The ceiling is structural, not a tuning miss:
 
-Because it regresses against the Mastermind baseline it is **not** the default
-(`cocktail_progress` stays 0.0; `DEFAULT_WEIGHTS == v1`). It's a first-class,
-selectable build — `lookahead:cocktail` (see `ALT_BUILDS` in `ml/versions.py`) —
-runnable in the gauntlet and ready to promote (flip `cocktail_progress` into
-`DEFAULT_WEIGHTS`) if you decide the long-game regime is what matters. Closing the
-Mastermind gap (e.g. only pursuing cocktails when ahead/safe) is the open lead.
+- The **forced ~5-item take economy** makes a multi-take build (e.g. a 3-gin
+  Martini) inefficient — most of each take is off-plan.
+- The cocktails that *don't* need building — **Margarita** (2 tequila),
+  **Manhattan** (2 whiskey), **Cosmopolitan** (vodka+cranberry) — are **free
+  declare-at-sale upgrades `v1` already takes** (the sale enumerates special
+  combos and the search picks the 10-pt cocktail). So the build code only adds
+  the *costly* cocktails, which short games don't repay.
+
+So cocktail building is a **long-game / vs-human** play, kept **off by default**
+(`cocktail_progress` 0.0; `DEFAULT_WEIGHTS == v1`) and selectable as
+`lookahead:cocktail` (`ALT_BUILDS` in `ml/versions.py`). Promote it by flipping
+`cocktail_progress` into `DEFAULT_WEIGHTS` if the long game is what you care about.
 
 ## Important gotchas
 

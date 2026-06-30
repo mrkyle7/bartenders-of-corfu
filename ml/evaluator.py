@@ -25,9 +25,11 @@ from uuid import UUID
 
 from app.GameState import GameState
 from app.Ingredient import Ingredient
-from app.PlayerState import MAX_CUP_INGREDIENTS, PlayerState
+from app.PlayerState import PlayerState
 from app.actions import SCORE_TO_WIN
 from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, drink_points
+
+from ml.cocktail import plan_cocktail
 
 # --- Terminal overrides ---------------------------------------------------
 # Not version-tuned: a win is a win regardless of which weight set is playing.
@@ -191,64 +193,24 @@ def _cup_progress(ps: PlayerState, cup) -> float:
     return score
 
 
-def _submultiset(part: Counter, whole: Counter) -> bool:
-    """True if every element of ``part`` appears in ``whole`` with >= the count."""
-    return all(whole.get(k, 0) >= v for k, v in part.items())
+def _cocktail_progress(gs: GameState, ps: PlayerState) -> float:
+    """Value of a cocktail this player should be building right now.
 
+    Delegates to ``ml.cocktail.plan_cocktail`` — the same situational, buildability-
+    and opponent-aware decision the bot's disposition uses — so the search and the
+    actual play agree on when a cocktail is worth chasing. Returns the target's
+    points discounted by how many ingredients are still needed, or 0.0 when there
+    is no cocktail worth pursuing.
 
-def _cocktail_progress(ps: PlayerState, cup) -> float:
-    """Value of an unfinished cup that is approaching a *completable* cocktail.
-
-    Cocktails are the big scores (10-15 pts, and exempt from the 2-spirit cap that
-    caps every other drink at 3), but the bot used to never build one: it sold
-    single-spirit cups for 1-3 pts and rerolled away the specials a recipe needed.
-    This term makes the search keep building toward, and bank the specials for, a
-    recipe the cup can still reach.
-
-    A recipe is "reachable" from this cup when the cup's spirits and mixers are a
-    sub-multiset of the recipe's (no wrong/excess ingredients), the missing
-    ingredients still fit in the cup, and **the required specials are already on
-    the mat** — i.e. an actually-completable plan, not a speculative one. (An
-    earlier version rewarded specials-not-yet-held too; that lit up almost every
-    single-spirit cup — they're all on *some* martini/old-fashioned path — so the
-    bot stopped selling and tanked. Requiring the specials keeps it targeted.)
-    Returns the best reachable recipe's value, scaled by points and closeness;
-    0.0 if none. A *complete* cocktail is left to _best_cup_sale, so this only
-    rewards genuine in-progress cups.
-
-    GAUNTLET RESULT (why ``cocktail_progress`` defaults to 0.0): turning this on
-    at any weight 0.3-1.0 regressed lookahead from ~90% to ~76% vs Mastermind
-    (avg points 30 -> 19) and lost head-to-head to v1 (48%). The cause is
-    structural, not a weight: the *search* values a cocktail-in-progress, but
-    ingredient *disposition* is delegated to Mastermind, which never stacks a cup
-    toward a recipe. So the bot just stops selling cups it can't actually finish
-    (and since it usually holds a martini/old-fashioned special, that's most
-    spirit cups). Making cocktail knowledge pay off needs cocktail-aware take
-    assignment in LookaheadStrategy; this term is the evaluator half, kept ready.
+    There is deliberately no generic "near complete" gradient: most recipes don't
+    overlap with normal drinks (only the single-spirit / valid-pairing ones do), so
+    an unbuildable half-cup is a stranded liability, not progress. ``plan_cocktail``
+    only returns a target when the specials are in hand AND the rest is obtainable.
     """
-    ings = cup.ingredients
-    if not ings or cup.is_full:
+    plan = plan_cocktail(gs, ps)
+    if plan is None:
         return 0.0
-    cup_spirits = Counter(i for i in ings if i in _SPIRITS)
-    if not cup_spirits:
-        return 0.0  # a recipe always needs >=1 spirit; a mixer-only cup can't lead
-    cup_mixers = Counter(i for i in ings if i in _MIXERS)
-    room = MAX_CUP_INGREDIENTS - len(ings)
-    mat = Counter(ps.special_ingredients)
-
-    best = 0.0
-    for r_spirits, r_mixers, r_specials, pts, _name in _RECIPES:
-        if not _submultiset(cup_spirits, r_spirits):
-            continue
-        if not _submultiset(cup_mixers, r_mixers):
-            continue
-        missing = (sum(r_spirits.values()) + sum(r_mixers.values())) - len(ings)
-        if missing <= 0 or missing > room:
-            continue  # already complete (best_cup_sale) or can't fit
-        if not all(mat.get(st.value, 0) >= n for st, n in r_specials.items()):
-            continue  # specials not banked — not a completable plan
-        best = max(best, pts / (1.0 + missing))
-    return best
+    return plan.points / (1.0 + plan.needed_count)
 
 
 def _threshold_proximity(
@@ -394,8 +356,8 @@ def player_potential(
     if full:
         for cup in ps.cups:
             value += _cup_progress(ps, cup) * w.cup_progress
-            if w.cocktail_progress:
-                value += _cocktail_progress(ps, cup) * w.cocktail_progress
+        if w.cocktail_progress:
+            value += _cocktail_progress(gs, ps) * w.cocktail_progress
         value += _threshold_proximity(gs, ps, w) * w.threshold
 
     return value

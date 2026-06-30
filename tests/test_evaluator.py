@@ -13,7 +13,6 @@ from ml.evaluator import (
     LOSS_VALUE,
     WIN_VALUE,
     _best_cup_sale,
-    _cocktail_progress,
     _safety_penalty,
     evaluate,
     player_potential,
@@ -82,43 +81,8 @@ def test_empty_cup_has_no_sale_value():
     assert _best_cup_sale(_ps_with_cup(cup), cup) == 0
 
 
-# ---------------------------------------------------------------------------
-#  Cocktail progress (capability is off by default but must be correct)
-# ---------------------------------------------------------------------------
-
-
-def _ps_with_cup_specials(cup: Cup, specials) -> PlayerState:
-    ps = _ps_with_cup(cup)
-    ps.special_ingredients = list(specials)
-    return ps
-
-
-def test_cocktail_progress_one_away_with_special():
-    # 2 gin + vermouth on the mat → Gin Martini (3 gin + vermouth), missing 1.
-    cup = Cup([Ingredient.GIN, Ingredient.GIN])
-    ps = _ps_with_cup_specials(cup, ["vermouth"])
-    assert _cocktail_progress(ps, cup) == 10.0 / (1 + 1)  # 5.0
-
-
-def test_cocktail_progress_zero_without_special():
-    # Same cup but the required special isn't banked → not a completable plan.
-    cup = Cup([Ingredient.GIN, Ingredient.GIN])
-    ps = _ps_with_cup_specials(cup, [])
-    assert _cocktail_progress(ps, cup) == 0.0
-
-
-def test_cocktail_progress_zero_when_already_complete():
-    # 3 gin + vermouth is a finished Gin Martini — left to _best_cup_sale.
-    cup = Cup([Ingredient.GIN, Ingredient.GIN, Ingredient.GIN])
-    ps = _ps_with_cup_specials(cup, ["vermouth"])
-    assert _cocktail_progress(ps, cup) == 0.0
-
-
-def test_cocktail_progress_zero_for_wrong_ingredient():
-    # A mixer in the cup disqualifies the spirit-only martini recipes.
-    cup = Cup([Ingredient.GIN, Ingredient.COLA])
-    ps = _ps_with_cup_specials(cup, ["vermouth"])
-    assert _cocktail_progress(ps, cup) == 0.0
+# Cocktail-progress is exercised in tests/test_cocktail.py (the planner it
+# delegates to needs full game state, not just a cup).
 
 
 # ---------------------------------------------------------------------------

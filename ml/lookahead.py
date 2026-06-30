@@ -179,7 +179,7 @@ class LookaheadStrategy(Strategy):
         # (which caps cups at 2 spirits and can't assemble a cocktail).
         if self.weights.cocktail_progress:
             ps = gs.player_states[player_id]
-            plan = plan_cocktail(ps)
+            plan = plan_cocktail(gs, ps)
             if plan is not None:
                 asn = cocktail_display_assignments(gs.open_display, count, plan)
                 if asn:
@@ -191,7 +191,7 @@ class LookaheadStrategy(Strategy):
     ) -> list[dict]:
         if self.weights.cocktail_progress:
             ps = gs.player_states[player_id]
-            plan = plan_cocktail(ps)  # re-plan from live state (display picks applied)
+            plan = plan_cocktail(gs, ps)  # re-plan from live state (display applied)
             if plan is not None:
                 return cocktail_pending_assignments(ps, drawn, plan)
         return self._fallback.choose_pending_assignments(gs, player_id, drawn)

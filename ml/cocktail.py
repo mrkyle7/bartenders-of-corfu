@@ -23,6 +23,8 @@ LookaheadStrategy wires this into ``choose_take_assignments`` /
 from collections import Counter
 from dataclasses import dataclass
 
+from app.actions import SCORE_TO_WIN
+from app.GameState import GameState
 from app.Ingredient import Ingredient
 from app.PlayerState import MAX_CUP_INGREDIENTS, PlayerState
 from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, VALID_PAIRINGS
@@ -30,12 +32,13 @@ from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, VALID_PAIRINGS
 
 @dataclass
 class CocktailPlan:
-    """A concrete, completable cocktail target for one cup."""
+    """A concrete, buildable cocktail target for one cup."""
 
     cup_index: int
     needed: Counter  # Ingredient -> how many more to put in the target cup
     points: int
     name: str
+    overlap_safe: bool
 
     @property
     def needed_count(self) -> int:
@@ -45,35 +48,83 @@ class CocktailPlan:
 # Don't chase a cocktail when survival is at stake: building one means taking
 # extra ingredients (off-plan ones get drunk, raising drunk/bladder), so a
 # multi-turn build from a dangerous position is how the cocktail bot used to
-# self-eliminate — it out-scored v1 but died twice as often. Above these
-# thresholds, abandon the build and fall back to Mastermind's safe play.
+# self-eliminate. Above these thresholds, fall back to Mastermind's safe play.
 _COCKTAIL_DRUNK_CAP = 2
 _COCKTAIL_MIN_BLADDER_ROOM = 2
+# An opponent at/above this score is "near a win" (40 to win) → time to gamble on
+# the big cocktail swing even from a cup-stranding recipe.
+_OPPONENT_THREAT_SCORE = 0.65 * SCORE_TO_WIN
 
 
-def plan_cocktail(ps: PlayerState) -> CocktailPlan | None:
-    """Pick the best cocktail this player can still complete, or None.
+def _overlap_safe(r_spirits: Counter, r_mixers: Counter) -> bool:
+    """Does this recipe build through *sellable* intermediate cups?
 
-    A recipe is a candidate only when the player already holds its specials (a
-    completable plan, not a speculative one — the human waits for the specials
-    first). For each candidate we find a cup whose current spirits/mixers are a
-    sub-multiset of the recipe and whose remaining ingredients still fit, and
-    return the shopping list. Prefer more points, then fewer ingredients still
-    needed, then the cup with the most progress (finish a build, don't restart).
+    True only for single-spirit recipes whose mixers (if any) are a valid normal
+    pairing — Martini, Manhattan, Old Fashioned, Margarita, Cosmopolitan. For
+    those, every partial cup is still a 1/3-pt normal drink, so building toward
+    the cocktail strands nothing. Multi-spirit (Long Island) or invalid-mixer
+    (Mojito's rum+soda, Tom Collins' gin+soda) recipes spoil the cup until the
+    recipe is complete, so they're only worth committing to when behind.
+    """
+    if len(r_spirits) != 1:
+        return False
+    spirit = next(iter(r_spirits))
+    valid = VALID_PAIRINGS.get(spirit, set())
+    return all(m in valid for m in r_mixers)
 
-    Returns None when drunk/bladder is in the danger zone — survival first.
+
+def _under_pressure(gs: GameState, ps: PlayerState) -> bool:
+    """Is an opponent ahead of us, or close enough to winning to force a gamble?
+
+    Cocktails are a high-variance catch-up play, so the cup-stranding recipes are
+    only worth it when we're not comfortably in front.
+    """
+    opp_best = max(
+        (
+            o.points
+            for pid, o in gs.player_states.items()
+            if pid != ps.player_id and not o.is_eliminated
+        ),
+        default=0,
+    )
+    return opp_best > ps.points or opp_best >= _OPPONENT_THREAT_SCORE
+
+
+def plan_cocktail(gs: GameState, ps: PlayerState) -> CocktailPlan | None:
+    """Pick a cocktail worth building right now, or None — the situational call.
+
+    Cocktails are *not* the primary plan; this returns a target only when it is
+    genuinely worth diverting from normal selling:
+
+    1. **Survival first** — None when drunk/bladder is in the danger zone.
+    2. **Specials in hand** — only recipes whose specials are already on the mat
+       (the human banks specials, then commits). No speculative builds.
+    3. **A real chance to build** — the missing spirits/mixers must actually be
+       obtainable from the display + bag; otherwise hang on and wait.
+    4. **Stranding risk vs. opponents** — overlap-safe recipes (sellable partials)
+       can be built anytime; cup-stranding ones only when behind / under threat.
+
+    Among the survivors, prefer overlap-safe, then more points, then fewer
+    ingredients still needed, then the cup with the most progress.
     """
     if ps.drunk_level > _COCKTAIL_DRUNK_CAP:
         return None
     if ps.bladder_capacity - len(ps.bladder) < _COCKTAIL_MIN_BLADDER_ROOM:
         return None
+
     held = Counter(ps.special_ingredients)
+    obtainable = Counter(gs.open_display) + Counter(gs.bag_contents)
+    behind = _under_pressure(gs, ps)
+
     best: CocktailPlan | None = None
     best_key: tuple | None = None
 
     for r_spirits, r_mixers, r_specials, pts, name in _RECIPES:
         if any(held.get(st.value, 0) < n for st, n in r_specials.items()):
             continue
+        safe = _overlap_safe(r_spirits, r_mixers)
+        if not safe and not behind:
+            continue  # don't strand a cup on a risky cocktail while in front
         recipe_total = sum(r_spirits.values()) + sum(r_mixers.values())
 
         for ci in (0, 1):
@@ -101,9 +152,14 @@ def plan_cocktail(ps: PlayerState) -> CocktailPlan | None:
                 if (d := n - c_mixers.get(k, 0)) > 0:
                     needed[k] = d
 
-            key = (pts, -needed_count, cup_total)
+            # A real chance to build: every missing ingredient must be obtainable.
+            if any(obtainable.get(ing, 0) < n for ing, n in needed.items()):
+                continue
+
+            key = (safe, pts, -needed_count, cup_total)
             if best_key is None or key > best_key:
-                best_key, best = key, CocktailPlan(ci, needed, pts, name)
+                best_key = key
+                best = CocktailPlan(ci, needed, pts, name, safe)
 
     return best
 
