@@ -187,13 +187,48 @@ def _format_weights(w) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Fit evaluator weights from history")
+    ap.add_argument(
+        "--source",
+        choices=("history", "selfplay"),
+        default="history",
+        help="history = human games from the API (off-policy, correlational); "
+        "selfplay = the bot's own lookahead games (on-policy, causal).",
+    )
     ap.add_argument("--url", default=DEFAULT_URL)
     ap.add_argument("--games", type=int, default=50)
     ap.add_argument("--samples", type=int, default=10, help="states sampled per game")
+    ap.add_argument(
+        "--modes",
+        default="all",
+        help="self-play only: 'all', 'none', or comma-separated mode names",
+    )
+    ap.add_argument("--players", type=int, default=2, help="self-play only")
+    ap.add_argument(
+        "--blend",
+        type=float,
+        default=1.0,
+        help="refine v1 instead of replacing it: final = blend*fit + (1-blend)*v1 "
+        "per value weight (safety + features too rare to fit fall back to v1). "
+        "1.0 = pure fit, 0.0 = pure v1.",
+    )
+    ap.add_argument(
+        "--rare-frac",
+        type=float,
+        default=0.05,
+        help="a feature active in fewer than this fraction of samples is too "
+        "sparse to trust — use v1's weight for it (avoids un-standardisation blowup).",
+    )
     ap.add_argument("--l2", type=float, default=0.02)
     ap.add_argument("--iters", type=int, default=4000)
     ap.add_argument("--lr", type=float, default=0.3)
     ap.add_argument("--out", default=None, help="optional JSON path for the coefs")
+    ap.add_argument(
+        "--dataset",
+        default=None,
+        help="cache path (.npz) for the (features, labels) dataset — built and "
+        "saved on first run, reused after, so you can re-fit at different --blend "
+        "without regenerating the (slow) self-play games.",
+    )
     ap.add_argument(
         "--fit-safety",
         action="store_true",
@@ -205,16 +240,74 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    print(f"Fetching ended games from {args.url} ...")
-    games = fetch_ended_games(args.url, args.games)
-    print(f"  {len(games)} ended games")
-    print("Building dataset (this fetches per-turn states) ...")
-    X, y, used = build_dataset(args.url, games, args.samples, verbose=True)
-    print(f"  {len(y)} samples from {used} games, win rate {y.mean():.3f}")
+    import os
+
+    if args.dataset and os.path.exists(args.dataset):
+        d = np.load(args.dataset)
+        X, y = d["X"], d["y"]
+        print(f"Loaded cached dataset {args.dataset}: {len(y)} samples")
+    elif args.source == "selfplay":
+        from app.game_modes import VALID_GAME_MODES, normalise_modes
+
+        from ml.selfplay import generate_dataset
+
+        if args.modes.lower() == "all":
+            modes = normalise_modes(sorted(VALID_GAME_MODES))
+        elif args.modes.lower() == "none":
+            modes = []
+        else:
+            modes = normalise_modes([m.strip() for m in args.modes.split(",")])
+        print(f"Generating {args.games} lookahead self-play games (modes={modes}) ...")
+        X, y = generate_dataset(
+            args.games,
+            modes=modes,
+            players=args.players,
+            samples_per_game=args.samples,
+            verbose=True,
+        )
+        print(f"  {len(y)} samples, win rate {y.mean():.3f}")
+    else:
+        print(f"Fetching ended games from {args.url} ...")
+        games = fetch_ended_games(args.url, args.games)
+        print(f"  {len(games)} ended games")
+        print("Building dataset (this fetches per-turn states) ...")
+        X, y, used = build_dataset(args.url, games, args.samples, verbose=True)
+        print(f"  {len(y)} samples from {used} games, win rate {y.mean():.3f}")
     if len(y) < 50:
         raise SystemExit("Too few samples to fit — increase --games/--samples.")
+    if args.dataset and not os.path.exists(args.dataset):
+        np.savez(args.dataset, X=X, y=y)
+        print(f"  cached dataset to {args.dataset}")
 
     coef, auc = fit_logistic(X, y, args.l2, args.iters, args.lr)
+
+    # v1 (current DEFAULT) as prior, in the same points-normalised coef space.
+    prior = {
+        "points": DEFAULT_WEIGHTS.points,
+        "karaoke_card": DEFAULT_WEIGHTS.karaoke_card,
+        "near_karaoke_win": DEFAULT_WEIGHTS.near_karaoke_win,
+        "cup_sell": DEFAULT_WEIGHTS.cup_sell,
+        "special_mat": DEFAULT_WEIGHTS.special_mat,
+        "specialist": DEFAULT_WEIGHTS.specialist,
+        "doubler": DEFAULT_WEIGHTS.doubler,
+        "store": DEFAULT_WEIGHTS.store,
+        "store_spirits": 0.5,
+        "refresher": DEFAULT_WEIGHTS.refresher,
+        "cup_progress": DEFAULT_WEIGHTS.cup_progress,
+        "threshold": DEFAULT_WEIGHTS.threshold,
+        "cocktail": DEFAULT_WEIGHTS.cocktail_progress,
+    }
+    activation = (X != 0).mean(axis=0)
+    safety = {f"drunk_{i}" for i in range(1, 6)} | {
+        f"bladder_room_{i}" for i in range(4)
+    }
+    for i, name in enumerate(FEATURE_NAMES):
+        if name in safety:
+            continue  # handled below
+        if activation[i] < args.rare_frac or name not in prior:
+            coef[name] = prior.get(name, 0.0)  # too sparse to trust → v1
+        else:
+            coef[name] = args.blend * coef[name] + (1 - args.blend) * prior[name]
 
     if not args.fit_safety:
         # Keep the causal, convex hand-tuned safety curve; overwrite the fitted

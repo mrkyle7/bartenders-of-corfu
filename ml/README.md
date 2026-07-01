@@ -244,11 +244,21 @@ Do **not** resurrect per-move live mutation in production.
      is real. Mid-game points is a *weaker* win-signal than structure, so
      normalising by it inflates everything.
 
-   So naive win-label fitting won't beat gauntlet-gated hand tuning (how `v1` was
-   built). To actually *learn* control weights you'd need the causal signal —
-   temporal-difference / self-play value targets, or fitting the *marginal* value
-   of each feature rather than its win-correlation. The tool and the 0.92 position
-   evaluator are kept for that follow-up (and as a diagnostic).
+   **Self-play was tried too** (`--source selfplay`, `ml/selfplay.py`: on-policy
+   lookahead self-play, so `V(s)` is learned on the bot's *own* state
+   distribution). It didn't help — pure self-play weights are worse (20%
+   self-elim, `doubler≈39`, sparse features like `near_karaoke` blow up under
+   un-standardisation), and even **refined into `v1`** (`--blend`, with a v1
+   fallback for too-sparse features) it still loses ~31% vs `v1`: the data
+   devalues `special_mat` and `refresher` (they don't *correlate* with winning
+   mid-game) but *valuing* them causally helps, so the nudges hurt scoring. So the
+   failure is the **win-label objective itself**, not off-policy-ness — across
+   history, self-play, and blended-refinement, none beats gauntlet-gated hand
+   tuning. To actually *learn* control weights you'd need a causal target (proper
+   TD/policy-iteration with a nonlinear value fn, or fitting each feature's
+   *marginal* value), which the linear evaluator can't represent well. The tool,
+   the on-policy self-play generator, and the 0.92 position evaluator are kept for
+   that follow-up (and as diagnostics).
 4. **Better opponent model.** The search assumes opponents play Mastermind;
    model them as lookahead (self-play) once #1 lands.
 5. **4-player evaluation.** All current numbers are 2-player; add a 4-player
