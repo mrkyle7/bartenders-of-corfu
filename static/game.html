@@ -8,6 +8,13 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4a2c0e">
+    <script>
+        // Table view opt-in: when the home-page toggle is on, this game is
+        // played in the new UI instead. The classic UI stays the default.
+        if (localStorage.getItem('bocTableView') === '1') {
+            window.location.replace('/play' + window.location.search);
+        }
+    </script>
     <script src="/static/theme.js"></script>
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/game.css">
