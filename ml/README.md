@@ -223,8 +223,32 @@ Do **not** resurrect per-move live mutation in production.
    (less `cup_sell`/potential, more realized points, more `samples`) and gauntlet
    each change — but the flat head-to-head suggests the 3rd ply has marginal value
    in a game this tactical, so weigh the effort.
-3. **`ml/fit_evaluator.py`** — replay history, fit evaluator weights, auto-run
-   the gauntlet to accept/reject. Versioned, gated, offline.
+3. **`ml/fit_evaluator.py` — built; the win-label fit is a good *predictor* but a
+   poor *controller*.** It replays ended games from the public API, labels each
+   mid/late state by whether that player won, and fits a logistic regression over
+   the evaluator's feature decomposition (`evaluator.player_features` /
+   `FEATURE_NAMES` / `weights_from_coefficients`). Gauntlet fitted weights with
+   `lookahead:fit=<coef.json>`. **Result (50 games, ~5k samples): position→win
+   AUC ≈ 0.92** — it ranks winners well — but the learned weights lose to `v1`
+   (~31%) and score far less, because **correlation ≠ causation for action
+   selection**:
+   - *Safety inverts.* Winners are drunk *because they drink productively* (to
+     claim doublers/karaoke), so the raw fit rewards drunkenness — the bot then
+     chases it and **self-eliminates 36%** of games. Fixed by keeping the one-hot
+     safety terms as *controls* but using the hand-tuned convex penalties
+     (default; `--fit-safety` to override).
+   - *Accumulation over-weights.* Winners hold doublers/specialists/specials, so
+     the fit gives them huge weights (`doubler≈17`, `specialist≈8` vs `points=1`)
+     and an action-selector maximising them **hoards cards and forgets to score**
+     (avg points ~17 vs `v1`'s ~30). Heavier L2 doesn't fix it — the correlation
+     is real. Mid-game points is a *weaker* win-signal than structure, so
+     normalising by it inflates everything.
+
+   So naive win-label fitting won't beat gauntlet-gated hand tuning (how `v1` was
+   built). To actually *learn* control weights you'd need the causal signal —
+   temporal-difference / self-play value targets, or fitting the *marginal* value
+   of each feature rather than its win-correlation. The tool and the 0.92 position
+   evaluator are kept for that follow-up (and as a diagnostic).
 4. **Better opponent model.** The search assumes opponents play Mastermind;
    model them as lookahead (self-play) once #1 lands.
 5. **4-player evaluation.** All current numbers are 2-player; add a 4-player

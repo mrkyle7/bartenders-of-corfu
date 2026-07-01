@@ -355,6 +355,109 @@ def player_potential(
     return value
 
 
+# --- Offline weight fitting (ml/fit_evaluator.py) --------------------------
+# The named terms below decompose player_potential into features so a logistic
+# fit on real game history can *learn* the weights instead of us guessing them.
+# Safety is exposed as per-drunk-level / per-bladder-room one-hots so the fit
+# recovers the whole penalty curve, not just a scalar.
+FEATURE_NAMES: tuple[str, ...] = (
+    "points",
+    "karaoke_card",
+    "near_karaoke_win",
+    "cup_sell",
+    "special_mat",
+    "specialist",
+    "doubler",
+    "store",
+    "store_spirits",
+    "refresher",
+    "cup_progress",
+    "threshold",
+    "cocktail",
+    "drunk_1",
+    "drunk_2",
+    "drunk_3",
+    "drunk_4",
+    "drunk_5",
+    "bladder_room_0",
+    "bladder_room_1",
+    "bladder_room_2",
+    "bladder_room_3",
+)
+
+
+def player_features(
+    gs: GameState, ps: PlayerState, w: EvalWeights = DEFAULT_WEIGHTS
+) -> dict[str, float]:
+    """Decomposed evaluator features for one player (keys == FEATURE_NAMES).
+
+    Each feature * its weight is a term of ``player_potential`` (safety terms are
+    one-hot so their weights are the penalty at each level, learned from data).
+    The lure/cocktail terms keep their internal shape and get a fitted scale.
+    """
+    f: dict[str, float] = dict.fromkeys(FEATURE_NAMES, 0.0)
+    f["points"] = float(ps.points)
+    f["karaoke_card"] = float(ps.karaoke_cards_claimed)
+    f["near_karaoke_win"] = 1.0 if ps.karaoke_cards_claimed >= 2 else 0.0
+    f["cup_sell"] = float(sum(_best_cup_sale(ps, c) for c in ps.cups))
+    f["special_mat"] = float(min(len(ps.special_ingredients), 4))
+    for cd in ps.cards:
+        ct = cd.get("card_type")
+        if ct == "specialist":
+            f["specialist"] += 1.0
+        elif ct == "cup_doubler":
+            f["doubler"] += 1.0
+        elif ct == "store":
+            f["store"] += 1.0
+            f["store_spirits"] += float(len(cd.get("stored_spirits", [])))
+        elif ct == "refresher":
+            f["refresher"] += 1.0
+    f["cup_progress"] = float(sum(_cup_progress(ps, c) for c in ps.cups))
+    f["threshold"] = _threshold_proximity(gs, ps, w)
+    f["cocktail"] = best_cocktail(gs, ps)[1]
+    drunk = max(0, min(ps.drunk_level, 5))
+    if drunk >= 1:
+        f[f"drunk_{drunk}"] = 1.0
+    room = ps.bladder_capacity - len(ps.bladder)
+    if 0 <= room <= 3:
+        f[f"bladder_room_{room}"] = 1.0
+    return f
+
+
+def weights_from_coefficients(coef: dict[str, float]) -> EvalWeights:
+    """Build EvalWeights from fitted per-feature coefficients (see FEATURE_NAMES).
+
+    The safety one-hots become the (negated) penalty tables; everything else maps
+    to its scalar weight. Coefficients are expected already normalised so that
+    ``points`` == 1.0 (the points-equivalent scale the rest of evaluate() assumes).
+    """
+    drunk = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    for lvl in range(1, 6):
+        drunk[lvl] = -coef.get(f"drunk_{lvl}", 0.0)  # coef is a bonus; penalty = -it
+    bladder = [
+        -coef.get("bladder_room_0", 0.0),
+        -coef.get("bladder_room_1", 0.0),
+        -coef.get("bladder_room_2", 0.0),
+        -coef.get("bladder_room_3", 0.0),
+    ]
+    return EvalWeights(
+        points=coef.get("points", 1.0),
+        karaoke_card=coef.get("karaoke_card", 0.0),
+        near_karaoke_win=coef.get("near_karaoke_win", 0.0),
+        cup_sell=coef.get("cup_sell", 0.0),
+        special_mat=coef.get("special_mat", 0.0),
+        specialist=coef.get("specialist", 0.0),
+        doubler=coef.get("doubler", 0.0),
+        store=coef.get("store", 0.0),
+        refresher=coef.get("refresher", 0.0),
+        cup_progress=coef.get("cup_progress", 0.0),
+        threshold=coef.get("threshold", 0.0),
+        cocktail_progress=coef.get("cocktail", 0.0),
+        drunk_penalty=tuple(drunk),
+        bladder_penalty_by_room=tuple(bladder),
+    )
+
+
 def evaluate(gs: GameState, player_id: UUID, w: EvalWeights = DEFAULT_WEIGHTS) -> float:
     """Scalar value of ``gs`` for ``player_id`` — higher is better.
 

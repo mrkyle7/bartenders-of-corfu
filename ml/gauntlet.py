@@ -98,6 +98,7 @@ def _parse_strategy_spec(spec: str) -> tuple[StrategyFactory, str]:
         from ml.evaluator import DEFAULT_WEIGHTS
 
         version = "latest"
+        fit_path = None
         kwargs: dict = {}
         for tok in param_str.split(","):
             tok = tok.strip()
@@ -110,11 +111,22 @@ def _parse_strategy_spec(spec: str) -> tuple[StrategyFactory, str]:
                     kwargs["depth"] = int(value)
                 elif key == "samples":
                     kwargs["samples"] = int(value)
+                elif key == "fit":
+                    fit_path = value
                 else:
                     raise ValueError(f"Unknown lookahead param {key!r}")
             else:
                 version = tok
-        weights = DEFAULT_WEIGHTS if version == "latest" else get_version(version)
+        if fit_path:
+            import json
+
+            from ml.evaluator import weights_from_coefficients
+
+            with open(fit_path) as fh:
+                weights = weights_from_coefficients(json.load(fh))
+            version = f"fit:{fit_path}"
+        else:
+            weights = DEFAULT_WEIGHTS if version == "latest" else get_version(version)
 
         def factory() -> Strategy:
             return LookaheadStrategy(weights=weights, **kwargs)
