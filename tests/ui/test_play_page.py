@@ -85,9 +85,9 @@ def test_take_tap_token_opens_assignment_sheet(
     token = page.locator("#market .market-tokens button.tok").first
     token.wait_for(state="visible", timeout=10000)
     token.click()
-    sheet = page.locator("#sheet")
-    sheet.wait_for(state="visible", timeout=5000)
-    text = sheet.inner_text()
+    # The sheet element is always in the DOM; wait for it to open with content
+    page.wait_for_selector("#sheet.open .sheet-option", state="visible", timeout=5000)
+    text = page.locator("#sheet").inner_text()
     # Special die tokens roll instead of pouring; either sheet is valid
     assert "Pour into Cup 1" in text or "Roll the special die" in text
 
@@ -101,9 +101,11 @@ def test_history_sheet_lists_moves(
     page.goto(f"{base_url}/play?id={new_game}")
     page.locator("#market .tok").first.wait_for(state="visible", timeout=10000)
     page.click("#footHistory")
-    sheet = page.locator("#sheet")
-    sheet.wait_for(state="visible", timeout=5000)
-    assert "History" in sheet.inner_text()
+    # The sheet opens only after the history fetch resolves; wait for its title
+    page.wait_for_selector("#sheet.open .sheet-title", state="visible", timeout=10000)
+    assert "History" in page.locator("#sheet").inner_text()
+    # A started game always has at least the game-start state; entries render
+    page.wait_for_selector("#sheet .history-item, #sheet .sheet-note", timeout=5000)
 
 
 def test_home_toggle_redirects_classic_game_page(page, base_url, new_user, new_game):
