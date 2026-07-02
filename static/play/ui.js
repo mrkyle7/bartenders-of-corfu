@@ -49,10 +49,6 @@ export function openSheet(title, contentNodes, { onClose, locked = false } = {})
     (sheet.querySelector('.sheet-close') ?? sheet.querySelector('button'))?.focus();
 }
 
-export function isSheetOpen() {
-    return document.getElementById('sheet').classList.contains('open');
-}
-
 export function closeSheet(force = false) {
     const backdrop = document.getElementById('sheetBackdrop');
     const sheet = document.getElementById('sheet');

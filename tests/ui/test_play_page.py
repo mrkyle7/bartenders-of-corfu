@@ -77,13 +77,15 @@ def _make_it_my_turn(base_url, new_game, new_user, other_user_and_jwt):
         )
 
 
-def _assign_through_sheets(page, count):
-    """Complete `count` assignment sheets by picking the first enabled option."""
+def _assign_through_dock(page, count):
+    """Complete `count` dock assignment steps by picking the first choice.
+
+    The assignment happens in the dock (not a covering sheet) so the player
+    can see their cups and bladder while deciding.
+    """
     for _ in range(count):
-        page.wait_for_selector(
-            "#sheet.open .sheet-option:not([disabled])", timeout=5000
-        )
-        page.locator("#sheet .sheet-option:not([disabled])").first.click()
+        page.wait_for_selector("#dock .dock-assign-prompt", timeout=5000)
+        page.locator("#dock .dock-btn:not([disabled]):not(.dock-end)").first.click()
         page.wait_for_timeout(300)
 
 
@@ -112,9 +114,12 @@ def test_take_select_tokens_then_assign(
     tokens.nth(1).click()
 
     page.click("#dock >> text=Assign 2")
-    page.wait_for_selector("#sheet.open .sheet-option", timeout=5000)
-    assert "(1 of 2)" in page.locator("#sheet .sheet-title").inner_text()
-    _assign_through_sheets(page, 2)
+    # Assignment runs in the dock; the mat stays visible throughout
+    page.wait_for_selector("#dock .dock-assign-prompt", timeout=5000)
+    assert "(1 of 2)" in page.locator("#dock").inner_text()
+    assert page.locator("#mat .cup").first.is_visible()
+    assert page.locator("#mat .bladder").is_visible()
+    _assign_through_dock(page, 2)
 
     # One batch of two was submitted in a single call
     game = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
@@ -127,7 +132,7 @@ def test_bag_draw_choose_count_and_assign_all(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
     """The bag asks how many to draw; every drawn ingredient must be assigned
-    through a locked sheet (no close button, Escape does nothing)."""
+    via the dock, with no way to back out of the batch."""
     _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
     _api_post(base_url, f"/v1/games/{new_game}/start", new_user["jwt"])
     _make_it_my_turn(base_url, new_game, new_user, other_user_and_jwt)
@@ -141,14 +146,12 @@ def test_bag_draw_choose_count_and_assign_all(
     assert "No going back" in page.locator("#sheet").inner_text()
 
     page.click('#sheet .count-btn >> text="2"')
-    page.wait_for_selector("#sheet.open .sheet-option", timeout=5000)
-    # Locked: no close button, Escape keeps the sheet open
-    assert page.locator("#sheet .sheet-close").count() == 0
-    page.keyboard.press("Escape")
-    page.wait_for_timeout(200)
-    assert page.locator("#sheet.open").count() == 1
+    # Drawn ingredients are assigned via the dock, with no way to back out
+    page.wait_for_selector("#dock .dock-assign-prompt", timeout=5000)
+    assert "You drew" in page.locator("#dock").inner_text()
+    assert page.locator("#dock >> text=Put back").count() == 0
 
-    _assign_through_sheets(page, 2)
+    _assign_through_dock(page, 2)
     game = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
     gs = game["game_state"]
     assert gs["bag_draw_pending"] == []
@@ -170,6 +173,21 @@ def test_history_sheet_lists_moves(
     assert "History" in page.locator("#sheet").inner_text()
     # A started game always has at least the game-start state; entries render
     page.wait_for_selector("#sheet .history-item, #sheet .sheet-note", timeout=5000)
+
+
+def test_opponent_sheet_shows_bladder_contents(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """Tapping an opponent chip reveals their bladder slots and drunk meter."""
+    _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
+    _api_post(base_url, f"/v1/games/{new_game}/start", new_user["jwt"])
+    page.goto(f"{base_url}/play?id={new_game}")
+    page.locator(".opp-chip").wait_for(state="visible", timeout=10000)
+    page.click(".opp-chip")
+    page.wait_for_selector("#sheet.open .bladder", timeout=5000)
+    assert page.locator("#sheet .drunk-meter").count() == 1
+    # A fresh opponent shows eight open bladder slots
+    assert page.locator("#sheet .bladder .bladder-slot").count() == 8
 
 
 def test_home_toggle_redirects_classic_game_page(page, base_url, new_user, new_game):

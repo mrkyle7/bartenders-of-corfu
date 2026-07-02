@@ -618,6 +618,23 @@ button.my-card { border-color: rgba(245, 182, 74, 0.5); }
 .dock-btn-icon { font-size: 17px; line-height: 1; }
 .dock-btn-label { font-size: 10.5px; font-weight: 700; }
 
+.dock-btn-sub { font-size: 9px; color: var(--muted); line-height: 1; }
+
+.dock-btn.danger {
+    border-color: var(--danger);
+    background: rgba(255, 133, 133, 0.12);
+}
+
+.dock-btn.danger .dock-btn-sub { color: var(--danger); }
+
+.dock-assign-prompt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
 .dock-free {
     position: absolute;
     top: -7px;

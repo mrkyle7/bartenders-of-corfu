@@ -73,12 +73,12 @@ export function cardFace(card, { claimable = false, onclick } = {}) {
     return node;
 }
 
-function drunkMeter(level, takeCount) {
+export function drunkMeter(level, takeCount) {
     const segs = Array.from({ length: MAX_DRUNK }, (_, i) =>
         el('span.drunk-seg', { 'data-on': i < level ? '1' : undefined, 'data-danger': i >= 3 ? '1' : undefined }));
     return el('div.drunk-meter', {
         role: 'img',
-        'aria-label': `Drunk level ${level} of ${MAX_DRUNK}. You must take ${takeCount} ingredients per turn.`,
+        'aria-label': `Drunk level ${level} of ${MAX_DRUNK}. Takes ${takeCount} ingredients per turn.`,
     },
         el('span.meter-label', { text: '🍺', 'aria-hidden': 'true' }),
         el('span.drunk-segs', {}, segs),
@@ -86,7 +86,7 @@ function drunkMeter(level, takeCount) {
     );
 }
 
-function bladderRow(ps, { onclick } = {}) {
+export function bladderRow(ps, { onclick } = {}) {
     const sealed = INITIAL_BLADDER_CAPACITY - ps.bladder_capacity;
     const slots = [];
     for (let i = 0; i < ps.bladder_capacity; i++) {
@@ -304,6 +304,43 @@ export function renderDock(container, state, ctx) {
             el('span.waiting-dots', { 'aria-hidden': 'true' }),
             el('span', { text: `${ctx.nameOf(state.player_turn)} is at the bar…` }),
         ));
+        return;
+    }
+    // Assigning a take batch happens in the dock, not a sheet, so the whole
+    // mat — cups and bladder — stays visible while the player decides.
+    if (ctx.assignFlow) {
+        const flow = ctx.assignFlow;
+        const buttons = flow.options.map((opt) => {
+            const btn = el('button.dock-btn', {
+                onclick: opt.onclick,
+                disabled: !!opt.disabled,
+                'aria-label': `${opt.label}${opt.disabled && opt.reason ? ` — ${opt.reason}` : opt.sub ? ` — ${opt.sub}` : ''}`,
+            },
+                el('span.dock-btn-icon', { text: opt.icon, 'aria-hidden': 'true' }),
+                el('span.dock-btn-label', { text: opt.label }),
+                (opt.disabled && opt.reason) || opt.sub
+                    ? el('span.dock-btn-sub', { text: opt.disabled ? opt.reason : opt.sub })
+                    : null,
+            );
+            if (opt.danger) btn.classList.add('danger');
+            return btn;
+        });
+        if (flow.cancellable) {
+            buttons.push(el('button.dock-btn.dock-end', {
+                onclick: () => ctx.on.assignCancel(),
+                'aria-label': 'Put the picked-up ingredients back',
+            },
+                el('span.dock-btn-icon', { text: '↩️', 'aria-hidden': 'true' }),
+                el('span.dock-btn-label', { text: 'Put back' }),
+            ));
+        }
+        container.replaceChildren(
+            el('div.dock-prompt.dock-assign-prompt', { 'aria-live': 'polite' },
+                token(flow.tokenName, { size: 'sm' }),
+                el('span', { text: flow.title }),
+            ),
+            el('div.dock-btns', {}, buttons),
+        );
         return;
     }
     // Picked-up display ingredients waiting to be assigned take over the dock

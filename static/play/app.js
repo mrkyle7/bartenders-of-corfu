@@ -7,11 +7,11 @@ import {
     describeMove, drinkName,
 } from './meta.js';
 import {
-    cardFace, cupVessel, renderCardRows, renderDock, renderMarket, renderMat,
-    renderOpponents, specialChip, token,
+    bladderRow, cardFace, cupVessel, drunkMeter, renderCardRows, renderDock,
+    renderMarket, renderMat, renderOpponents, specialChip, token,
 } from './render.js';
 import {
-    banner, closeSheet, el, flyToken, isSheetOpen, openSheet, pulse, sheetOption, toastError,
+    banner, closeSheet, el, flyToken, openSheet, pulse, sheetOption, toastError,
 } from './ui.js';
 
 const POLL_MS = 2000;
@@ -149,25 +149,29 @@ function buildCtx() {
         myTurn,
         takeInProgress,
         availableTypes,
-        canTakeNow: myTurn && availableTypes.has('take_ingredients'),
+        canTakeNow: myTurn && availableTypes.has('take_ingredients') && !assignFlow,
         canEndTurn: !!valid?.can_end_turn,
         selectedSlots,
         selectedCount: selectedSlots.size,
+        assignFlow: myTurn && assignFlow ? assignFlowDescriptor() : null,
         claimableCardIds: new Set(valid?.actions.filter((a) => a.action_type === 'claim_card').map((a) => a.params.card_id)),
         refreshableRows: new Set(valid?.actions.filter((a) => a.action_type === 'refresh_card_row').map((a) => a.params.row_position)),
         readOnly: false,
         on: {
             displayTokenTap, bagTap, cupTap, bladderTap: confirmWee, cardTap, rowRefresh: confirmRefreshRow,
             specialsTap: openRerollSheet, myStoreCardTap: openStoreCardSheet, opponentTap: openOpponentSheet,
-            dockAction, assignSelected, clearSelection,
+            dockAction, assignSelected, clearSelection, assignCancel: cancelAssignFlow,
         },
     };
 }
 
 function renderBoard() {
     const gs = game.game_state;
-    // A stale selection can't survive the turn moving on
-    if ((gs.player_turn !== me.id || gs.winner) && selectedSlots.size) selectedSlots.clear();
+    // A stale selection or half-assigned batch can't survive the turn moving on
+    if (gs.player_turn !== me.id || gs.winner) {
+        selectedSlots.clear();
+        assignFlow = null;
+    }
     const ctx = buildCtx();
     document.body.classList.toggle('my-turn', ctx.myTurn);
     $('board').classList.remove('lobby-mode');
@@ -200,7 +204,7 @@ function renderBoard() {
     }
 
     // Mid-take with unassigned bag draws (e.g. after a reload): resume the flow.
-    if (ctx.myTurn && gs.bag_draw_pending.length > 0 && !isSheetOpen() && !busy) {
+    if (ctx.myTurn && gs.bag_draw_pending.length > 0 && !assignFlow && !busy) {
         startPendingAssignment();
     }
 }
@@ -272,7 +276,7 @@ function selectedItems() {
 }
 
 function assignSelected() {
-    runAssignmentFlow(selectedItems());
+    startAssignmentFlow(selectedItems());
 }
 
 function bagTap(bagEl) {
@@ -288,8 +292,7 @@ function bagTap(bagEl) {
             onclick: () => {
                 doAction(() => api.drawFromBag(gameId, n)).then((result) => {
                     if (!result) return;
-                    banner(`You drew ${result.drawn.map((d) => ING[d]?.label ?? d).join(', ')}`, { icon: '🎒' });
-                    flyToken(bagEl, $('mat'));
+                    flyToken(bagEl, $('dock'));
                     startPendingAssignment();
                 });
             },
@@ -310,43 +313,63 @@ function bagTap(bagEl) {
 // Kick off assignment of the pending bag draw plus any selected display tokens.
 function startPendingAssignment() {
     const pendingItems = game.game_state.bag_draw_pending.map((name) => ({ ingredient: name, source: 'pending' }));
-    runAssignmentFlow([...pendingItems, ...selectedItems()]);
+    startAssignmentFlow([...pendingItems, ...selectedItems()]);
 }
 
-// Walk the player through assigning each ingredient in the batch, then submit
-// a single take-ingredients call. Batches containing bag draws are locked in —
-// the sheet cannot be dismissed. Display-only batches can be backed out of.
-function runAssignmentFlow(items, collected = [], batch = { cup0: 0, cup1: 0, drinks: 0 }) {
+// The batch being assigned, one ingredient at a time, via the dock (so the
+// cups and bladder stay visible). Batches containing bag draws cannot be
+// backed out of; display-only batches can be put back.
+let assignFlow = null; // { items, collected, batch: { cup0, cup1, drinks } }
+
+function startAssignmentFlow(items) {
     if (!items.length) return;
-    const idx = collected.length;
-    const item = items[idx];
-    const locked = items.some((i) => i.source === 'pending');
+    assignFlow = { items, collected: [], batch: { cup0: 0, cup1: 0, drinks: 0 } };
+    render();
+}
+
+function cancelAssignFlow() {
+    assignFlow = null;
+    clearSelection();
+}
+
+async function assignChoice(disposition, cupIndex) {
+    const flow = assignFlow;
+    const item = flow.items[flow.collected.length];
+    flow.collected.push({
+        ingredient: item.ingredient, source: item.source, disposition, cup_index: cupIndex,
+    });
+    if (disposition === 'cup') flow.batch[`cup${cupIndex}`] += 1;
+    else flow.batch.drinks += 1;
+    if (flow.collected.length < flow.items.length) {
+        render();
+        return;
+    }
+    const assignments = flow.collected;
+    assignFlow = null;
+    const result = await doAction(() => api.takeIngredients(gameId, assignments));
+    if (result) {
+        clearSelection({ rerender: false });
+        afterTakeBatch(result);
+    }
+    render();
+}
+
+// Descriptor for renderDock: the current item, progress and choice buttons.
+function assignFlowDescriptor() {
+    const flow = assignFlow;
+    const idx = flow.collected.length;
+    const item = flow.items[idx];
     const meta = ING[item.ingredient];
-    const counter = items.length > 1 ? ` (${idx + 1} of ${items.length})` : '';
+    const counter = flow.items.length > 1 ? ` (${idx + 1} of ${flow.items.length})` : '';
     const title = item.source === 'pending'
-        ? `You drew ${meta?.label ?? item.ingredient}${counter}`
-        : `Assign ${meta?.label ?? item.ingredient}${counter}`;
-    openSheet(title, el('div.sheet-options', {},
-        el('div.sheet-token-preview', {}, token(item.ingredient)),
-        assignOptions(item.ingredient, batch, async (disposition, cupIndex) => {
-            const next = [...collected, {
-                ingredient: item.ingredient, source: item.source, disposition, cup_index: cupIndex,
-            }];
-            if (next.length < items.length) {
-                const nextBatch = { ...batch };
-                if (disposition === 'cup') nextBatch[`cup${cupIndex}`] += 1;
-                else nextBatch.drinks += 1;
-                runAssignmentFlow(items, next, nextBatch);
-                return;
-            }
-            const result = await doAction(() => api.takeIngredients(gameId, next));
-            if (result) {
-                clearSelection({ rerender: false });
-                afterTakeBatch(result);
-                render();
-            }
-        }),
-    ), { locked });
+        ? `You drew ${meta?.label ?? item.ingredient}${counter} — where does it go?`
+        : `${meta?.label ?? item.ingredient}${counter} — where does it go?`;
+    return {
+        tokenName: item.ingredient,
+        title,
+        options: assignOptions(item.ingredient, flow.batch, assignChoice),
+        cancellable: !flow.items.some((i) => i.source === 'pending'),
+    };
 }
 
 function drunkPreview(ingredients) {
@@ -360,39 +383,41 @@ function drunkPreview(ingredients) {
     return delta;
 }
 
-// Options for a single ingredient, aware of what this batch has already
-// claimed (cup space, bladder room) via `batch`.
+// Choice descriptors for a single ingredient, aware of what this batch has
+// already claimed (cup space, bladder room) via `batch`. Rendered as dock
+// buttons by renderDock.
 function assignOptions(ingredientName, batch, submit) {
-    const ps = game.game_state.player_states[me.id];
     const meta = ING[ingredientName];
     if (meta?.kind === 'special') {
-        return [sheetOption({
-            icon: '🎲', label: 'Roll the special die', sub: 'Find out which special ingredient you get',
-            primary: true, onclick: () => submit('drink', 0),
-        })];
+        return [{
+            icon: '🎲', label: 'Roll the die', sub: 'reveal your special',
+            onclick: () => submit('drink', 0),
+        }];
     }
+    const ps = game.game_state.player_states[me.id];
     const options = [0, 1].map((i) => {
         const fill = ps.cups[i].ingredients.length + batch[`cup${i}`];
-        return sheetOption({
+        return {
             icon: '🥛',
-            label: `Pour into Cup ${i + 1}`,
+            label: `Cup ${i + 1}`,
             sub: `${fill}/5 full`,
             disabled: fill >= 5,
-            reason: 'Cup is full',
+            reason: 'full',
             onclick: () => submit('cup', i),
-        });
+        };
     });
     const delta = drunkPreview([ingredientName]);
     const wouldPassOut = ps.drunk_level + Math.max(delta, 0) > 5;
     const wouldWet = ps.bladder.length + batch.drinks + 1 > ps.bladder_capacity;
-    options.push(sheetOption({
+    options.push({
         icon: '👄',
         label: 'Drink it',
-        sub: wouldPassOut ? '⚠️ You would pass out — hospital!'
-            : wouldWet ? '⚠️ Your bladder would overflow!'
-                : delta > 0 ? `+${delta} drunk, +1 bladder` : delta < 0 ? `${delta} drunk, +1 bladder` : '+1 bladder',
+        sub: wouldPassOut ? '⚠️ hospital!'
+            : wouldWet ? '⚠️ overflow!'
+                : delta !== 0 ? `${delta > 0 ? '+' : ''}${delta} drunk` : '+1 bladder',
+        danger: wouldPassOut || wouldWet,
         onclick: () => submit('drink', 0),
-    }));
+    });
     return options;
 }
 
@@ -426,6 +451,38 @@ function sellBothOptions() {
 
 function specialsSummary(declared) {
     return declared.length ? `using ${declared.map((s) => SPECIAL_TYPES[s]?.label ?? s).join(' + ')}` : 'no specials';
+}
+
+// One sheet listing every way to sell right now: per-cup options and — when
+// the sell_both_cups house rule allows it — both cups in a single action.
+function openSellSheet() {
+    const gs = game.game_state;
+    const ps = gs.player_states[me.id];
+    const options = [];
+    const boths = sellBothOptions().sort((a, b) => b.params.points - a.params.points).slice(0, 3);
+    for (const [i, a] of boths.entries()) {
+        options.push(sheetOption({
+            icon: '💰',
+            label: `Sell BOTH cups — ${pts(a.params.points)}`,
+            sub: 'one action, both drinks',
+            primary: i === 0,
+            onclick: () => sellCup(a.params),
+        }));
+    }
+    for (const cupIndex of [0, 1]) {
+        const sells = sellOptionsForCup(cupIndex).sort((a, b) => b.params.points - a.params.points).slice(0, 4);
+        for (const a of sells) {
+            options.push(sheetOption({
+                icon: '🥛',
+                label: `Cup ${cupIndex + 1}: ${drinkName(ps.cups[cupIndex].ingredients, a.params.declared_specials)} — ${pts(a.params.points)}`,
+                sub: specialsSummary(a.params.declared_specials) + (a.is_free ? ' · ⚡ free action' : ''),
+                primary: !boths.length && a === sells[0],
+                onclick: () => sellCup(a.params),
+            }));
+        }
+    }
+    options.push(el('button.menu-link', { onclick: openDrinksMenu, text: '📖 Drinks menu & prices' }));
+    openSheet('Sell drinks', el('div.sheet-options', {}, options));
 }
 
 function cupTap(cupIndex) {
@@ -660,11 +717,13 @@ function openOpponentSheet(pid) {
     openSheet(names[pid] ?? 'Player', el('div.sheet-options', {},
         el('div.opp-detail-stats', {},
             el('span', { text: `⭐ ${ps.points} pts` }),
-            el('span', { text: `🍺 drunk ${ps.drunk_level}/5` }),
-            el('span', { text: `💧 bladder ${ps.bladder.length}/${ps.bladder_capacity}` }),
             el('span', { text: `🎤 ${ps.karaoke_cards_claimed}/3` }),
             ps.status !== 'active' ? el('span', { text: STATUS_LABELS[ps.status] }) : null,
         ),
+        drunkMeter(ps.drunk_level, ps.take_count),
+        // Bladder contents are public — they show which cards this player
+        // can afford to claim.
+        bladderRow(ps),
         el('div.opp-detail-cups', {},
             cupVessel(ps.cups[0], 0, { mini: true }),
             cupVessel(ps.cups[1], 1, { mini: true }),
@@ -685,7 +744,12 @@ function dockAction(type) {
             banner('Tap face-up ingredients to pick them up, or the bag to draw blind', { icon: '🫳' });
             pulse($('market'));
             break;
-        case 'sell_cup':
+        case 'sell_cup': {
+            const sellable = [0, 1].filter((i) => sellOptionsForCup(i).length);
+            if (sellable.length === 1 && !sellBothOptions().length) cupTap(sellable[0]);
+            else openSellSheet();
+            break;
+        }
         case 'drink_cup': {
             const cups = [0, 1].filter((i) => !gs.player_states[me.id].cups[i].is_empty);
             if (cups.length === 1) cupTap(cups[0]);
