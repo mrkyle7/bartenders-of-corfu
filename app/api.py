@@ -188,6 +188,20 @@ async def game_page():
     )
 
 
+@app.get("/play")
+async def play_page():
+    """Table view — the alternative game UI. Same game, new table."""
+    play_path = os.path.join("static", "play.html")
+    return FileResponse(
+        play_path,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
 @app.get("/admin")
 async def admin_page():
     admin_path = os.path.join("static", "admin.html")

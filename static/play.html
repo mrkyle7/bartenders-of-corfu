@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Bartenders of Corfu — Table view</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1d1128">
+    <link rel="stylesheet" href="/static/css/play.css">
+</head>
+
+<body>
+    <header id="topbar">
+        <a id="homeLink" href="/" aria-label="Back to home">‹</a>
+        <div id="turnIndicator" aria-live="polite"></div>
+        <div id="myScore" aria-label="Your score"></div>
+    </header>
+
+    <div id="undoBar" class="hidden" role="alert"></div>
+
+    <main id="board">
+        <section id="players" aria-label="Other players"></section>
+        <section id="cards" aria-label="Card rows"></section>
+        <section id="market" aria-label="Open ingredients and bag"></section>
+        <section id="mat" aria-label="Your player mat"></section>
+        <section id="lobby" aria-label="Game lobby"></section>
+    </main>
+
+    <nav id="dock" aria-label="Actions"></nav>
+
+    <footer id="foot">
+        <button id="footHistory" aria-label="Game history">📜 History</button>
+        <button id="footReplay" aria-label="Replay the game">▶ Replay</button>
+        <button id="footRules" aria-label="Drinks menu">📖 Menu</button>
+        <button id="footMenu" aria-label="More options">⋯ More</button>
+    </footer>
+
+    <div id="banners" aria-live="polite"></div>
+
+    <div id="sheetBackdrop" aria-hidden="true"></div>
+    <div id="sheet" role="dialog" aria-modal="true" aria-hidden="true"></div>
+
+    <div id="replayOverlay" class="hidden" role="dialog" aria-modal="true" aria-label="Game replay">
+        <div class="replay-top">
+            <span id="replayTurnLabel"></span>
+            <button id="replayClose" class="replay-close" aria-label="Close replay">✕</button>
+        </div>
+        <div id="replayBoard"></div>
+        <div class="replay-controls">
+            <button id="replayPrev" aria-label="Previous turn">⏮</button>
+            <button id="replayPlay" aria-label="Play replay">▶</button>
+            <button id="replayNext" aria-label="Next turn">⏭</button>
+            <input id="replaySlider" type="range" min="0" max="0" value="0" aria-label="Replay turn">
+        </div>
+    </div>
+
+    <div id="winnerOverlay" class="hidden" role="dialog" aria-modal="true" aria-label="Game over"></div>
+
+    <script type="module" src="/static/play/app.js"></script>
+</body>
+
+</html>

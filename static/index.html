@@ -30,6 +30,11 @@
         <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender, before you get too drunk!
         </p>
         <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
+        <label class="ui-toggle" for="tableViewToggle">
+            <input type="checkbox" id="tableViewToggle" aria-describedby="tableViewDesc">
+            <span>✨ New table view</span>
+            <small id="tableViewDesc">Try the redesigned one-screen game UI</small>
+        </label>
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <section class="game-section hidden" id="myGamesSection">
             <h2>Your Games</h2>
@@ -72,7 +77,30 @@
         });
         setLogOutLink();
         init();
+
+        // Table view opt-in toggle. Game links keep pointing at /game; the
+        // classic page redirects to /play when this preference is on.
+        const tableViewToggle = document.getElementById('tableViewToggle');
+        tableViewToggle.checked = localStorage.getItem('bocTableView') === '1';
+        tableViewToggle.addEventListener('change', () => {
+            localStorage.setItem('bocTableView', tableViewToggle.checked ? '1' : '0');
+        });
     </script>
+    <style>
+        .ui-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            margin: 10px auto 0;
+            cursor: pointer;
+            flex-wrap: wrap;
+        }
+
+        .ui-toggle input { width: 18px; height: 18px; accent-color: #c9822a; }
+        .ui-toggle span { font-weight: 600; }
+        .ui-toggle small { flex-basis: 100%; text-align: center; opacity: 0.75; }
+    </style>
 </body>
 
 </html>

@@ -1,6 +1,5 @@
 """Supabase-dependent API tests for push notification endpoints."""
 
-import os
 import time
 import unittest
 from unittest.mock import patch
