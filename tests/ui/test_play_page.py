@@ -63,13 +63,8 @@ def test_dock_reflects_whose_turn(
         assert "Take" not in dock_text
 
 
-def test_take_tap_token_opens_assignment_sheet(
-    page, base_url, new_user, new_game, other_user_and_jwt
-):
-    """On your turn, tapping a face-up ingredient offers cup/drink choices."""
-    _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
-    _api_post(base_url, f"/v1/games/{new_game}/start", new_user["jwt"])
-
+def _make_it_my_turn(base_url, new_game, new_user, other_user_and_jwt):
+    """Start from a fresh game and ensure it is new_user's turn."""
     game = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
     if game["game_state"]["player_turn"] != new_user["user"]["id"]:
         # Other player takes their ingredients first so it becomes our turn
@@ -81,15 +76,84 @@ def test_take_tap_token_opens_assignment_sheet(
             take,
         )
 
+
+def _assign_through_sheets(page, count):
+    """Complete `count` assignment sheets by picking the first enabled option."""
+    for _ in range(count):
+        page.wait_for_selector(
+            "#sheet.open .sheet-option:not([disabled])", timeout=5000
+        )
+        page.locator("#sheet .sheet-option:not([disabled])").first.click()
+        page.wait_for_timeout(300)
+
+
+def test_take_select_tokens_then_assign(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """Tapping face-up ingredients picks them up; Assign walks through each."""
+    _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
+    _api_post(base_url, f"/v1/games/{new_game}/start", new_user["jwt"])
+    _make_it_my_turn(base_url, new_game, new_user, other_user_and_jwt)
+
     page.goto(f"{base_url}/play?id={new_game}")
-    token = page.locator("#market .market-tokens button.tok").first
-    token.wait_for(state="visible", timeout=10000)
-    token.click()
-    # The sheet element is always in the DOM; wait for it to open with content
-    page.wait_for_selector("#sheet.open .sheet-option", state="visible", timeout=5000)
-    text = page.locator("#sheet").inner_text()
-    # Special die tokens roll instead of pouring; either sheet is valid
-    assert "Pour into Cup 1" in text or "Roll the special die" in text
+    tokens = page.locator("#market .market-tokens button.tok")
+    tokens.first.wait_for(state="visible", timeout=10000)
+    tokens.nth(0).click()
+    tokens.nth(1).click()
+
+    # Two tokens picked up: dock offers Assign 2 / Put back
+    dock = page.locator("#dock")
+    assert "Assign 2" in dock.inner_text()
+    assert page.locator("#market .market-slot.selected").count() == 2
+
+    # Deselecting works before committing
+    tokens.nth(1).click()
+    assert "Assign 1" in dock.inner_text()
+    tokens.nth(1).click()
+
+    page.click("#dock >> text=Assign 2")
+    page.wait_for_selector("#sheet.open .sheet-option", timeout=5000)
+    assert "(1 of 2)" in page.locator("#sheet .sheet-title").inner_text()
+    _assign_through_sheets(page, 2)
+
+    # One batch of two was submitted in a single call
+    game = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
+    gs = game["game_state"]
+    my_turn_over = gs["player_turn"] != new_user["user"]["id"]
+    assert my_turn_over or gs["ingredients_taken_this_turn"] == 2
+
+
+def test_bag_draw_choose_count_and_assign_all(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """The bag asks how many to draw; every drawn ingredient must be assigned
+    through a locked sheet (no close button, Escape does nothing)."""
+    _api_post(base_url, f"/v1/games/{new_game}/join", other_user_and_jwt["jwt"])
+    _api_post(base_url, f"/v1/games/{new_game}/start", new_user["jwt"])
+    _make_it_my_turn(base_url, new_game, new_user, other_user_and_jwt)
+
+    page.goto(f"{base_url}/play?id={new_game}")
+    page.locator("#market .tok").first.wait_for(state="visible", timeout=10000)
+    page.click("#bagChip")
+    page.wait_for_selector("#sheet.open .count-btn", timeout=5000)
+    # Sober player must take 3: offered counts are 1, 2 and 3
+    assert page.locator("#sheet .count-btn").count() == 3
+    assert "No going back" in page.locator("#sheet").inner_text()
+
+    page.click('#sheet .count-btn >> text="2"')
+    page.wait_for_selector("#sheet.open .sheet-option", timeout=5000)
+    # Locked: no close button, Escape keeps the sheet open
+    assert page.locator("#sheet .sheet-close").count() == 0
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
+    assert page.locator("#sheet.open").count() == 1
+
+    _assign_through_sheets(page, 2)
+    game = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
+    gs = game["game_state"]
+    assert gs["bag_draw_pending"] == []
+    my_turn_over = gs["player_turn"] != new_user["user"]["id"]
+    assert my_turn_over or gs["ingredients_taken_this_turn"] == 2
 
 
 def test_history_sheet_lists_moves(

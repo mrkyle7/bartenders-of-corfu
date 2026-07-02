@@ -187,12 +187,22 @@ export function renderCardRows(container, state, ctx) {
 
 export function renderMarket(container, state, ctx) {
     const canTake = !ctx.readOnly && ctx.canTakeNow;
-    const tokens = state.open_display.map((name, i) =>
-        el('span.market-slot', { 'data-slot': String(i) },
+    const selected = ctx.selectedSlots ?? new Set();
+    const tokens = state.open_display.map((name, i) => {
+        const isSelected = selected.has(i);
+        const slot = el('span.market-slot', { 'data-slot': String(i) },
             token(name, {
-                onclick: canTake ? (ev) => ctx.on.displayTokenTap(name, ev.currentTarget) : undefined,
-                highlight: canTake,
-            })));
+                onclick: canTake ? () => ctx.on.displayTokenTap(name, i) : undefined,
+                highlight: canTake && !isSelected,
+            }));
+        if (isSelected) slot.classList.add('selected');
+        const tok = slot.querySelector('.tok');
+        if (canTake) {
+            tok.setAttribute('aria-pressed', String(isSelected));
+            tok.setAttribute('aria-label', `${ING[name]?.label ?? name} — ${isSelected ? 'selected, tap to put back' : 'tap to pick up'}`);
+        }
+        return slot;
+    });
     const bag = el(canTake ? 'button.bag' : 'div.bag', {
         id: 'bagChip',
         onclick: canTake ? (ev) => ctx.on.bagTap(ev.currentTarget) : undefined,
@@ -294,6 +304,33 @@ export function renderDock(container, state, ctx) {
             el('span.waiting-dots', { 'aria-hidden': 'true' }),
             el('span', { text: `${ctx.nameOf(state.player_turn)} is at the bar…` }),
         ));
+        return;
+    }
+    // Picked-up display ingredients waiting to be assigned take over the dock
+    if (ctx.selectedCount > 0) {
+        const remaining = ps.take_count - state.ingredients_taken_this_turn - ctx.selectedCount;
+        container.replaceChildren(
+            el('div.dock-prompt', {
+                text: remaining > 0 ? `Tap more ingredients, or assign (${remaining} more allowed)` : 'That’s your limit — assign them',
+                'aria-live': 'polite',
+            }),
+            el('div.dock-btns', {},
+                el('button.dock-btn.dock-assign', {
+                    onclick: () => ctx.on.assignSelected(),
+                    'aria-label': `Assign ${ctx.selectedCount} selected ingredient${ctx.selectedCount === 1 ? '' : 's'}`,
+                },
+                    el('span.dock-btn-icon', { text: '🫳', 'aria-hidden': 'true' }),
+                    el('span.dock-btn-label', { text: `Assign ${ctx.selectedCount}` }),
+                ),
+                el('button.dock-btn.dock-end', {
+                    onclick: () => ctx.on.clearSelection(),
+                    'aria-label': 'Put selected ingredients back',
+                },
+                    el('span.dock-btn-icon', { text: '↩️', 'aria-hidden': 'true' }),
+                    el('span.dock-btn-label', { text: 'Put back' }),
+                ),
+            ),
+        );
         return;
     }
     if (ctx.takeInProgress) {

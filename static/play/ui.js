@@ -23,34 +23,42 @@ export function el(spec, attrs = {}, ...children) {
 // ─── Bottom sheet ────────────────────────────────────────────────────────────
 
 let sheetCloseCallback = null;
+let sheetLocked = false;
 
-export function openSheet(title, contentNodes, { onClose } = {}) {
-    closeSheet();
+// `locked` sheets have no close button and ignore backdrop/Escape dismissal —
+// used when the player must finish a decision (e.g. assigning bag draws).
+export function openSheet(title, contentNodes, { onClose, locked = false } = {}) {
+    closeSheet(true);
     sheetCloseCallback = onClose ?? null;
+    sheetLocked = locked;
     const backdrop = document.getElementById('sheetBackdrop');
     const sheet = document.getElementById('sheet');
     sheet.replaceChildren(
         el('div.sheet-grip', { 'aria-hidden': 'true' }),
         el('div.sheet-head', {},
             el('h2.sheet-title', { text: title }),
-            el('button.sheet-close', { 'aria-label': 'Close', onclick: closeSheet, text: '✕' }),
+            locked
+                ? null
+                : el('button.sheet-close', { 'aria-label': 'Close', onclick: () => closeSheet(), text: '✕' }),
         ),
         el('div.sheet-body', {}, contentNodes),
     );
     backdrop.classList.add('open');
     sheet.classList.add('open');
     sheet.setAttribute('aria-hidden', 'false');
-    sheet.querySelector('.sheet-close').focus();
+    (sheet.querySelector('.sheet-close') ?? sheet.querySelector('button'))?.focus();
 }
 
 export function isSheetOpen() {
     return document.getElementById('sheet').classList.contains('open');
 }
 
-export function closeSheet() {
+export function closeSheet(force = false) {
     const backdrop = document.getElementById('sheetBackdrop');
     const sheet = document.getElementById('sheet');
     if (!sheet.classList.contains('open')) return;
+    if (sheetLocked && !force) return;
+    sheetLocked = false;
     backdrop.classList.remove('open');
     sheet.classList.remove('open');
     sheet.setAttribute('aria-hidden', 'true');
