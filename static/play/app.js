@@ -354,7 +354,8 @@ async function assignChoice(disposition, cupIndex) {
     render();
 }
 
-// Descriptor for renderDock: the current item, progress and choice buttons.
+// Descriptor for renderDock: the full batch queue, the current item and its
+// choice buttons — so a multi-draw shows everything drawn at once.
 function assignFlowDescriptor() {
     const flow = assignFlow;
     const idx = flow.collected.length;
@@ -364,9 +365,15 @@ function assignFlowDescriptor() {
     const title = item.source === 'pending'
         ? `You drew ${meta?.label ?? item.ingredient}${counter} — where does it go?`
         : `${meta?.label ?? item.ingredient}${counter} — where does it go?`;
+    const badgeFor = (a) => (a.disposition === 'cup' ? `🥛${a.cup_index + 1}` : '👄');
     return {
         tokenName: item.ingredient,
         title,
+        queue: flow.items.map((it, i) => ({
+            name: it.ingredient,
+            state: i < idx ? 'done' : i === idx ? 'current' : 'todo',
+            badge: i < idx ? badgeFor(flow.collected[i]) : undefined,
+        })),
         options: assignOptions(item.ingredient, flow.batch, assignChoice),
         cancellable: !flow.items.some((i) => i.source === 'pending'),
     };
