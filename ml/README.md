@@ -91,8 +91,19 @@ uv run python -m ml.gauntlet --candidate lookahead --regression --games 200 --mo
 
 | Matchup | Modes | Win rate | Wilson 95% low | Self-elim | Speed |
 |---|---|---|---|---|---|
-| lookahead vs mastermind | all | **90.5–91.0%** (seeds 1000/2000) | 85.6–86.2% | 8.5% | 0.7 s/game |
+| lookahead (`v1`) vs mastermind | all | **~74%** | ~65% | ~9% | 0.7 s/game |
 | mcts(100) vs mastermind | all | 75.0% (45/60) | 62.8% | 25% | **52.9 s/game** |
+
+> **Baseline correction.** Earlier drafts of this file reported lookahead vs
+> mastermind at ~86–91%. Those numbers predate the runner draw-fix (`8183aa6`)
+> and were **inflated by a simulation bug**: all-modes games dragged *past* the
+> real last-round ending until someone self-eliminated, which favours lookahead
+> (it self-eliminates less than mastermind). With the runner now ending games on
+> points as the real rules do, v1's honest rate is **~74%**. The vs-mastermind
+> number is also noisy/non-transitive across 100-game samples, so **the reliable
+> gate is the seat-balanced head-to-head vs the previous frozen version**, not the
+> vs-mastermind figure. Historical vs-mastermind percentages below are left as
+> originally measured (pre-fix) and should be read as relative, not absolute.
 
 ### Engine-acquisition tuning round (this round)
 
@@ -171,6 +182,25 @@ So cocktail building is a **long-game / vs-human** play, kept **off by default**
 (`cocktail_progress` 0.0; `DEFAULT_WEIGHTS == v1`) and selectable as
 `lookahead:cocktail` (`ALT_BUILDS` in `ml/versions.py`). Promote it by flipping
 `cocktail_progress` into `DEFAULT_WEIGHTS` if the long game is what you care about.
+
+### Drink management / sobering (`lookahead:sober`)
+
+Three ways to sober: **wee** (−1 drunk, but permanently shrinks bladder capacity
+and spends a toilet token), **drink plain mixers with no spirit in the batch**
+(−1 each), or hold a **refresher** so its mixer is "hot" and sobers −1 even
+alongside spirits. Audit of how the bot handles this:
+
+- It won't drink itself to death — the convex drunk penalty keeps self-elim ~9%.
+- **It over-wees**: the bladder penalty is keyed by *remaining room*, not
+  *capacity*, so it never sees weeing's permanent capacity cost. The
+  `bladder_headroom` weight (reward `min(capacity−floor, toilet_tokens)`) fixes
+  that. It's directionally positive — **~52% vs v1 over 200g, more points, less
+  self-elim** — but the CI [45%, 59%] straddles 50%, so it's *not significant* and
+  doesn't clear the bar to become the default. Selectable as `lookahead:sober`.
+- **Refreshers are already handled implicitly**: the search simulates its own
+  drinking, so a hot mixer's −1 shows up as lower drunk at the leaf. Bumping the
+  static `refresher` weight to make it *claim* more actually *hurt* (48% vs v1) —
+  don't.
 
 ## Important gotchas
 

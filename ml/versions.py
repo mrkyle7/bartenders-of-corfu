@@ -95,6 +95,21 @@ ALT_BUILDS: dict[str, EvalWeights] = {
         threshold_discount=0.6,
         cocktail_progress=0.5,
     ),
+    # sober — v1 plus a bladder-headroom reward (rewards remaining safe wees) so
+    # the bot stops over-weeing and preserving bladder capacity. A principled fix
+    # for a real gap, and directionally positive — ~52% vs v1 over 200g with more
+    # points and slightly less self-elim — but NOT statistically significant (CI
+    # [45%, 59%]), so it doesn't clear the "significantly beats v1" bar to become
+    # the default. Kept selectable. (A refresher-value bump was tried on top and
+    # *hurt* — the search already sees refreshers' drink-offset via simulation.)
+    "sober": EvalWeights(
+        doubler_acquire=11.0,
+        specialist_acquire=7.0,
+        karaoke_acquire=8.0,
+        threshold_reach=3,
+        threshold_discount=0.6,
+        bladder_headroom=0.5,
+    ),
 }
 
 

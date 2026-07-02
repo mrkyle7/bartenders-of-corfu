@@ -25,7 +25,7 @@ from uuid import UUID
 
 from app.GameState import GameState
 from app.Ingredient import Ingredient
-from app.PlayerState import PlayerState
+from app.PlayerState import MIN_BLADDER_CAPACITY, PlayerState
 from app.actions import SCORE_TO_WIN
 from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, drink_points
 
@@ -64,6 +64,14 @@ class EvalWeights:
     cocktail_progress: float = 0.0
 
     special_mat: float = 1.2  # option value of an unused special on the mat (caps)
+
+    # Bladder headroom: reward the number of *safe wees still available* —
+    # min(capacity - floor, toilet_tokens). Weeing sobers only 1 level but
+    # permanently shrinks bladder capacity and spends a token, and the room-based
+    # safety penalty is blind to that permanent cost — so the bot over-wees,
+    # quietly losing drinking headroom. Rewarding remaining headroom makes it wee
+    # only when it must. Default 0.0 so v0/v1 stay frozen.
+    bladder_headroom: float = 0.0
 
     # Ongoing engine value of *held* cards (their claim points already counted).
     specialist: float = 4.0  # +2 per matching non-cocktail sell, repeatedly
@@ -344,6 +352,9 @@ def player_potential(
     value += min(len(ps.special_ingredients), 4) * w.special_mat
     value += _card_engine_value(ps, w)
     value -= _safety_penalty(ps, w)
+    if w.bladder_headroom:
+        headroom = min(ps.bladder_capacity - MIN_BLADDER_CAPACITY, ps.toilet_tokens)
+        value += w.bladder_headroom * max(0, headroom)
 
     if full:
         for cup in ps.cups:
