@@ -193,9 +193,11 @@ def test_opponent_sheet_shows_bladder_contents(
 def test_home_toggle_redirects_classic_game_page(page, base_url, new_user, new_game):
     """With the table-view toggle on, /game redirects to /play for the same game."""
     page.goto(f"{base_url}/")
-    toggle = page.locator("#tableViewToggle")
+    # The checkbox itself is visually hidden behind the pill track; click the switch
+    toggle = page.locator(".ui-toggle")
     toggle.wait_for(state="visible", timeout=10000)
-    toggle.check()
+    toggle.click()
+    assert page.is_checked("#tableViewToggle")
     page.goto(f"{base_url}/game?id={new_game}")
     page.wait_for_url(re.compile(r".*/play\?id=.*"), timeout=10000)
 
