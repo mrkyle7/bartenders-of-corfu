@@ -66,16 +66,61 @@ LOOKAHEAD_VERSIONS: dict[str, EvalWeights] = {
 }
 
 # The newest registered version (last inserted). New tuning is gated against it.
+# Deliberately the last entry of the *progression* dict above — experimental
+# alternates (below) are not part of the line and never become `latest`.
 LATEST_VERSION = next(reversed(LOOKAHEAD_VERSIONS))
+
+# Experimental / alternate builds — selectable (e.g. `lookahead:cocktail`) and
+# gauntlet-comparable, but NOT in the progression and NOT the default, because
+# they don't beat `latest` across the board. Kept here so the work is first-class
+# and runnable instead of buried behind a hand-edited weight.
+ALT_BUILDS: dict[str, EvalWeights] = {
+    # cocktail — engine-acquisition (v1) PLUS recipe-directed cocktail building,
+    # driven by *value and probability*, not hand-written rules (see ml/cocktail.py
+    # best_cocktail: EV = P(complete) * (points - a normal sale); the search weighs
+    # it via cocktail_progress, so "only when behind", "don't strand a cup" and
+    # "play safe" emerge from the evaluation rather than if-statements). It builds
+    # real cocktails but still trails on the gauntlet — ~76% vs Mastermind (v1
+    # ~90%) and ~46% vs v1 head-to-head; a weight sweep (0.3/0.5/1.0) only ever
+    # makes it worse, so the ceiling is structural: the forced ~5-item take economy
+    # makes multi-take builds inefficient, and the cocktails that DON'T need
+    # building (Margarita/Manhattan/Cosmopolitan) are free declare-at-sale upgrades
+    # v1 already takes. Off by default; flip cocktail_progress into DEFAULT_WEIGHTS
+    # to promote it.
+    "cocktail": EvalWeights(
+        doubler_acquire=11.0,
+        specialist_acquire=7.0,
+        karaoke_acquire=8.0,
+        threshold_reach=3,
+        threshold_discount=0.6,
+        cocktail_progress=0.5,
+    ),
+    # sober — v1 plus a bladder-headroom reward (rewards remaining safe wees) so
+    # the bot stops over-weeing and preserving bladder capacity. A principled fix
+    # for a real gap, and directionally positive — ~52% vs v1 over 200g with more
+    # points and slightly less self-elim — but NOT statistically significant (CI
+    # [45%, 59%]), so it doesn't clear the "significantly beats v1" bar to become
+    # the default. Kept selectable. (A refresher-value bump was tried on top and
+    # *hurt* — the search already sees refreshers' drink-offset via simulation.)
+    "sober": EvalWeights(
+        doubler_acquire=11.0,
+        specialist_acquire=7.0,
+        karaoke_acquire=8.0,
+        threshold_reach=3,
+        threshold_discount=0.6,
+        bladder_headroom=0.5,
+    ),
+}
 
 
 def get_version(version: str) -> EvalWeights:
-    """Resolve a version id (e.g. ``"v1"``, or ``"latest"``) to its weights."""
+    """Resolve a version id (``"v1"``, ``"latest"``, or an alt build) to weights."""
     key = LATEST_VERSION if version.lower() == "latest" else version
-    try:
+    if key in LOOKAHEAD_VERSIONS:
         return LOOKAHEAD_VERSIONS[key]
-    except KeyError:
-        raise ValueError(
-            f"Unknown lookahead version {version!r}. "
-            f"Known: {', '.join(LOOKAHEAD_VERSIONS)}, latest"
-        ) from None
+    if key in ALT_BUILDS:
+        return ALT_BUILDS[key]
+    raise ValueError(
+        f"Unknown lookahead version {version!r}. Known: "
+        f"{', '.join((*LOOKAHEAD_VERSIONS, *ALT_BUILDS))}, latest"
+    )

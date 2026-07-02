@@ -81,6 +81,10 @@ def test_empty_cup_has_no_sale_value():
     assert _best_cup_sale(_ps_with_cup(cup), cup) == 0
 
 
+# Cocktail-progress is exercised in tests/test_cocktail.py (the planner it
+# delegates to needs full game state, not just a cup).
+
+
 # ---------------------------------------------------------------------------
 #  Safety penalties are monotonic
 # ---------------------------------------------------------------------------
@@ -103,6 +107,29 @@ def test_full_bladder_penalised():
         bladder_capacity=capacity,
     )
     assert _safety_penalty(full) > _safety_penalty(empty)
+
+
+def test_bladder_headroom_rewards_preserved_capacity():
+    from dataclasses import replace
+
+    from ml.evaluator import DEFAULT_WEIGHTS
+
+    w = replace(DEFAULT_WEIGHTS, bladder_headroom=1.0)
+    gs, pids = _two_player_state()
+    fresh = gs.player_states[pids[0]]  # full capacity 8, 4 tokens
+    fresh.bladder_capacity = 8
+    fresh.toilet_tokens = 4
+    worn = gs.player_states[pids[1]]  # wee'd down: min capacity, no tokens
+    worn.bladder_capacity = 4
+    worn.toilet_tokens = 0
+    # The headroom term makes an otherwise-equal fresh bladder worth more.
+    assert player_potential(gs, fresh, w, full=False) > player_potential(
+        gs, worn, w, full=False
+    )
+    # With the default weight (0.0) the term is inert — v1 unaffected.
+    assert player_potential(gs, fresh, DEFAULT_WEIGHTS, full=False) == player_potential(
+        gs, worn, DEFAULT_WEIGHTS, full=False
+    )
 
 
 def test_more_points_scores_higher():

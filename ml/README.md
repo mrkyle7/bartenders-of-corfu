@@ -91,8 +91,19 @@ uv run python -m ml.gauntlet --candidate lookahead --regression --games 200 --mo
 
 | Matchup | Modes | Win rate | Wilson 95% low | Self-elim | Speed |
 |---|---|---|---|---|---|
-| lookahead vs mastermind | all | **90.5–91.0%** (seeds 1000/2000) | 85.6–86.2% | 8.5% | 0.7 s/game |
+| lookahead (`v1`) vs mastermind | all | **~74%** | ~65% | ~9% | 0.7 s/game |
 | mcts(100) vs mastermind | all | 75.0% (45/60) | 62.8% | 25% | **52.9 s/game** |
+
+> **Baseline correction.** Earlier drafts of this file reported lookahead vs
+> mastermind at ~86–91%. Those numbers predate the runner draw-fix (`8183aa6`)
+> and were **inflated by a simulation bug**: all-modes games dragged *past* the
+> real last-round ending until someone self-eliminated, which favours lookahead
+> (it self-eliminates less than mastermind). With the runner now ending games on
+> points as the real rules do, v1's honest rate is **~74%**. The vs-mastermind
+> number is also noisy/non-transitive across 100-game samples, so **the reliable
+> gate is the seat-balanced head-to-head vs the previous frozen version**, not the
+> vs-mastermind figure. Historical vs-mastermind percentages below are left as
+> originally measured (pre-fix) and should be read as relative, not absolute.
 
 ### Engine-acquisition tuning round (this round)
 
@@ -129,6 +140,67 @@ So `v1` ships as `latest` because it targets the regime that actually broke in
 production, but the next round (`v2`) must pull *significantly* ahead of `v1`
 *head-to-head* without giving back the no-modes ground. lookahead remains **~78×
 faster** than the shipped MCTS.
+
+### Cocktail knowledge (`lookahead:cocktail`) — a long-game specialist, off by default
+
+Cocktails are the big scores (10–15 pts, exempt from the 2-spirit cap that caps
+every other drink at 3), and the bot ignored them. The full feature is now built:
+
+- **Evaluator** (`_cocktail_progress` + `cocktail_progress` weight): values a cup
+  a few ingredients from a *completable* cocktail (recipe sub-multiset + specials
+  on the mat).
+- **Decision is value/probability-driven, not rule-driven** (`ml/cocktail.py`
+  `best_cocktail`): for every recipe whose specials are banked and every cup
+  that's a sub-multiset of it, **EV = P(complete) × (points − a normal sale)**,
+  where `P(complete)` is a cheap proxy on how comfortably the missing ingredients
+  are obtainable from display+bag. The evaluator's cocktail term *is* that EV, so
+  the search trades it off against everything else — "only when behind" (points
+  are worth more head-to-head when behind), "don't strand a cup" (a stranded cup
+  loses its `_best_cup_sale` value), and "play safe" (the safety penalty) all
+  **emerge from the evaluation**, not from `if` statements. The knobs (`_HEADROOM`,
+  display weight, the EV build threshold) are tunable weights.
+- **Disposition**: when the best EV clears the build bar, it builds that cup from
+  the display, stacking the 3rd/4th spirit (the 2-spirit cap is a *sale* rule,
+  not a take rule) and spoiling off-plan spirits rather than drinking into the
+  cliff. `LookaheadStrategy` simulates its *own* disposition so the safety penalty
+  sees a build-take's real cost.
+
+Honest gauntlet result (120-game, all modes): it builds real cocktails but
+**still trails** — ~76% vs Mastermind (`v1` ~90%) and ~46% vs `v1` head-to-head,
+and a weight sweep (0.3 / 0.5 / 1.0) only makes it worse. The ceiling is
+structural, not a tuning miss:
+
+- The **forced ~5-item take economy** makes a multi-take build (e.g. a 3-gin
+  Martini) inefficient — most of each take is off-plan.
+- The cocktails that *don't* need building — **Margarita** (2 tequila),
+  **Manhattan** (2 whiskey), **Cosmopolitan** (vodka+cranberry) — are **free
+  declare-at-sale upgrades `v1` already takes** (the sale enumerates special
+  combos and the search picks the 10-pt cocktail). So the build code only adds
+  the *costly* cocktails, which short games don't repay.
+
+So cocktail building is a **long-game / vs-human** play, kept **off by default**
+(`cocktail_progress` 0.0; `DEFAULT_WEIGHTS == v1`) and selectable as
+`lookahead:cocktail` (`ALT_BUILDS` in `ml/versions.py`). Promote it by flipping
+`cocktail_progress` into `DEFAULT_WEIGHTS` if the long game is what you care about.
+
+### Drink management / sobering (`lookahead:sober`)
+
+Three ways to sober: **wee** (−1 drunk, but permanently shrinks bladder capacity
+and spends a toilet token), **drink plain mixers with no spirit in the batch**
+(−1 each), or hold a **refresher** so its mixer is "hot" and sobers −1 even
+alongside spirits. Audit of how the bot handles this:
+
+- It won't drink itself to death — the convex drunk penalty keeps self-elim ~9%.
+- **It over-wees**: the bladder penalty is keyed by *remaining room*, not
+  *capacity*, so it never sees weeing's permanent capacity cost. The
+  `bladder_headroom` weight (reward `min(capacity−floor, toilet_tokens)`) fixes
+  that. It's directionally positive — **~52% vs v1 over 200g, more points, less
+  self-elim** — but the CI [45%, 59%] straddles 50%, so it's *not significant* and
+  doesn't clear the bar to become the default. Selectable as `lookahead:sober`.
+- **Refreshers are already handled implicitly**: the search simulates its own
+  drinking, so a hot mixer's −1 shows up as lower drunk at the leaf. Bumping the
+  static `refresher` weight to make it *claim* more actually *hurt* (48% vs v1) —
+  don't.
 
 ## Important gotchas
 
@@ -168,11 +240,55 @@ Do **not** resurrect per-move live mutation in production.
 1. **Promote lookahead to the production default / retire MCTS.** It is faster
    and stronger. Decide whether `mcts` stays selectable at all. Consider making
    bot games default the optional rules on (host still controls them today).
-2. **`depth=2` + a weight pass.** Bump search depth and tune the `evaluator.py`
-   weight block; gauntlet each change. Watch per-move latency (depth grows cost
-   ~quadratically but is far under MCTS).
-3. **`ml/fit_evaluator.py`** — replay history, fit evaluator weights, auto-run
-   the gauntlet to accept/reject. Versioned, gated, offline.
+2. **`depth=2` *needs* a weight pass — it regresses on its own.** Depth is now
+   selectable in the gauntlet (`lookahead:depth=2`, `lookahead:cocktail,depth=2`).
+   Note the naming: the default `depth=1` already searches *two* of the bot's
+   turns (action → opponents → follow-up → opponents → evaluate), so `depth=2` is
+   a three-turn search. Measured (120/60g, all modes): `depth=2` with v1 weights
+   is **~74% vs Mastermind** (down from ~90%) and **~50% vs v1** head-to-head —
+   i.e. no better head-to-head, worse vs Mastermind, and ~10× slower. The
+   evaluator is tuned for the 2-ply horizon, so a 3rd ply amplifies the
+   "holding/potential looks good → defer the sale" bias and adds sampling noise.
+   To make depth pay off, re-tune the `evaluator.py` weight block *for that depth*
+   (less `cup_sell`/potential, more realized points, more `samples`) and gauntlet
+   each change — but the flat head-to-head suggests the 3rd ply has marginal value
+   in a game this tactical, so weigh the effort.
+3. **`ml/fit_evaluator.py` — built; the win-label fit is a good *predictor* but a
+   poor *controller*.** It replays ended games from the public API, labels each
+   mid/late state by whether that player won, and fits a logistic regression over
+   the evaluator's feature decomposition (`evaluator.player_features` /
+   `FEATURE_NAMES` / `weights_from_coefficients`). Gauntlet fitted weights with
+   `lookahead:fit=<coef.json>`. **Result (50 games, ~5k samples): position→win
+   AUC ≈ 0.92** — it ranks winners well — but the learned weights lose to `v1`
+   (~31%) and score far less, because **correlation ≠ causation for action
+   selection**:
+   - *Safety inverts.* Winners are drunk *because they drink productively* (to
+     claim doublers/karaoke), so the raw fit rewards drunkenness — the bot then
+     chases it and **self-eliminates 36%** of games. Fixed by keeping the one-hot
+     safety terms as *controls* but using the hand-tuned convex penalties
+     (default; `--fit-safety` to override).
+   - *Accumulation over-weights.* Winners hold doublers/specialists/specials, so
+     the fit gives them huge weights (`doubler≈17`, `specialist≈8` vs `points=1`)
+     and an action-selector maximising them **hoards cards and forgets to score**
+     (avg points ~17 vs `v1`'s ~30). Heavier L2 doesn't fix it — the correlation
+     is real. Mid-game points is a *weaker* win-signal than structure, so
+     normalising by it inflates everything.
+
+   **Self-play was tried too** (`--source selfplay`, `ml/selfplay.py`: on-policy
+   lookahead self-play, so `V(s)` is learned on the bot's *own* state
+   distribution). It didn't help — pure self-play weights are worse (20%
+   self-elim, `doubler≈39`, sparse features like `near_karaoke` blow up under
+   un-standardisation), and even **refined into `v1`** (`--blend`, with a v1
+   fallback for too-sparse features) it still loses ~31% vs `v1`: the data
+   devalues `special_mat` and `refresher` (they don't *correlate* with winning
+   mid-game) but *valuing* them causally helps, so the nudges hurt scoring. So the
+   failure is the **win-label objective itself**, not off-policy-ness — across
+   history, self-play, and blended-refinement, none beats gauntlet-gated hand
+   tuning. To actually *learn* control weights you'd need a causal target (proper
+   TD/policy-iteration with a nonlinear value fn, or fitting each feature's
+   *marginal* value), which the linear evaluator can't represent well. The tool,
+   the on-policy self-play generator, and the 0.92 position evaluator are kept for
+   that follow-up (and as diagnostics).
 4. **Better opponent model.** The search assumes opponents play Mastermind;
    model them as lookahead (self-play) once #1 lands.
 5. **4-player evaluation.** All current numbers are 2-player; add a 4-player

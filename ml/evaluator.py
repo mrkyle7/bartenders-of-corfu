@@ -25,9 +25,11 @@ from uuid import UUID
 
 from app.GameState import GameState
 from app.Ingredient import Ingredient
-from app.PlayerState import PlayerState
+from app.PlayerState import MIN_BLADDER_CAPACITY, PlayerState
 from app.actions import SCORE_TO_WIN
 from app.cocktails import _MIXERS, _RECIPES, _SPIRITS, drink_points
+
+from ml.cocktail import best_cocktail
 
 # --- Terminal overrides ---------------------------------------------------
 # Not version-tuned: a win is a win regardless of which weight set is playing.
@@ -53,8 +55,23 @@ class EvalWeights:
     # toward a high-value (cocktail / doubled) sale that isn't complete yet.
     cup_sell: float = 0.7
     cup_progress: float = 1.0
+    # Cocktail knowledge: reward a cup that is a few ingredients from completing a
+    # reachable cocktail recipe (10-15 pts, exempt from the 2-spirit cap). Kept at
+    # 0.0 — the experiment is documented in _cocktail_progress; enabling it (any
+    # weight 0.3-1.0) regressed the gauntlet because the search holds cups it can't
+    # finish (disposition is delegated to Mastermind, which doesn't aim at
+    # recipes). The term stays available for the disposition-aware follow-up.
+    cocktail_progress: float = 0.0
 
     special_mat: float = 1.2  # option value of an unused special on the mat (caps)
+
+    # Bladder headroom: reward the number of *safe wees still available* —
+    # min(capacity - floor, toilet_tokens). Weeing sobers only 1 level but
+    # permanently shrinks bladder capacity and spends a token, and the room-based
+    # safety penalty is blind to that permanent cost — so the bot over-wees,
+    # quietly losing drinking headroom. Rewarding remaining headroom makes it wee
+    # only when it must. Default 0.0 so v0/v1 stay frozen.
+    bladder_headroom: float = 0.0
 
     # Ongoing engine value of *held* cards (their claim points already counted).
     specialist: float = 4.0  # +2 per matching non-cocktail sell, repeatedly
@@ -93,6 +110,8 @@ class EvalWeights:
 
 # The live champion weights. ``ml/versions.py`` imports this as the latest entry
 # in its registry; production and the bare ``lookahead`` strategy use it.
+# NOTE: cocktail_progress stays 0.0 here — enabling it regressed the gauntlet
+# (see _cocktail_progress). The capability is kept, off, for future work.
 DEFAULT_WEIGHTS = EvalWeights()
 
 
@@ -180,6 +199,18 @@ def _cup_progress(ps: PlayerState, cup) -> float:
     # special on the mat while the cup still has a spirit.
     score += 0.5 * min(len(ps.special_ingredients), 2)
     return score
+
+
+def _cocktail_progress(gs: GameState, ps: PlayerState) -> float:
+    """Expected value of this player's best cocktail opportunity.
+
+    Delegates to ``ml.cocktail.best_cocktail``: P(complete) * (cocktail points - a
+    normal sale), shared with the bot's disposition so search and play agree. It's
+    a value, not a rule — the search weighs it against safety, the cup's lost sale
+    value when stranded, and the opponent gap, so *when* to chase a cocktail (and
+    which) falls out of the evaluation rather than hand-written conditions.
+    """
+    return best_cocktail(gs, ps)[1]
 
 
 def _threshold_proximity(
@@ -321,13 +352,121 @@ def player_potential(
     value += min(len(ps.special_ingredients), 4) * w.special_mat
     value += _card_engine_value(ps, w)
     value -= _safety_penalty(ps, w)
+    if w.bladder_headroom:
+        headroom = min(ps.bladder_capacity - MIN_BLADDER_CAPACITY, ps.toilet_tokens)
+        value += w.bladder_headroom * max(0, headroom)
 
     if full:
         for cup in ps.cups:
             value += _cup_progress(ps, cup) * w.cup_progress
+        if w.cocktail_progress:
+            value += _cocktail_progress(gs, ps) * w.cocktail_progress
         value += _threshold_proximity(gs, ps, w) * w.threshold
 
     return value
+
+
+# --- Offline weight fitting (ml/fit_evaluator.py) --------------------------
+# The named terms below decompose player_potential into features so a logistic
+# fit on real game history can *learn* the weights instead of us guessing them.
+# Safety is exposed as per-drunk-level / per-bladder-room one-hots so the fit
+# recovers the whole penalty curve, not just a scalar.
+FEATURE_NAMES: tuple[str, ...] = (
+    "points",
+    "karaoke_card",
+    "near_karaoke_win",
+    "cup_sell",
+    "special_mat",
+    "specialist",
+    "doubler",
+    "store",
+    "store_spirits",
+    "refresher",
+    "cup_progress",
+    "threshold",
+    "cocktail",
+    "drunk_1",
+    "drunk_2",
+    "drunk_3",
+    "drunk_4",
+    "drunk_5",
+    "bladder_room_0",
+    "bladder_room_1",
+    "bladder_room_2",
+    "bladder_room_3",
+)
+
+
+def player_features(
+    gs: GameState, ps: PlayerState, w: EvalWeights = DEFAULT_WEIGHTS
+) -> dict[str, float]:
+    """Decomposed evaluator features for one player (keys == FEATURE_NAMES).
+
+    Each feature * its weight is a term of ``player_potential`` (safety terms are
+    one-hot so their weights are the penalty at each level, learned from data).
+    The lure/cocktail terms keep their internal shape and get a fitted scale.
+    """
+    f: dict[str, float] = dict.fromkeys(FEATURE_NAMES, 0.0)
+    f["points"] = float(ps.points)
+    f["karaoke_card"] = float(ps.karaoke_cards_claimed)
+    f["near_karaoke_win"] = 1.0 if ps.karaoke_cards_claimed >= 2 else 0.0
+    f["cup_sell"] = float(sum(_best_cup_sale(ps, c) for c in ps.cups))
+    f["special_mat"] = float(min(len(ps.special_ingredients), 4))
+    for cd in ps.cards:
+        ct = cd.get("card_type")
+        if ct == "specialist":
+            f["specialist"] += 1.0
+        elif ct == "cup_doubler":
+            f["doubler"] += 1.0
+        elif ct == "store":
+            f["store"] += 1.0
+            f["store_spirits"] += float(len(cd.get("stored_spirits", [])))
+        elif ct == "refresher":
+            f["refresher"] += 1.0
+    f["cup_progress"] = float(sum(_cup_progress(ps, c) for c in ps.cups))
+    f["threshold"] = _threshold_proximity(gs, ps, w)
+    f["cocktail"] = best_cocktail(gs, ps)[1]
+    drunk = max(0, min(ps.drunk_level, 5))
+    if drunk >= 1:
+        f[f"drunk_{drunk}"] = 1.0
+    room = ps.bladder_capacity - len(ps.bladder)
+    if 0 <= room <= 3:
+        f[f"bladder_room_{room}"] = 1.0
+    return f
+
+
+def weights_from_coefficients(coef: dict[str, float]) -> EvalWeights:
+    """Build EvalWeights from fitted per-feature coefficients (see FEATURE_NAMES).
+
+    The safety one-hots become the (negated) penalty tables; everything else maps
+    to its scalar weight. Coefficients are expected already normalised so that
+    ``points`` == 1.0 (the points-equivalent scale the rest of evaluate() assumes).
+    """
+    drunk = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    for lvl in range(1, 6):
+        drunk[lvl] = -coef.get(f"drunk_{lvl}", 0.0)  # coef is a bonus; penalty = -it
+    bladder = [
+        -coef.get("bladder_room_0", 0.0),
+        -coef.get("bladder_room_1", 0.0),
+        -coef.get("bladder_room_2", 0.0),
+        -coef.get("bladder_room_3", 0.0),
+    ]
+    return EvalWeights(
+        points=coef.get("points", 1.0),
+        karaoke_card=coef.get("karaoke_card", 0.0),
+        near_karaoke_win=coef.get("near_karaoke_win", 0.0),
+        cup_sell=coef.get("cup_sell", 0.0),
+        special_mat=coef.get("special_mat", 0.0),
+        specialist=coef.get("specialist", 0.0),
+        doubler=coef.get("doubler", 0.0),
+        store=coef.get("store", 0.0),
+        refresher=coef.get("refresher", 0.0),
+        cup_progress=coef.get("cup_progress", 0.0),
+        threshold=coef.get("threshold", 0.0),
+        cocktail_progress=coef.get("cocktail", 0.0),
+        drunk_penalty=tuple(drunk),
+        bladder_penalty_by_room=tuple(bladder),
+    )
 
 
 def evaluate(gs: GameState, player_id: UUID, w: EvalWeights = DEFAULT_WEIGHTS) -> float:
