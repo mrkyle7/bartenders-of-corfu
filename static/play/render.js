@@ -73,12 +73,12 @@ export function cardFace(card, { claimable = false, onclick } = {}) {
     return node;
 }
 
-function drunkMeter(level, takeCount) {
+export function drunkMeter(level, takeCount) {
     const segs = Array.from({ length: MAX_DRUNK }, (_, i) =>
         el('span.drunk-seg', { 'data-on': i < level ? '1' : undefined, 'data-danger': i >= 3 ? '1' : undefined }));
     return el('div.drunk-meter', {
         role: 'img',
-        'aria-label': `Drunk level ${level} of ${MAX_DRUNK}. You must take ${takeCount} ingredients per turn.`,
+        'aria-label': `Drunk level ${level} of ${MAX_DRUNK}. Takes ${takeCount} ingredients per turn.`,
     },
         el('span.meter-label', { text: '🍺', 'aria-hidden': 'true' }),
         el('span.drunk-segs', {}, segs),
@@ -86,7 +86,7 @@ function drunkMeter(level, takeCount) {
     );
 }
 
-function bladderRow(ps, { onclick } = {}) {
+export function bladderRow(ps, { onclick } = {}) {
     const sealed = INITIAL_BLADDER_CAPACITY - ps.bladder_capacity;
     const slots = [];
     for (let i = 0; i < ps.bladder_capacity; i++) {
@@ -187,12 +187,22 @@ export function renderCardRows(container, state, ctx) {
 
 export function renderMarket(container, state, ctx) {
     const canTake = !ctx.readOnly && ctx.canTakeNow;
-    const tokens = state.open_display.map((name, i) =>
-        el('span.market-slot', { 'data-slot': String(i) },
+    const selected = ctx.selectedSlots ?? new Set();
+    const tokens = state.open_display.map((name, i) => {
+        const isSelected = selected.has(i);
+        const slot = el('span.market-slot', { 'data-slot': String(i) },
             token(name, {
-                onclick: canTake ? (ev) => ctx.on.displayTokenTap(name, ev.currentTarget) : undefined,
-                highlight: canTake,
-            })));
+                onclick: canTake ? () => ctx.on.displayTokenTap(name, i) : undefined,
+                highlight: canTake && !isSelected,
+            }));
+        if (isSelected) slot.classList.add('selected');
+        const tok = slot.querySelector('.tok');
+        if (canTake) {
+            tok.setAttribute('aria-pressed', String(isSelected));
+            tok.setAttribute('aria-label', `${ING[name]?.label ?? name} — ${isSelected ? 'selected, tap to put back' : 'tap to pick up'}`);
+        }
+        return slot;
+    });
     const bag = el(canTake ? 'button.bag' : 'div.bag', {
         id: 'bagChip',
         onclick: canTake ? (ev) => ctx.on.bagTap(ev.currentTarget) : undefined,
@@ -294,6 +304,70 @@ export function renderDock(container, state, ctx) {
             el('span.waiting-dots', { 'aria-hidden': 'true' }),
             el('span', { text: `${ctx.nameOf(state.player_turn)} is at the bar…` }),
         ));
+        return;
+    }
+    // Assigning a take batch happens in the dock, not a sheet, so the whole
+    // mat — cups and bladder — stays visible while the player decides.
+    if (ctx.assignFlow) {
+        const flow = ctx.assignFlow;
+        const buttons = flow.options.map((opt) => {
+            const btn = el('button.dock-btn', {
+                onclick: opt.onclick,
+                disabled: !!opt.disabled,
+                'aria-label': `${opt.label}${opt.disabled && opt.reason ? ` — ${opt.reason}` : opt.sub ? ` — ${opt.sub}` : ''}`,
+            },
+                el('span.dock-btn-icon', { text: opt.icon, 'aria-hidden': 'true' }),
+                el('span.dock-btn-label', { text: opt.label }),
+                (opt.disabled && opt.reason) || opt.sub
+                    ? el('span.dock-btn-sub', { text: opt.disabled ? opt.reason : opt.sub })
+                    : null,
+            );
+            if (opt.danger) btn.classList.add('danger');
+            return btn;
+        });
+        if (flow.cancellable) {
+            buttons.push(el('button.dock-btn.dock-end', {
+                onclick: () => ctx.on.assignCancel(),
+                'aria-label': 'Put the picked-up ingredients back',
+            },
+                el('span.dock-btn-icon', { text: '↩️', 'aria-hidden': 'true' }),
+                el('span.dock-btn-label', { text: 'Put back' }),
+            ));
+        }
+        container.replaceChildren(
+            el('div.dock-prompt.dock-assign-prompt', { 'aria-live': 'polite' },
+                token(flow.tokenName, { size: 'sm' }),
+                el('span', { text: flow.title }),
+            ),
+            el('div.dock-btns', {}, buttons),
+        );
+        return;
+    }
+    // Picked-up display ingredients waiting to be assigned take over the dock
+    if (ctx.selectedCount > 0) {
+        const remaining = ps.take_count - state.ingredients_taken_this_turn - ctx.selectedCount;
+        container.replaceChildren(
+            el('div.dock-prompt', {
+                text: remaining > 0 ? `Tap more ingredients, or assign (${remaining} more allowed)` : 'That’s your limit — assign them',
+                'aria-live': 'polite',
+            }),
+            el('div.dock-btns', {},
+                el('button.dock-btn.dock-assign', {
+                    onclick: () => ctx.on.assignSelected(),
+                    'aria-label': `Assign ${ctx.selectedCount} selected ingredient${ctx.selectedCount === 1 ? '' : 's'}`,
+                },
+                    el('span.dock-btn-icon', { text: '🫳', 'aria-hidden': 'true' }),
+                    el('span.dock-btn-label', { text: `Assign ${ctx.selectedCount}` }),
+                ),
+                el('button.dock-btn.dock-end', {
+                    onclick: () => ctx.on.clearSelection(),
+                    'aria-label': 'Put selected ingredients back',
+                },
+                    el('span.dock-btn-icon', { text: '↩️', 'aria-hidden': 'true' }),
+                    el('span.dock-btn-label', { text: 'Put back' }),
+                ),
+            ),
+        );
         return;
     }
     if (ctx.takeInProgress) {

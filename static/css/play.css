@@ -309,7 +309,31 @@ button.card.claimable {
 
 .market-tokens { display: flex; gap: 9px; }
 
-.market-slot { display: inline-flex; }
+.market-slot { display: inline-flex; position: relative; }
+
+.market-slot.selected .tok {
+    border-color: var(--amber);
+    box-shadow: 0 0 12px var(--glow);
+    transform: translateY(-4px);
+}
+
+.market-slot.selected::after {
+    content: '✓';
+    position: absolute;
+    top: -7px;
+    right: -5px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--amber);
+    color: var(--amber-text);
+    font-size: 11px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
 
 .tok {
     display: inline-flex;
@@ -318,6 +342,7 @@ button.card.claimable {
     width: 40px;
     height: 40px;
     border-radius: 50%;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
     background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), transparent 42%), var(--tok-color);
     color: var(--tok-text);
     border: 2px solid rgba(0, 0, 0, 0.35);
@@ -593,6 +618,23 @@ button.my-card { border-color: rgba(245, 182, 74, 0.5); }
 .dock-btn-icon { font-size: 17px; line-height: 1; }
 .dock-btn-label { font-size: 10.5px; font-weight: 700; }
 
+.dock-btn-sub { font-size: 9px; color: var(--muted); line-height: 1; }
+
+.dock-btn.danger {
+    border-color: var(--danger);
+    background: rgba(255, 133, 133, 0.12);
+}
+
+.dock-btn.danger .dock-btn-sub { color: var(--danger); }
+
+.dock-assign-prompt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
 .dock-free {
     position: absolute;
     top: -7px;
@@ -606,6 +648,26 @@ button.my-card { border-color: rgba(245, 182, 74, 0.5); }
 }
 
 .dock-end { background: var(--surface); border-color: var(--line); }
+
+.dock-assign {
+    background: linear-gradient(180deg, var(--amber), #dd9a30);
+    color: var(--amber-text);
+}
+
+/* Count picker in the bag draw sheet */
+.count-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding: 4px 0 8px; }
+
+.count-btn {
+    min-width: 48px;
+    min-height: 48px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.count-btn:active { transform: scale(0.95); }
 
 .dock-msg {
     display: flex;
