@@ -17,6 +17,17 @@ import {
 const POLL_MS = 2000;
 const gameId = new URLSearchParams(window.location.search).get('id');
 
+// Size the app to the *visible* viewport. Some Android browsers report
+// 100dvh taller than what is actually visible (the system gesture bar
+// overlays the bottom), which pushed the footer off screen.
+function fitViewport() {
+    const h = window.visualViewport?.height ?? window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', `${Math.round(h)}px`);
+}
+window.visualViewport?.addEventListener('resize', fitViewport);
+window.addEventListener('resize', fitViewport);
+fitViewport();
+
 let me = null;
 let game = null;
 let valid = null;
