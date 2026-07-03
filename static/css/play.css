@@ -21,18 +21,25 @@
 
 html, body { height: 100%; margin: 0; }
 
-/* Paint the page colour behind safe-area insets (e.g. the Android gesture
-   bar) — otherwise the browser shows a white strip below the footer. */
+/* Android edge-to-edge: declare a dark scheme and explicit background
+   colours so the browser paints the gesture-bar scrim dark instead of
+   white, and draws no light strip behind the safe-area insets. */
+:root { color-scheme: dark; }
 html { background: var(--bg2); }
 
 body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color: var(--text);
-    background: radial-gradient(120% 90% at 50% 0%, var(--bg1) 0%, var(--bg2) 70%);
+    /* Explicit background-color matters: a gradient alone computes to a
+       transparent colour, which Android uses for its bottom-bar scrim. */
+    background-color: var(--bg2);
+    background-image: radial-gradient(120% 90% at 50% 0%, var(--bg1) 0%, var(--bg2) 70%);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     grid-template-columns: minmax(0, 1fr);
-    height: 100dvh;
+    /* --app-height tracks visualViewport (set in app.js) — more reliable
+       than dvh on Android, where the gesture bar can overlay the page. */
+    height: var(--app-height, 100dvh);
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
 }
@@ -736,7 +743,9 @@ button.my-card { border-color: rgba(245, 182, 74, 0.5); }
     display: flex;
     justify-content: space-around;
     gap: 4px;
-    padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
+    /* Clear the gesture-navigation zone: at least the safe-area inset,
+       and never less than a small cushion above the gesture pill. */
+    padding: 4px 8px max(calc(4px + env(safe-area-inset-bottom, 0px)), 14px);
     border-top: 1px solid var(--line);
 }
 
