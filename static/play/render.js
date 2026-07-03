@@ -83,6 +83,7 @@ export function drunkMeter(level, takeCount) {
         el('span.meter-label', { text: '🍺', 'aria-hidden': 'true' }),
         el('span.drunk-segs', {}, segs),
         el('span.meter-num', { text: String(level) }),
+        el('span.take-hint', { text: `takes ${takeCount}/turn` }),
     );
 }
 
@@ -334,13 +335,23 @@ export function renderDock(container, state, ctx) {
                 el('span.dock-btn-label', { text: 'Put back' }),
             ));
         }
-        container.replaceChildren(
+        // With more than one in the batch, show the whole queue: assigned
+        // ones dimmed with where they went, the current one highlighted.
+        const queue = flow.queue.length > 1
+            ? el('div.assign-queue', { 'aria-label': `Assigning ${flow.queue.length} ingredients` },
+                flow.queue.map((q) => el('span.assign-queue-item', { 'data-state': q.state },
+                    token(q.name, { size: 'sm' }),
+                    q.badge ? el('span.assign-queue-badge', { text: q.badge, 'aria-hidden': 'true' }) : null,
+                )))
+            : null;
+        container.replaceChildren(...[
+            queue,
             el('div.dock-prompt.dock-assign-prompt', { 'aria-live': 'polite' },
-                token(flow.tokenName, { size: 'sm' }),
+                queue ? null : token(flow.tokenName, { size: 'sm' }),
                 el('span', { text: flow.title }),
             ),
             el('div.dock-btns', {}, buttons),
-        );
+        ].filter(Boolean));
         return;
     }
     // Picked-up display ingredients waiting to be assigned take over the dock
@@ -382,12 +393,14 @@ export function renderDock(container, state, ctx) {
     for (const def of DOCK_ACTIONS) {
         const info = ctx.availableTypes?.get(def.type);
         if (!info) continue;
+        // The drunker you are, the more you must take — show the count up front
+        const label = def.type === 'take_ingredients' ? `Take ${ps.take_count}` : def.label;
         buttons.push(el('button.dock-btn', {
             onclick: () => ctx.on.dockAction(def.type),
-            'aria-label': `${def.label}${info.is_free ? ' (free action)' : ''}`,
+            'aria-label': `${label}${def.type === 'take_ingredients' ? ' ingredients' : ''}${info.is_free ? ' (free action)' : ''}`,
         },
             el('span.dock-btn-icon', { text: def.icon, 'aria-hidden': 'true' }),
-            el('span.dock-btn-label', { text: def.label }),
+            el('span.dock-btn-label', { text: label }),
             info.is_free ? el('span.dock-free', { text: '⚡ free', title: 'Free action — does not use your turn' }) : null,
         ));
     }
