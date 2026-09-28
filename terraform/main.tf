@@ -436,6 +436,13 @@ resource "google_cloud_run_v2_service" "bartenders" {
         name  = "BARTENDERS_URL"
         value = "https://${local.bartenders_host}"
       }
+
+      # Share the login cookie across the apex and all subdomains, so a login
+      # carries over (see app/auth_cookie.py).
+      env {
+        name  = "COOKIE_DOMAIN"
+        value = var.domain_name
+      }
     }
   }
 

@@ -13,6 +13,7 @@ from app.logging_config import setup_logging, CanonicalLogMiddleware
 from app.db import db
 from app import push
 from app.landing import LandingHostMiddleware
+from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 import traceback
@@ -64,14 +65,7 @@ async def refresh_token(request: Request):
         return JSONResponse(status_code=401, content={"error": "User not found"})
     token = jwt_handler.sign(user)
     response = JSONResponse(content={"ok": True})
-    response.set_cookie(
-        key="userjwt",
-        value=token,
-        httponly=True,
-        secure=False,
-        samesite="Strict",
-        max_age=14 * 24 * 60 * 60,
-    )
+    set_auth_cookie(response, token)
     return response
 
 
@@ -144,7 +138,7 @@ def _require_auth(request: Request) -> tuple[TokenUser | None, JSONResponse | No
                             "error": "Token has been invalidated. Please log in again."
                         },
                     )
-                    response.delete_cookie(key="userjwt")
+                    clear_auth_cookie(response)
                     return None, response
             except (ValueError, TypeError):
                 pass
@@ -552,9 +546,7 @@ async def register(user: UserCreate):
         response = JSONResponse(
             content=created.to_dict(), status_code=201, headers={"Location": "/"}
         )
-        response.set_cookie(
-            key="userjwt", value=token, httponly=True, secure=False, samesite="Strict"
-        )
+        set_auth_cookie(response, token, max_age=None)
         return response
     except Exception as e:
         logger.exception("Error registering user")
@@ -580,7 +572,7 @@ async def logout(request: Request):
         except Exception:
             logger.exception("Error recording logout for user %s", token_user.username)
     response = JSONResponse(content={"message": "Logged out"}, status_code=200)
-    response.delete_cookie(key="userjwt")
+    clear_auth_cookie(response)
     logger.info("User logged out")
     return response
 
@@ -595,14 +587,7 @@ async def login(userLogin: UserLogin):
             response = JSONResponse(
                 content=user.to_dict(), status_code=200, headers={"Location": "/"}
             )
-            response.set_cookie(
-                key="userjwt",
-                value=token,
-                httponly=True,
-                secure=False,
-                samesite="Strict",
-                max_age=14 * 24 * 60 * 60,  # 14 days in seconds
-            )
+            set_auth_cookie(response, token)
             return response
         else:
             logger.warning("Authentication failed for user %s", userLogin.username)
@@ -625,7 +610,7 @@ async def user_details(request: Request):
             response = JSONResponse(
                 content={"error": "User not found"}, status_code=404
             )
-            response.delete_cookie(key="userjwt")
+            clear_auth_cookie(response)
             return response
         logger.info("User details for %s", token_user.username)
         return JSONResponse(
@@ -635,7 +620,7 @@ async def user_details(request: Request):
     except Exception as e:
         logger.error("Error verifying token: %s", str(e))
         response = JSONResponse(content={"error": str(e)}, status_code=400)
-        response.delete_cookie(key="userjwt")
+        clear_auth_cookie(response)
         return response
 
 
@@ -717,7 +702,7 @@ async def delete_account(request: Request):
         userManager.delete_user(token_user.id)
         logger.info("Account deleted for user %s", token_user.username)
         response = JSONResponse(content={"message": "Account deleted"})
-        response.delete_cookie(key="userjwt")
+        clear_auth_cookie(response)
         return response
     except UserValidationError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})

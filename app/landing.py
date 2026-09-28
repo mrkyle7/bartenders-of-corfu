@@ -7,6 +7,9 @@ The Bartenders service answers on two hostnames:
   Every other path there redirects to the same path on ``BARTENDERS_URL`` so
   old bookmarks, share links and push-notification links keep working.
 
+Responses on the apex also move an old host-only login cookie onto the
+shared domain (see ``app/auth_cookie.py``), so players stay logged in.
+
 Both settings come from the environment. When ``LANDING_HOST`` is unset (local
 runs, tests, k3s) the middleware does nothing.
 """
@@ -16,6 +19,8 @@ import os
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, RedirectResponse, Response
+
+from app.auth_cookie import migrate_legacy_cookie
 
 LANDING_PAGE = os.path.join("static", "landing.html")
 
@@ -55,7 +60,9 @@ class LandingHostMiddleware(BaseHTTPMiddleware):
 
         path = request.url.path
         if path == "/":
-            return FileResponse(LANDING_PAGE, headers=NO_CACHE)
+            response = FileResponse(LANDING_PAGE, headers=NO_CACHE)
+            migrate_legacy_cookie(request, response)
+            return response
         if path == "/sw.js":
             return Response(
                 RETIRE_SERVICE_WORKER,
@@ -72,4 +79,6 @@ class LandingHostMiddleware(BaseHTTPMiddleware):
         query = request.url.query
         location = f"{target}{path}" + (f"?{query}" if query else "")
         # 307 keeps the method and body, and is not cached forever by browsers.
-        return RedirectResponse(location, status_code=307)
+        response = RedirectResponse(location, status_code=307)
+        migrate_legacy_cookie(request, response)
+        return response
