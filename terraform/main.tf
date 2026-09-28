@@ -1,5 +1,10 @@
-# Bartenders of Corfu — GCP infrastructure.
-# Cloud Run service with Supabase (external), Artifact Registry, Secret Manager.
+# Cheetah Moon Games — GCP infrastructure.
+#
+#   cheetahmoongames.com             games home page (served by the bartenders service)
+#   bartenders.cheetahmoongames.com  Bartenders of Corfu (Cloud Run: bartenders)
+#   boxer.cheetahmoongames.com       The Boxer (Cloud Run: the-boxer, deployed from mrkyle7/the-boxer)
+#
+# Bartenders uses Supabase (external), Artifact Registry and Secret Manager.
 
 variable "env" {
   type        = string
@@ -34,7 +39,19 @@ variable "bucket_name" {
 variable "domain_name" {
   type        = string
   default     = "cheetahmoongames.com"
-  description = "Custom domain served by the app"
+  description = "Apex domain. Serves the games home page; every other path redirects to the Bartenders subdomain."
+}
+
+variable "bartenders_subdomain" {
+  type        = string
+  default     = "bartenders"
+  description = "Subdomain that serves Bartenders of Corfu"
+}
+
+variable "boxer_subdomain" {
+  type        = string
+  default     = "boxer"
+  description = "Subdomain that serves The Boxer"
 }
 
 variable "ci_service_account" {
@@ -47,6 +64,18 @@ variable "github_repo" {
   type        = string
   default     = "mrkyle7/bartenders-of-corfu"
   description = "GitHub repository (owner/repo) allowed to authenticate via Workload Identity Federation."
+}
+
+variable "boxer_github_repo" {
+  type        = string
+  default     = "mrkyle7/the-boxer"
+  description = "GitHub repository for The Boxer, also allowed to deploy via Workload Identity Federation."
+}
+
+locals {
+  bartenders_host = "${var.bartenders_subdomain}.${var.domain_name}"
+  boxer_host      = "${var.boxer_subdomain}.${var.domain_name}"
+  github_repos    = [var.github_repo, var.boxer_github_repo]
 }
 
 # ---------------------------------------------------------------------------
@@ -85,7 +114,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
   }
-  attribute_condition = "attribute.repository == '${var.github_repo}'"
+  attribute_condition = "attribute.repository in [${join(", ", [for r in local.github_repos : "'${r}'"])}]"
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
@@ -96,6 +125,13 @@ resource "google_service_account_iam_member" "wif_github_terraform" {
   service_account_id = "projects/${var.project_name}/serviceAccounts/${var.ci_service_account}"
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}
+
+# The Boxer's repo deploys with the same CI service account.
+resource "google_service_account_iam_member" "wif_github_boxer" {
+  service_account_id = "projects/${var.project_name}/serviceAccounts/${var.ci_service_account}"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.boxer_github_repo}"
 }
 
 # ---------------------------------------------------------------------------
@@ -388,6 +424,18 @@ resource "google_cloud_run_v2_service" "bartenders" {
           }
         }
       }
+
+      # On the apex domain the app serves only the home page and redirects
+      # everything else to the Bartenders subdomain (see app/landing.py).
+      env {
+        name  = "LANDING_HOST"
+        value = var.domain_name
+      }
+
+      env {
+        name  = "BARTENDERS_URL"
+        value = "https://${local.bartenders_host}"
+      }
     }
   }
 
@@ -420,6 +468,8 @@ resource "google_cloud_run_service_iam_member" "public" {
 
 # --- Domain + DNS -------------------------------------------------------------
 
+# The apex stays mapped to the bartenders service, which serves the home page
+# there and redirects every other path to the Bartenders subdomain.
 resource "google_cloud_run_domain_mapping" "cheetahmoongames" {
   project  = var.project_name
   location = var.region
@@ -460,6 +510,140 @@ resource "google_dns_record_set" "cheetahmoongames_aaaa" {
   ])
 }
 
+resource "google_cloud_run_domain_mapping" "bartenders" {
+  project  = var.project_name
+  location = var.region
+  name     = local.bartenders_host
+
+  metadata {
+    namespace = var.project_name
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.bartenders.name
+  }
+}
+
+# Subdomain mappings are always served through ghs.googlehosted.com.
+resource "google_dns_record_set" "bartenders_cname" {
+  project      = var.project_name
+  name         = "${local.bartenders_host}."
+  type         = "CNAME"
+  ttl          = 300
+  managed_zone = "cheetahmoongames-com"
+  rrdatas      = ["ghs.googlehosted.com."]
+}
+
+# ---------------------------------------------------------------------------
+# The Boxer — Node.js WebSocket game, deployed by mrkyle7/the-boxer's own
+# workflow (image: <region>-docker.pkg.dev/<project>/docker-us/the-boxer).
+# ---------------------------------------------------------------------------
+
+resource "google_service_account" "boxer_run" {
+  project      = var.project_name
+  account_id   = "the-boxer-run"
+  display_name = "Cloud Run service account for the-boxer"
+}
+
+resource "google_service_account_iam_member" "ci_impersonates_boxer_run_sa" {
+  service_account_id = google_service_account.boxer_run.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.ci_service_account}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "boxer_run_pulls_images" {
+  project    = var.project_name
+  location   = google_artifact_registry_repository.docker_us.location
+  repository = google_artifact_registry_repository.docker_us.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.boxer_run.email}"
+}
+
+resource "google_cloud_run_v2_service" "boxer" {
+  project             = var.project_name
+  name                = "the-boxer"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  deletion_protection = false
+
+  template {
+    service_account = google_service_account.boxer_run.email
+
+    # Fights are WebSocket connections; let a whole match fit in one request.
+    timeout          = "3600s"
+    session_affinity = true
+
+    # Rooms live in memory, so both fighters must reach the same instance.
+    # One instance holds many WebSocket connections at once.
+    max_instance_request_concurrency = 1000
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 1
+    }
+
+    containers {
+      image = "us-docker.pkg.dev/cloudrun/container/hello"
+
+      ports {
+        container_port = 8080
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+        cpu_idle = true
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+
+  depends_on = [
+    google_project_service.cloudrun,
+    google_artifact_registry_repository_iam_member.boxer_run_pulls_images,
+  ]
+}
+
+resource "google_cloud_run_service_iam_member" "boxer_public" {
+  project  = google_cloud_run_v2_service.boxer.project
+  location = google_cloud_run_v2_service.boxer.location
+  service  = google_cloud_run_v2_service.boxer.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+resource "google_cloud_run_domain_mapping" "boxer" {
+  project  = var.project_name
+  location = var.region
+  name     = local.boxer_host
+
+  metadata {
+    namespace = var.project_name
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.boxer.name
+  }
+}
+
+resource "google_dns_record_set" "boxer_cname" {
+  project      = var.project_name
+  name         = "${local.boxer_host}."
+  type         = "CNAME"
+  ttl          = 300
+  managed_zone = "cheetahmoongames-com"
+  rrdatas      = ["ghs.googlehosted.com."]
+}
+
 # ---------------------------------------------------------------------------
 # Outputs
 # ---------------------------------------------------------------------------
@@ -472,4 +656,9 @@ output "cloud_run_url" {
 output "cloud_run_service_account" {
   value       = google_service_account.bartenders_run.email
   description = "Service account used by the Cloud Run service"
+}
+
+output "boxer_cloud_run_url" {
+  value       = google_cloud_run_v2_service.boxer.uri
+  description = "Direct Cloud Run URL for The Boxer"
 }

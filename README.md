@@ -86,7 +86,17 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
 
 # Infrastructure
 
-All GCP resources are managed in `terraform/`. This includes the Cloud Run service, Artifact Registry, Secret Manager, DNS, Workload Identity Federation, and all IAM bindings.
+All GCP resources are managed in `terraform/`. This includes the Cloud Run services, Artifact Registry, Secret Manager, DNS, Workload Identity Federation, and all IAM bindings.
+
+The project hosts more than one game:
+
+| Host | Serves |
+| --- | --- |
+| `cheetahmoongames.com` | Games home page (`static/landing.html`). Every other path redirects to the Bartenders subdomain, so old links keep working. |
+| `bartenders.cheetahmoongames.com` | Bartenders of Corfu |
+| `boxer.cheetahmoongames.com` | [The Boxer](https://github.com/mrkyle7/the-boxer), a separate Cloud Run service (`the-boxer`) that deploys from its own repo |
+
+The apex and the Bartenders subdomain both point at the `bartenders` service. `app/landing.py` tells them apart by the `Host` header, using the `LANDING_HOST` and `BARTENDERS_URL` environment variables set in terraform. With `LANDING_HOST` unset (local runs, tests) the app behaves exactly as before.
 
 ```
 cd terraform
