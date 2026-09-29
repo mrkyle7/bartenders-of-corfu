@@ -958,6 +958,7 @@ function openMenuSheet() {
         icon: '🕹️', label: 'Switch to classic view',
         onclick: () => {
             localStorage.setItem('bocTableView', '0');
+            localStorage.setItem('bocUi', 'classic');
             window.location.href = `/game?id=${gameId}`;
         },
     }));

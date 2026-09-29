@@ -9,11 +9,18 @@
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4a2c0e">
     <script>
-        // Table view opt-in: when the home-page toggle is on, this game is
-        // played in the new UI instead. The classic UI stays the default.
-        if (localStorage.getItem('bocTableView') === '1') {
-            window.location.replace('/play' + window.location.search);
-        }
+        // The view picked on the home page: 'bar' (bar top) or 'table'
+        // (table view) play this game in that UI instead. Classic is the
+        // default. 'bocTableView' is the older table-view switch.
+        (function () {
+            let view = 'classic';
+            try {
+                view = localStorage.getItem('bocUi')
+                    || (localStorage.getItem('bocTableView') === '1' ? 'table' : 'classic');
+            } catch (e) { /* storage blocked: stay on classic */ }
+            if (view === 'bar') window.location.replace('/bar' + window.location.search);
+            else if (view === 'table') window.location.replace('/play' + window.location.search);
+        })();
     </script>
     <script src="/static/theme.js"></script>
     <link rel="stylesheet" href="/static/css/base.css">
