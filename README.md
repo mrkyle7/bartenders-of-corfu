@@ -94,6 +94,12 @@ This repo's `.github/workflows/ci-cd.yml` still deploys the app itself: it pushe
 
 With `COOKIE_DOMAIN=cheetahmoongames.com` (set in that Terraform), the login cookie is shared across every `cheetahmoongames.com` subdomain; see `app/auth_cookie.py`. Unset, as in local runs and tests, the cookie is host-only.
 
+Bartenders' accounts are the Cheetah Moon accounts for every game on the site:
+
+- Players sign in at `https://cheetahmoongames.com/login`. With `LOGIN_URL` set (also in that Terraform), `GET /login` here redirects there, with `next` pointing back to the page that sent the player. Unset, `/login` serves the page in `static/login.html` as before.
+- The home page passes sign-in, sign-up and sign-out on to `/login`, `/register`, `/logout` and `/userDetails` here.
+- `GET /v1/auth/keys/{kid}` returns the public key for a login token's `kid`, so other games can check the `userjwt` cookie themselves.
+
 # Testing
 
 Run `uv run pytest`

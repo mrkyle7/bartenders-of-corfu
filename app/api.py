@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from app.gameManager import GameManager
 from app.game import GameException, Status
@@ -16,6 +16,7 @@ from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 import traceback
+from urllib.parse import urlencode
 
 from app.user import TokenUser, UserValidationError
 from typing import Optional, List
@@ -156,8 +157,42 @@ async def root():
     )
 
 
+def _login_url() -> str | None:
+    """Where players sign in, when that's the shared cheetahmoongames.com page."""
+    return os.getenv("LOGIN_URL", "").strip() or None
+
+
+def _public_origin(request: Request) -> str:
+    """This site's origin as the browser sees it (Cloud Run terminates TLS)."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    return f"{proto.split(',')[0].strip()}://{request.url.netloc}"
+
+
+def _return_to(request: Request) -> str:
+    """The page on this site to come back to after signing in.
+
+    A ``next`` path wins, then the page that sent the player here (pages send
+    players to ``/login`` when they aren't signed in), then the home page.
+    """
+    origin = _public_origin(request)
+    next_path = request.query_params.get("next", "")
+    if next_path.startswith("/") and not next_path.startswith("//"):
+        return origin + next_path
+    referer = request.headers.get("referer", "")
+    if referer.startswith(origin + "/") and not referer.startswith(origin + "/login"):
+        return referer
+    return origin + "/"
+
+
 @app.get("/login")
-async def login_page():
+async def login_page(request: Request):
+    login_url = _login_url()
+    if login_url:
+        # Signing in happens on the shared page, which sends the player back here.
+        return RedirectResponse(
+            f"{login_url}?{urlencode({'next': _return_to(request)})}",
+            status_code=302,
+        )
     login_path = os.path.join("static", "login.html")
     return FileResponse(
         login_path,
@@ -594,6 +629,26 @@ async def login(userLogin: UserLogin):
     except Exception as e:
         logger.error("Error during login for user %s: %s", userLogin.username, str(e))
         return JSONResponse(content={"error": str(e)}, status_code=400)
+
+
+@app.get("/v1/auth/keys/{kid}")
+async def auth_public_key(kid: str):
+    """The public key that checks login cookies signed with ``kid``.
+
+    Other cheetahmoongames.com games read the shared ``userjwt`` cookie and use
+    this to verify it themselves. Public keys are not secret.
+    """
+    try:
+        key_id = UUID(kid)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "Unknown key"})
+    pem = db.get_public_key(key_id)
+    if pem is None:
+        return JSONResponse(status_code=404, content={"error": "Unknown key"})
+    return JSONResponse(
+        content={"kid": str(key_id), "alg": jwt_handler.algorithm, "pem": pem.decode()},
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.get("/userDetails")
