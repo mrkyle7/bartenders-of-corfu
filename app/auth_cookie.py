@@ -4,16 +4,14 @@ With ``COOKIE_DOMAIN`` set (e.g. ``cheetahmoongames.com``) the cookie carries a
 ``Domain`` attribute, so one login works on the apex and every subdomain. With
 it unset (local runs, tests, k3s) the cookie is host-only, exactly as before.
 
-Cookies issued before ``COOKIE_DOMAIN`` existed are host-only on the apex and
-never reach a subdomain. ``migrate_legacy_cookie`` moves such a cookie onto the
-shared domain when its owner next visits the apex (the landing middleware calls
-it), so existing players stay logged in when they follow a link to the game.
+Cookies issued before ``COOKIE_DOMAIN`` existed are host-only on the apex.
+The cheetahmoongames.com home page (mrkyle7/cheetahmoongames) moves them onto
+the shared domain as players pass through it.
 """
 
 import os
 from typing import Optional
 
-from starlette.requests import Request
 from starlette.responses import Response
 
 COOKIE_NAME = "userjwt"
@@ -46,31 +44,3 @@ def clear_auth_cookie(response: Response) -> None:
     if domain:
         response.delete_cookie(key=COOKIE_NAME)
     response.delete_cookie(key=COOKIE_NAME, domain=domain)
-
-
-def _login_cookie_values(request: Request) -> list[str]:
-    # request.cookies collapses duplicates, so read the raw header: a browser
-    # holding both a host-only and a shared cookie sends the name twice.
-    values = []
-    for part in request.headers.get("cookie", "").split(";"):
-        name, sep, value = part.strip().partition("=")
-        if sep and name == COOKIE_NAME:
-            values.append(value)
-    return values
-
-
-def migrate_legacy_cookie(request: Request, response: Response) -> None:
-    """On the apex, move a host-only login cookie onto the shared domain."""
-    if not cookie_domain():
-        return
-    values = _login_cookie_values(request)
-    if not values:
-        return
-    # Delete the host-only cookie first, then (re)set the shared one. Browsers
-    # disagree on whether the two are the same cookie; in this order every
-    # browser ends up with just the shared cookie.
-    response.delete_cookie(key=COOKIE_NAME)
-    if len(values) == 1:
-        set_auth_cookie(response, values[0])
-    # With two copies the shared cookie already exists and is the newer login,
-    # so only the stale host-only copy is removed.
