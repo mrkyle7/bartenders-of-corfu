@@ -138,7 +138,30 @@ main {
     gap: 8px;
 }
 
+/* Back to the other games on cheetahmoongames.com, top left. */
+.site-home {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 1.1em;
+    color: var(--theme-link);
+    text-decoration: none;
+}
+
+.site-home:hover,
+.site-home:focus-visible {
+    text-decoration: underline;
+}
+
 @media (max-width: 600px) {
+    .site-home {
+        position: static;
+        display: block;
+        text-align: center;
+        padding: 10px 8px 0;
+        font-size: 0.95em;
+    }
+
     .user-header {
         position: static;
         justify-content: center;
