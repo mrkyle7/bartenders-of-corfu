@@ -74,7 +74,7 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
 | API endpoints | `POST /v1/push-subscriptions`, `DELETE /v1/push-subscriptions`, `GET /vapid-public-key` |
 | Service worker handler | `static/sw.js` — `push` event |
 | Browser subscription | `static/script.js` + `static/game.js` — `subscribeToPush()` |
-| Infrastructure | `terraform/main.tf` — `vapid-private-key` and `vapid-public-key` secrets |
+| Infrastructure | `terraform/bartenders.tf` in [mrkyle7/cheetahmoongames](https://github.com/mrkyle7/cheetahmoongames) — `vapid-private-key` and `vapid-public-key` secrets |
 
 ## References
 
@@ -86,26 +86,13 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
 
 # Infrastructure
 
-All GCP resources are managed in `terraform/`. This includes the Cloud Run services, Artifact Registry, Secret Manager, DNS, Workload Identity Federation, and all IAM bindings.
+Bartenders runs at **https://bartenders.cheetahmoongames.com**, one of the games on [cheetahmoongames.com](https://cheetahmoongames.com).
 
-The project hosts more than one game:
+Its Google Cloud setup lives in **[mrkyle7/cheetahmoongames](https://github.com/mrkyle7/cheetahmoongames)**, next to the other games: `terraform/bartenders.tf` covers the Cloud Run service, secrets, subdomain and IAM. Change infrastructure there; its workflow applies Terraform when changes merge.
 
-| Host | Serves |
-| --- | --- |
-| `cheetahmoongames.com` | Games home page (`static/landing.html`). Every other path redirects to the Bartenders subdomain, so old links keep working. |
-| `bartenders.cheetahmoongames.com` | Bartenders of Corfu |
-| `boxer.cheetahmoongames.com` | [The Boxer](https://github.com/mrkyle7/the-boxer), a separate Cloud Run service (`the-boxer`) that deploys from its own repo |
+This repo's `.github/workflows/ci-cd.yml` still deploys the app itself: it pushes Supabase migrations, syncs the Supabase secrets and deploys a new image to the `bartenders` service.
 
-The apex and the Bartenders subdomain both point at the `bartenders` service. `app/landing.py` tells them apart by the `Host` header, using the `LANDING_HOST` and `BARTENDERS_URL` environment variables set in terraform. With `LANDING_HOST` unset (local runs, tests) the app behaves exactly as before.
-
-```
-cd terraform
-terraform init
-terraform plan
-terraform apply
-```
-
-The only manual prerequisite is creating the `github-terraform` service account itself and verifying domain ownership (`gcloud domains verify cheetahmoongames.com`). Everything else is declared in terraform.
+With `COOKIE_DOMAIN=cheetahmoongames.com` (set in that Terraform), the login cookie is shared across every `cheetahmoongames.com` subdomain; see `app/auth_cookie.py`. Unset, as in local runs and tests, the cookie is host-only.
 
 # Testing
 

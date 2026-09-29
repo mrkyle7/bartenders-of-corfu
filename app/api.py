@@ -12,7 +12,6 @@ from app.JWTHandler import JWTHandler
 from app.logging_config import setup_logging, CanonicalLogMiddleware
 from app.db import db
 from app import push
-from app.landing import LandingHostMiddleware
 from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
@@ -94,8 +93,6 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# Innermost, so landing-host responses still get HSTS and canonical logging.
-app.add_middleware(LandingHostMiddleware)
 app.add_middleware(HSTSMiddleware)
 app.add_middleware(NoCacheStaticMiddleware)
 app.add_middleware(CanonicalLogMiddleware)
