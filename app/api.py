@@ -232,6 +232,20 @@ async def play_page():
     )
 
 
+@app.get("/bar")
+async def bar_page():
+    """Bar top view: the game laid out like the physical box on a table."""
+    bar_path = os.path.join("static", "bar.html")
+    return FileResponse(
+        bar_path,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
 @app.get("/admin")
 async def admin_page():
     admin_path = os.path.join("static", "admin.html")

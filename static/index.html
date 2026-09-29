@@ -31,12 +31,13 @@
         <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender, before you get too drunk!
         </p>
         <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
-        <label class="ui-toggle" for="tableViewToggle">
-            <input type="checkbox" id="tableViewToggle" aria-describedby="tableViewDesc">
-            <span class="ui-toggle-track" aria-hidden="true"></span>
-            <span class="ui-toggle-text">✨ New table view</span>
-        </label>
-        <small id="tableViewDesc" class="ui-toggle-desc">Try the redesigned one-screen game UI</small>
+        <fieldset class="ui-choice" aria-describedby="uiChoiceDesc">
+            <legend>How the game looks</legend>
+            <label><input type="radio" name="uiChoice" value="classic" id="uiClassic"><span>Classic</span></label>
+            <label><input type="radio" name="uiChoice" value="table" id="tableViewToggle"><span>Table view</span></label>
+            <label><input type="radio" name="uiChoice" value="bar" id="uiBar"><span>Bar top</span></label>
+        </fieldset>
+        <small id="uiChoiceDesc" class="ui-toggle-desc">Bar top lays the game out like the real box: cards, tokens, glasses and mats.</small>
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <section class="game-section hidden" id="myGamesSection">
             <h2>Your Games</h2>
@@ -81,28 +82,47 @@
         setLogOutLink();
         init();
 
-        // Table view opt-in toggle. Game links keep pointing at /game; the
-        // classic page redirects to /play when this preference is on.
-        const tableViewToggle = document.getElementById('tableViewToggle');
-        tableViewToggle.checked = localStorage.getItem('bocTableView') === '1';
-        tableViewToggle.addEventListener('change', () => {
-            localStorage.setItem('bocTableView', tableViewToggle.checked ? '1' : '0');
+        // Which game UI to use. Game links keep pointing at /game; the classic
+        // page sends players on to /play or /bar when they picked one.
+        let uiChoice = 'classic';
+        try {
+            uiChoice = localStorage.getItem('bocUi')
+                || (localStorage.getItem('bocTableView') === '1' ? 'table' : 'classic');
+        } catch (e) { /* storage blocked: classic */ }
+        document.querySelectorAll('input[name="uiChoice"]').forEach((input) => {
+            input.checked = input.value === uiChoice;
+            input.addEventListener('change', () => {
+                if (!input.checked) return;
+                try {
+                    localStorage.setItem('bocUi', input.value);
+                    localStorage.setItem('bocTableView', input.value === 'table' ? '1' : '0');
+                } catch (e) { /* storage blocked */ }
+            });
         });
     </script>
     <style>
-        /* Table-view opt-in switch. base.css styles bare inputs as 80%-wide
-           blocks, so the real checkbox is visually hidden and a pill track
-           is drawn instead. */
-        .ui-toggle {
+        /* Game UI choice: three printed tiles, the picked one filled. */
+        .ui-choice {
             display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            margin: 6px auto 0;
-            cursor: pointer;
-            user-select: none;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
+            margin: 10px auto 0;
+            padding: 0;
+            border: 0;
         }
 
-        .ui-toggle input {
+        .ui-choice legend {
+            width: 100%;
+            margin-bottom: 6px;
+            text-align: center;
+            font-weight: 600;
+            color: var(--theme-text-primary);
+        }
+
+        .ui-choice label { position: relative; cursor: pointer; }
+
+        .ui-choice input {
             position: absolute;
             opacity: 0;
             width: 1px;
@@ -110,39 +130,25 @@
             margin: 0;
         }
 
-        .ui-toggle-track {
-            position: relative;
-            width: 44px;
-            height: 24px;
-            flex: none;
-            border-radius: 999px;
-            background: rgba(0, 0, 0, 0.22);
-            border: 1px solid rgba(0, 0, 0, 0.15);
-            transition: background 0.2s ease;
+        .ui-choice span {
+            display: inline-block;
+            min-height: 44px;
+            padding: 11px 16px;
+            border: 2px solid var(--theme-btn-bg);
+            border-radius: 6px;
+            color: var(--theme-text-primary);
+            font-weight: 600;
         }
 
-        .ui-toggle-track::after {
-            content: '';
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #fff;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-            transition: transform 0.2s ease;
+        .ui-choice input:checked + span {
+            background: var(--theme-btn-bg);
+            color: var(--theme-btn-text);
         }
 
-        .ui-toggle input:checked + .ui-toggle-track { background: var(--theme-btn-bg); }
-        .ui-toggle input:checked + .ui-toggle-track::after { transform: translateX(20px); }
-
-        .ui-toggle input:focus-visible + .ui-toggle-track {
+        .ui-choice input:focus-visible + span {
             outline: 2px solid var(--theme-btn-bg);
             outline-offset: 2px;
         }
-
-        .ui-toggle-text { font-weight: 600; color: var(--theme-text-primary); }
 
         .ui-toggle-desc {
             display: block;

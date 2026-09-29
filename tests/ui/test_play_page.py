@@ -190,19 +190,19 @@ def test_opponent_sheet_shows_bladder_contents(
     assert page.locator("#sheet .bladder .bladder-slot").count() == 8
 
 
-def test_home_toggle_redirects_classic_game_page(page, base_url, new_user, new_game):
-    """With the table-view toggle on, /game redirects to /play for the same game."""
+def test_home_choice_redirects_classic_game_page(page, base_url, new_user, new_game):
+    """Picking table view on the home page sends /game on to /play for the same game."""
     page.goto(f"{base_url}/")
-    # The checkbox itself is visually hidden behind the pill track; click the switch
-    toggle = page.locator(".ui-toggle")
-    toggle.wait_for(state="visible", timeout=10000)
-    toggle.click()
+    choice = page.locator(".ui-choice label", has_text="Table view")
+    choice.wait_for(state="visible", timeout=10000)
+    choice.click()
     assert page.is_checked("#tableViewToggle")
     page.goto(f"{base_url}/game?id={new_game}")
     page.wait_for_url(re.compile(r".*/play\?id=.*"), timeout=10000)
 
-    # Toggle off: classic page stays put
-    page.evaluate("localStorage.setItem('bocTableView', '0')")
+    # Back to classic: the classic page stays put
+    page.goto(f"{base_url}/")
+    page.locator(".ui-choice label", has_text="Classic").click()
     page.goto(f"{base_url}/game?id={new_game}")
     page.wait_for_timeout(500)
     assert "/game?id=" in page.url
