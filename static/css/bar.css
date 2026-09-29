@@ -19,8 +19,8 @@
     --stock: #fdfdfb;
     --stock-ink: #1c1d22;
 
-    --t: 42px;   /* tokens on the display and in your hand */
-    --ts: 28px;  /* tokens on mats and cards */
+    --t: 58px;   /* tokens on the display and in your hand */
+    --ts: 30px;  /* tokens on mats and cards */
     --cw: 124px; /* card width in the market */
 
     --display: "Bitter", "Rockwell", "Roboto Slab", Georgia, serif;
@@ -144,81 +144,82 @@ body.is-busy .table { cursor: progress; }
 
 .tok {
     --size: var(--t);
+    --ring: var(--ink);
     position: relative;
-    display: inline-grid;
-    place-items: center;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     flex: none;
     width: var(--size);
     height: var(--size);
     padding: 0;
-    border: 2px solid rgba(0, 0, 0, 0.28);
+    border: 0;
     border-radius: 50%;
-    background: var(--fill, #777);
+    background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.14), transparent 62%), var(--fill, #777);
     color: var(--ink, #fff);
-    font: 800 calc(var(--size) * 0.36)/1 var(--ui);
+    /* engraved ring, then the disc's thickness, then its shadow on the table */
     box-shadow:
-        inset 0 calc(var(--size) * -0.07) 0 rgba(0, 0, 0, 0.22),
-        inset 0 calc(var(--size) * 0.05) 0 rgba(255, 255, 255, 0.38),
-        0 2px 3px rgba(0, 0, 0, 0.5);
+        inset 0 0 0 calc(var(--size) * 0.06) var(--fill),
+        inset 0 0 0 calc(var(--size) * 0.085) var(--ring),
+        0 calc(var(--size) * 0.07) 0 var(--edge, rgba(0, 0, 0, 0.35)),
+        0 calc(var(--size) * 0.1) calc(var(--size) * 0.12) rgba(0, 0, 0, 0.45);
+    margin-bottom: calc(var(--size) * 0.07);
     transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
 }
-.tok-small { --size: var(--ts); border-width: 1.5px; }
+.tok-small { --size: var(--ts); }
 button.tok { cursor: pointer; }
-.tok-mark { pointer-events: none; }
 
-/* Mixers are square tiles, spirits round discs. */
-.tok-mixer { border-radius: 22%; }
-
-.ing-whiskey { --fill: #c07a22; --ink: #2a1604; }
-.ing-rum { --fill: #7c3317; --ink: #fbe3d2; }
-.ing-vodka { --fill: #dfe7ee; --ink: #22313d; }
-.ing-gin { --fill: #2e7a68; --ink: #eafff8; }
-.ing-tequila { --fill: #e6c84a; --ink: #3a2e05; }
-.ing-any_spirit { --fill: #9aa3aa; --ink: #1b2126; }
-.ing-cola { --fill: #2a1a14; --ink: #f3d9c9; box-shadow: inset 0 0 0 3px #b3261e, 0 2px 3px rgba(0, 0, 0, 0.5); }
-.ing-soda { --fill: #9fd8ec; --ink: #0e3442; }
-.ing-tonic { --fill: #d9ecb0; --ink: #2c3a0c; }
-.ing-cranberry { --fill: #a8173c; --ink: #ffe3ea; }
-
-/* The special: an unrolled purple die, and rolled faces on the mat. */
-.tok-special, .tok-rolled {
-    border-radius: 18%;
-    --fill: #6b3fa0;
-    background: linear-gradient(145deg, #8757c0, #5a3190);
-    border-color: #3a1d63;
+.tok-icon {
+    display: block;
+    flex: none;
+    width: calc(var(--size) * 0.6);
+    height: calc(var(--size) * 0.6);
+    pointer-events: none;
 }
-.pips {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    width: 64%;
-    height: 64%;
+.tok-icon svg { display: block; width: 100%; height: 100%; }
+.tok-name {
+    margin-top: 1%;
+    /* shrink long names so they sit inside the ring, like the real print */
+    font: 800 min(calc(var(--size) * 0.14), calc(var(--size) * 0.74 / var(--len)))/1 var(--ui);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    pointer-events: none;
 }
-.pips i { width: 70%; height: 70%; margin: auto; border-radius: 50%; background: #f3eaff; }
-.pips i:nth-child(1) { grid-area: 1 / 1; }
-.pips i:nth-child(2) { grid-area: 1 / 3; }
-.pips i:nth-child(3) { grid-area: 2 / 2; }
-.pips i:nth-child(4) { grid-area: 3 / 1; }
-.pips i:nth-child(5) { grid-area: 3 / 3; }
-.tok-icon { display: grid; place-items: center; width: 72%; height: 72%; pointer-events: none; }
-.tok-icon svg { width: 100%; height: 100%; }
+.tok:not(.tok-small) .tok-icon { width: calc(var(--size) * 0.42); height: calc(var(--size) * 0.42); }
+.tok:not(.tok-small) { padding-bottom: calc(var(--size) * 0.08); }
+
+/* Colours taken from the real tokens (gin isn't in the photo: a clear spirit). */
+.ing-soda { --fill: #6f9fc9; --ink: #fff; --edge: #4d7ba3; }
+.ing-cola { --fill: #7a4730; --ink: #fff; --edge: #55301f; }
+.ing-cranberry { --fill: #d8343b; --ink: #fff; --edge: #a11f25; }
+.ing-tequila { --fill: #f3a526; --ink: #1d1406; --edge: #bd7a0e; }
+.ing-rum { --fill: #8d2226; --ink: #fff; --edge: #621417; }
+.ing-whiskey { --fill: #d6a33b; --ink: #1d1406; --edge: #a57820; }
+.ing-vodka { --fill: #6c6f72; --ink: #fff; --edge: #4b4e51; }
+.ing-tonic { --fill: #0f7f86; --ink: #fff; --edge: #0a5a5f; }
+.ing-gin { --fill: #dfe7e4; --ink: #214a3c; --edge: #a8b8b2; }
+.ing-special, .tok-rolled { --fill: #6b3d9c; --ink: #fff; --edge: #4a2672; }
+.ing-any_spirit { --fill: #e9e4da; --ink: #3a3a3a; --edge: #b5ad9f; }
+.tok-rolled.tok-small .tok-icon { width: calc(var(--size) * 0.56); height: calc(var(--size) * 0.56); }
 
 .tok.is-missing {
     background: transparent;
     color: var(--fill);
     border: 2px dashed var(--fill);
     box-shadow: none;
-    opacity: 0.85;
+    margin-bottom: 0;
+    opacity: 0.9;
 }
 .tok.is-placed { outline: 2px dashed var(--kumquat); outline-offset: 2px; animation: set-down 0.18s ease-out; }
 .tok.is-ghost { opacity: 0.3; box-shadow: none; }
 .tok.is-lifted { opacity: 0.28; box-shadow: none; }
 .tok.is-selected {
     transform: translateY(-8px) scale(1.06);
-    box-shadow: 0 0 0 3px var(--kumquat), 0 10px 14px rgba(0, 0, 0, 0.5);
+    outline: 3px solid var(--kumquat);
+    outline-offset: 2px;
 }
-.tok.is-takeable:hover, .tok.is-takeable:focus-visible { transform: translateY(-5px); box-shadow: 0 0 0 3px var(--kumquat), 0 8px 12px rgba(0, 0, 0, 0.5); }
-.tok.is-takeable { box-shadow: 0 0 0 2px rgba(240, 138, 36, 0.8), 0 3px 4px rgba(0, 0, 0, 0.5); }
+.tok.is-takeable:hover, .tok.is-takeable:focus-visible { transform: translateY(-5px); }
 
 @keyframes set-down { from { transform: translateY(-10px) scale(1.12); } to { transform: none; } }
 
@@ -271,8 +272,8 @@ button.tok { cursor: pointer; }
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
     gap: 16px;
-    --ts: 20px;
-    --t: 30px;
+    --ts: 23px;
+    --t: 40px;
 }
 
 .middle {
@@ -687,7 +688,8 @@ button.mouth { cursor: pointer; }
 
 .specials { padding: 8px 10px; border: 1.5px dashed var(--line); border-radius: 8px; }
 .specials-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: var(--ts); }
-.specials .tok { --size: calc(var(--ts) + 6px); }
+.specials .tok { --size: 48px; }
+.across .specials .tok { --size: 36px; }
 .specials .btn { margin-top: 8px; }
 
 /* Your hand while taking ingredients. */
@@ -865,8 +867,8 @@ button.mouth { cursor: pointer; }
 
 @media (max-width: 600px) {
     :root {
-        --t: 38px;
-        --ts: 25px;
+        --t: 50px;
+        --ts: 27px;
         --cw: calc((100vw - 32px - 20px) / 3);
     }
     body { font-size: 14px; }
@@ -888,7 +890,7 @@ button.mouth { cursor: pointer; }
     .card-name { font-size: 11px; padding: 0 5px; }
     .card-text, .card-cost { padding: 0 5px; }
     .supply { justify-content: center; }
-    .display { padding: 12px 14px; gap: 6px; flex-wrap: wrap; justify-content: center; }
+    .display { padding: 12px 12px; gap: 5px; flex-wrap: wrap; justify-content: center; }
     .across { grid-template-columns: 1fr; }
     .score-cell { width: 26px; height: 32px; }
     .mat { padding: 10px; }

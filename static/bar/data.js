@@ -4,19 +4,19 @@
 export const SPIRITS = ['WHISKEY', 'RUM', 'VODKA', 'GIN', 'TEQUILA'];
 export const MIXERS = ['COLA', 'SODA', 'TONIC', 'CRANBERRY'];
 
-// Spirits are round wooden discs, mixers square tiles, specials a purple die.
-// Every token carries a short mark so colour is never the only clue.
+// Every token carries a picture (and its name, when big enough) so colour is
+// never the only clue.
 export const ING = {
-    WHISKEY: { label: 'Whisky', mark: 'Wh', kind: 'spirit' },
-    RUM: { label: 'Rum', mark: 'Ru', kind: 'spirit' },
-    VODKA: { label: 'Vodka', mark: 'Vo', kind: 'spirit' },
-    GIN: { label: 'Gin', mark: 'Gi', kind: 'spirit' },
-    TEQUILA: { label: 'Tequila', mark: 'Te', kind: 'spirit' },
-    COLA: { label: 'Cola', mark: 'Co', kind: 'mixer' },
-    SODA: { label: 'Soda water', mark: 'So', kind: 'mixer' },
-    TONIC: { label: 'Tonic water', mark: 'To', kind: 'mixer' },
-    CRANBERRY: { label: 'Cranberry', mark: 'Cr', kind: 'mixer' },
-    SPECIAL: { label: 'Special die', mark: '?', kind: 'special' },
+    WHISKEY: { label: 'Whisky', kind: 'spirit' },
+    RUM: { label: 'Rum', kind: 'spirit' },
+    VODKA: { label: 'Vodka', kind: 'spirit' },
+    GIN: { label: 'Gin', kind: 'spirit' },
+    TEQUILA: { label: 'Tequila', kind: 'spirit' },
+    COLA: { label: 'Cola', kind: 'mixer' },
+    SODA: { label: 'Soda water', kind: 'mixer' },
+    TONIC: { label: 'Tonic water', kind: 'mixer' },
+    CRANBERRY: { label: 'Cranberry', kind: 'mixer' },
+    SPECIAL: { label: 'Special die', kind: 'special' },
 };
 
 export const SPECIALS = {

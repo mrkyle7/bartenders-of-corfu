@@ -91,16 +91,38 @@ const KIND_ICONS = {
     free_action: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/></svg>',
 };
 
-// An ingredient token. `name` is an ingredient key, 'ANY_SPIRIT', or a
-// resolved special ('lemon', …).
+// Ingredient pictures, as printed on the real tokens. `currentColor` is the
+// token's ink; `var(--fill)` cuts detail back out in the token's colour.
+const ING_ICONS = {
+    SODA: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="8.5" cy="15.5" r="4.3"/><circle cx="16" cy="12.5" r="3"/><circle cx="12.5" cy="6.8" r="2.3"/><circle cx="18.3" cy="5.6" r="1.4"/></svg>',
+    COLA: '<svg viewBox="0 0 24 24"><path d="M5.5 9.5h13l-1.4 12H6.9z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6.4 13.5h11.2l-.9 7H7.3z" fill="currentColor"/><circle cx="10" cy="6" r="1.5" fill="currentColor"/><circle cx="14.2" cy="4.2" r="1.9" fill="currentColor"/><circle cx="12.6" cy="7.9" r="1" fill="currentColor"/></svg>',
+    CRANBERRY: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 8.5C9.5 4 5 4.5 3.5 6c2.5.3 5.6 1.6 8.5 2.5zM12 8.5c2.5-4.5 7-4 8.5-2.5-2.5.3-5.6 1.6-8.5 2.5z"/><circle cx="7.6" cy="14" r="4" style="stroke:var(--fill)" stroke-width="1.2"/><circle cx="16.4" cy="14" r="4" style="stroke:var(--fill)" stroke-width="1.2"/><circle cx="12" cy="11.3" r="3.7" style="stroke:var(--fill)" stroke-width="1.2"/><circle cx="7" cy="12.8" r=".9" style="fill:var(--fill)"/><circle cx="15.8" cy="12.8" r=".9" style="fill:var(--fill)"/></svg>',
+    TEQUILA: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21L11 3.5 13 3.5z"/><path d="M12 21L6.5 6l2.2-.4z"/><path d="M12 21l5.5-15-2.2-.4z"/><path d="M12 21L2 10.5l2-1z"/><path d="M12 21l10-10.5-2-1z"/><path d="M12 21L.8 16.5l1.3-1.6z"/><path d="M12 21l11.2-4.5-1.3-1.6z"/><path d="M6 21h12v1H6z"/></svg>',
+    RUM: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 15.5h19l-2.6 4.7H5.4z"/><path d="M8.3 3.5v12M15.3 2.5v13" stroke="currentColor" stroke-width="1"/><path d="M4.8 5.5q3.5 1 0 5h6.8q3.5-4 0-5zM4.3 11.2q3 .8.2 3.5h7.4q2.6-2.5 0-3.5z"/><path d="M11.8 4q3.5 1.2 0 5.6h7q3.5-4.3 0-5.6zM11.4 10.5q3 .8.2 4h7.6q2.6-3 0-4z"/><path d="M15.3 2.5l3 .9-3 .9z"/><circle cx="8.3" cy="17.6" r=".75" style="fill:var(--fill)"/><circle cx="12" cy="17.6" r=".75" style="fill:var(--fill)"/><circle cx="15.7" cy="17.6" r=".75" style="fill:var(--fill)"/></svg>',
+    WHISKEY: '<svg viewBox="0 0 24 24"><path d="M6.2 3h11.6q2.6 9 0 18H6.2q-2.6-9 0-18z" fill="currentColor"/><path d="M5.3 7.5h13.4M5.3 16.5h13.4" style="stroke:var(--fill)" stroke-width="1.3"/><path d="M10 3.2v17.6M14 3.2v17.6" style="stroke:var(--fill)" stroke-width=".8"/></svg>',
+    VODKA: '<svg viewBox="0 0 24 24"><path d="M4.5 3.5h15l-2.2 17H6.7z" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M6.4 11.5h11.2l-1.2 7.5H7.6z" fill="currentColor"/></svg>',
+    GIN: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c0-6 1-11 4-17" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13 13c-3-1-6-3-7.5-6 3 .4 6 2.2 7.5 6zM14.4 9.5c2.8-1 5-3 6-5.8-2.8.8-5.2 2.8-6 5.8z"/><circle cx="8.3" cy="15.7" r="2.4"/><circle cx="12.3" cy="18" r="2.2"/><circle cx="17.3" cy="13.6" r="2.3"/><circle cx="7.6" cy="15" r=".7" style="fill:var(--fill)"/></svg>',
+    TONIC: '<svg viewBox="0 0 24 24"><path d="M2.5 7.5a9.5 9.5 0 0 0 19 0z" fill="currentColor"/><path d="M4.3 8.8a7.7 7.7 0 0 0 15.4 0z" style="fill:var(--fill)"/><path d="M5.6 8.8a6.4 6.4 0 0 0 12.8 0z" fill="currentColor"/><path d="M12 8.8v6.4M12 8.8l-4.6 4.4M12 8.8l4.6 4.4M12 8.8L5.8 10.8M12 8.8l6.2 2" style="stroke:var(--fill)" stroke-width="1.1"/></svg>',
+    SPECIAL: '<svg viewBox="0 0 24 24"><polygon fill="currentColor" points="12.0,1.5 13.8,5.2 17.2,2.9 16.9,7.1 21.1,6.8 18.8,10.2 22.5,12.0 18.8,13.8 21.1,17.2 16.9,16.9 17.2,21.1 13.8,18.8 12.0,22.5 10.2,18.8 6.8,21.1 7.1,16.9 2.9,17.3 5.2,13.8 1.5,12.0 5.2,10.2 2.9,6.7 7.1,7.1 6.7,2.9 10.2,5.2"/><polygon style="fill:var(--fill)" points="12.0,8.0 13.0,10.6 15.8,10.8 13.6,12.5 14.4,15.2 12.0,13.7 9.6,15.2 10.4,12.5 8.2,10.8 11.0,10.6"/></svg>',
+    ANY_SPIRIT: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8.5 8.5a3.5 3.5 0 1 1 5 3.2c-1 .5-1.5 1.2-1.5 2.3v.8"/><circle cx="12" cy="18.6" r=".6" fill="currentColor"/></svg>',
+};
+
+const TOKEN_NAMES = {
+    WHISKEY: 'Whisky', SODA: 'Soda', TONIC: 'Tonic', SPECIAL: 'Special', ANY_SPIRIT: 'Any',
+};
+
+// A token, drawn like the real ones: a thick coloured disc with an engraved
+// ring, a picture, and the name round the bottom (on the bigger tokens).
+// `name` is an ingredient key, 'ANY_SPIRIT', or a rolled special ('lemon'…).
 function token(name, { onclick, label, state, selected, key, small } = {}) {
     const special = SPECIALS[name];
     const meta = ING[name];
-    let kind = meta?.kind ?? (special ? 'rolled' : 'spirit');
-    if (name === 'ANY_SPIRIT') kind = 'spirit';
+    const kind = special ? 'rolled' : meta?.kind ?? 'spirit';
     const text = special?.label ?? meta?.label ?? 'Any one spirit';
+    const printed = special?.label ?? TOKEN_NAMES[name] ?? meta?.label ?? '';
     const node = h(onclick ? 'button.tok' : 'span.tok', {
         cls: `tok-${kind} ing-${name.toLowerCase()}${state ? ` is-${state}` : ''}${selected ? ' is-selected' : ''}${small ? ' tok-small' : ''}`,
+        style: { '--len': String(Math.max(printed.length, 4)) },
         type: onclick ? 'button' : undefined,
         onclick,
         'aria-label': label ?? text,
@@ -109,9 +131,8 @@ function token(name, { onclick, label, state, selected, key, small } = {}) {
         'data-k': key,
         role: onclick ? undefined : 'img',
     });
-    if (special) node.append(h('span.tok-icon', { svg: SPECIAL_ICONS[name], 'aria-hidden': 'true' }));
-    else if (kind === 'special') node.append(h('span.pips', { 'aria-hidden': 'true' }, h('i'), h('i'), h('i'), h('i'), h('i')));
-    else node.append(h('span.tok-mark', { 'aria-hidden': 'true', text: name === 'ANY_SPIRIT' ? '?' : meta?.mark ?? '' }));
+    node.append(h('span.tok-icon', { svg: special ? SPECIAL_ICONS[name] : ING_ICONS[name] ?? '', 'aria-hidden': 'true' }));
+    if (!small) node.append(h('span.tok-name', { text: printed, 'aria-hidden': 'true' }));
     return node;
 }
 
