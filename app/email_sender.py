@@ -7,6 +7,7 @@ Configured by environment variables:
   which is what local runs and tests get.
 - ``EMAIL_FROM`` / ``EMAIL_FROM_NAME``: the sender. Brevo only sends from a
   verified sender or an authenticated domain.
+- ``BREVO_API_URL``: only for trying things locally against a stand-in.
 """
 
 import json
@@ -43,7 +44,7 @@ def send_email(to_email: str, to_name: str, subject: str, html: str, text: str) 
         "textContent": text,
     }
     request = urllib.request.Request(
-        BREVO_URL,
+        os.getenv("BREVO_API_URL", BREVO_URL),
         data=json.dumps(payload).encode(),
         headers={
             "api-key": key,
