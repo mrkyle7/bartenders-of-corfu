@@ -11,6 +11,7 @@ Covers:
   - join game shows "Go to Game"
   - logout switches header back to login link
   - joining a full game shows an inline error, no alert()
+  - links back to the other games on cheetahmoongames.com
 """
 
 from tests.ui.conftest import _api_register, _api_post, _unique
@@ -164,3 +165,23 @@ def test_full_game_shows_game_full_in_join_section(page, base_url, new_user):
     game_li = page.locator(f"li[data-game-id='{game_id}']")
     assert "Game Full" in game_li.inner_text()
     assert game_li.locator("button", has_text="Join Game").count() == 0
+
+
+def test_links_back_to_cheetah_moon_games(page, base_url):
+    """The lobby links back to the other games, top left and in the footer."""
+    page.goto(base_url)
+    top = page.locator("a.site-home")
+    assert top.is_visible()
+    assert top.get_attribute("href") == "https://cheetahmoongames.com/"
+    assert page.locator('footer a[href="https://cheetahmoongames.com/"]').count() == 1
+
+
+def test_link_back_fits_on_a_phone(page, base_url):
+    """At 320 px the link back and the account links don't overlap or overflow."""
+    page.set_viewport_size({"width": 320, "height": 640})
+    page.goto(base_url)
+    page.wait_for_load_state("networkidle")
+    back = page.locator("a.site-home").bounding_box()
+    header = page.locator("header.user-header").bounding_box()
+    assert back["y"] + back["height"] <= header["y"] + 1
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
