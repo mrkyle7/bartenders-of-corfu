@@ -110,10 +110,11 @@ jobs:
           supabase link --project-ref $SUPABASE_PROJECT_ID
           supabase db push --linked
 
-      - name: Sync Supabase secrets to Secret Manager
+      - name: Sync secrets to Secret Manager
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: |
           # Add a new Secret Manager version only when the GitHub secret has
           # actually changed — avoids version churn on every deploy.
@@ -135,6 +136,13 @@ jobs:
           }
           sync_secret supabase-url "$SUPABASE_URL"
           sync_secret supabase-key "$SUPABASE_KEY"
+          # Sends password reset emails. Until the GitHub secret is set, the
+          # app sees the "not-set" placeholder Terraform created and sends none.
+          if [ -n "$BREVO_API_KEY" ]; then
+            sync_secret brevo-api-key "$BREVO_API_KEY"
+          else
+            echo "BREVO_API_KEY not set in GitHub; password reset emails stay off"
+          fi
 
       - name: Deploy to Cloud Run
         id: deploy

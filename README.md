@@ -99,6 +99,7 @@ Bartenders' accounts are the Cheetah Moon accounts for every game on the site:
 - Players sign in at `https://cheetahmoongames.com/login`. With `LOGIN_URL` set (also in that Terraform), `GET /login` here redirects there, with `next` pointing back to the page that sent the player. Unset, `/login` serves the page in `static/login.html` as before.
 - The home page passes sign-in, sign-up and sign-out on to `/login`, `/register`, `/logout` and `/userDetails` here.
 - `GET /v1/auth/keys/{kid}` returns the public key for a login token's `kid`, so other games can check the `userjwt` cookie themselves.
+- Forgotten passwords: `POST /v1/auth/password-reset {email, next?}` emails a one-time link (valid for an hour, at most 3 an hour per account) through [Brevo](https://www.brevo.com), always answering 202 so it doesn't reveal which emails have accounts. `POST /v1/auth/password-reset/confirm {token, new_password}` sets the password, signs out every other session and signs the player in. The pages for it are on the home page. Emails need `BREVO_API_KEY` (the `BREVO_API_KEY` GitHub secret, synced to Secret Manager on deploy) and `EMAIL_FROM`, a sender Brevo has verified; without a key nothing is sent. Code: `app/password_reset.py`, `app/email_sender.py`.
 
 # Testing
 

@@ -27,6 +27,7 @@ _SUPABASE_DEPENDENT_FILES = {
     "test_jwt_handler.py",
     "test_theme_bdd.py",
     "test_shared_login_bdd.py",
+    "test_password_reset_bdd.py",
     "test_game_manager.py",
     "test_game_actions_bdd.py",
 }

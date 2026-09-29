@@ -2,7 +2,7 @@ import os
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
-from fastapi import FastAPI, Query, Request
+from fastapi import BackgroundTasks, FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from app.gameManager import GameManager
@@ -12,6 +12,7 @@ from app.JWTHandler import JWTHandler
 from app.logging_config import setup_logging, CanonicalLogMiddleware
 from app.db import db
 from app import push
+from app import password_reset
 from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
@@ -649,6 +650,41 @@ async def auth_public_key(kid: str):
         content={"kid": str(key_id), "alg": jwt_handler.algorithm, "pem": pem.decode()},
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+    next: Optional[str] = None
+
+
+@app.post("/v1/auth/password-reset")
+async def request_password_reset(
+    body: PasswordResetRequest, background_tasks: BackgroundTasks
+):
+    """Emails a reset link if an account uses this email.
+
+    The answer is the same either way, and the email is sent after replying,
+    so neither the answer nor its timing says whether the account exists.
+    """
+    background_tasks.add_task(password_reset.request_reset, body.email, body.next)
+    return JSONResponse(status_code=202, content={"ok": True})
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+
+@app.post("/v1/auth/password-reset/confirm")
+async def confirm_password_reset(body: PasswordResetConfirm):
+    """Sets a new password from a reset link and signs the player in."""
+    try:
+        user = password_reset.complete_reset(body.token, body.new_password)
+    except UserValidationError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    response = JSONResponse(content=user.to_dict(), status_code=200)
+    set_auth_cookie(response, jwt_handler.sign(user))
+    return response
 
 
 @app.get("/userDetails")

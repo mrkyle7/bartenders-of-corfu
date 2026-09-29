@@ -227,6 +227,78 @@ class Db:
         )
         return len(response.data) == 1
 
+    def get_user_by_email(self, email: str) -> User | None:
+        """The active or deactivated account using ``email``, ignoring case."""
+        # ilike without wildcards: escape the characters it treats specially.
+        pattern = (
+            email.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        response = (
+            self.supabase.table("users")
+            .select(",".join(self._USER_COLUMNS))
+            .ilike("email", pattern)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        if len(response.data) != 1:
+            return None
+        return self._row_to_user(response.data[0])
+
+    def add_password_reset(
+        self, user_id: UUID, token_hash: str, expires_at: datetime
+    ) -> bool:
+        response = (
+            self.supabase.table("password_resets")
+            .insert(
+                {
+                    "user_id": str(user_id),
+                    "token_hash": token_hash,
+                    "expires_at": expires_at.isoformat(),
+                }
+            )
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def count_password_resets_since(self, user_id: UUID, since: datetime) -> int:
+        response = (
+            self.supabase.table("password_resets")
+            .select("id")
+            .eq("user_id", str(user_id))
+            .gte("created_at", since.isoformat())
+            .execute()
+        )
+        return len(response.data)
+
+    def get_password_reset(self, token_hash: str) -> dict | None:
+        response = (
+            self.supabase.table("password_resets")
+            .select("id,user_id,expires_at,used_at")
+            .eq("token_hash", token_hash)
+            .execute()
+        )
+        return response.data[0] if len(response.data) == 1 else None
+
+    def use_password_reset(self, reset_id: str) -> bool:
+        """Marks the link used. False if it already was."""
+        response = (
+            self.supabase.table("password_resets")
+            .update({"used_at": self._now()})
+            .eq("id", str(reset_id))
+            .is_("used_at", "null")
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def use_all_password_resets(self, user_id: UUID) -> None:
+        (
+            self.supabase.table("password_resets")
+            .update({"used_at": self._now()})
+            .eq("user_id", str(user_id))
+            .is_("used_at", "null")
+            .execute()
+        )
+
     def update_theme(self, user_id: UUID, theme: str) -> bool:
         response = (
             self.supabase.table("users")
