@@ -112,16 +112,17 @@ const TOKEN_NAMES = {
 };
 
 // A token, drawn like the real ones: a thick coloured disc with an engraved
-// ring, a picture, and the name round the bottom (on the bigger tokens).
+// ring, a picture and its name. Tokens are one size wherever they sit;
+// `print` is only for the small pictures printed on a card.
 // `name` is an ingredient key, 'ANY_SPIRIT', or a rolled special ('lemon'…).
-function token(name, { onclick, label, state, selected, key, small } = {}) {
+function token(name, { onclick, label, state, selected, key, print } = {}) {
     const special = SPECIALS[name];
     const meta = ING[name];
     const kind = special ? 'rolled' : meta?.kind ?? 'spirit';
     const text = special?.label ?? meta?.label ?? 'Any one spirit';
     const printed = special?.label ?? TOKEN_NAMES[name] ?? meta?.label ?? '';
     const node = h(onclick ? 'button.tok' : 'span.tok', {
-        cls: `tok-${kind} ing-${name.toLowerCase()}${state ? ` is-${state}` : ''}${selected ? ' is-selected' : ''}${small ? ' tok-small' : ''}`,
+        cls: `tok-${kind} ing-${name.toLowerCase()}${state ? ` is-${state}` : ''}${selected ? ' is-selected' : ''}${print ? ' tok-print' : ''}`,
         style: { '--len': String(Math.max(printed.length, 4)) },
         type: onclick ? 'button' : undefined,
         onclick,
@@ -132,7 +133,7 @@ function token(name, { onclick, label, state, selected, key, small } = {}) {
         role: onclick ? undefined : 'img',
     });
     node.append(h('span.tok-icon', { svg: special ? SPECIAL_ICONS[name] : ING_ICONS[name] ?? '', 'aria-hidden': 'true' }));
-    if (!small) node.append(h('span.tok-name', { text: printed, 'aria-hidden': 'true' }));
+    if (!print) node.append(h('span.tok-name', { text: printed, 'aria-hidden': 'true' }));
     return node;
 }
 
@@ -599,29 +600,41 @@ function bladderCounts(ps) {
     return counts;
 }
 
-function costTokens(card, ps) {
-    const cost = cardCost(card);
+// How many of your cost tokens you already have, for hollowing out the rest.
+function costHave(card, ps) {
+    if (!ps) return Infinity;
     const have = bladderCounts(ps);
-    if (card.card_type === 'karaoke' && ps) {
+    if (card.card_type === 'karaoke') {
         for (const c of ps.cards) if (c.card_type === 'store' && c.spirit_type === card.spirit_type) {
             have[card.spirit_type] = (have[card.spirit_type] ?? 0) + (c.stored_spirits?.length ?? 0);
         }
     }
-    if (card.card_type === 'cup_doubler') {
-        const best = Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
-        return cost.map((name, i) => token(name, { small: true, state: ps && i >= best ? 'missing' : undefined }));
-    }
-    return cost.map((name, i) => token(name, { small: true, state: ps && i >= (have[name] ?? 0) ? 'missing' : undefined }));
+    if (card.card_type === 'cup_doubler') return Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
+    return have[cardCost(card)[0]] ?? 0;
 }
 
+function costCaption(card) {
+    const cost = cardCost(card);
+    if (card.card_type === 'cup_doubler') return '3 of one spirit';
+    return `${cost.length} ${ING[cost[0]]?.label.replace(' water', '') ?? ''}`;
+}
+
+const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.6l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.4 5.7 21l1.5-7.1L1.8 9l7.2-.8z" fill="#f4c537" stroke="#6b4a0c" stroke-width="1.1" stroke-linejoin="round"/><path d="M12 4.4l2.2 4.8 5.2.6" fill="none" stroke="#fff3c2" stroke-width=".9" stroke-linecap="round"/></svg>';
+
+// The token a card is about, drawn big in its art: the spirit or mixer.
+const cardSubject = (card) => card.spirit_type ?? card.mixer_type ?? null;
+
+// A card laid out like the printed ones: Greek-key border, art panel with the
+// cost badge and points star, name ribbon, kind, and the rule in a frame.
 function cardFace(card, { claimable, owner, index, compact } = {}) {
     const kind = CARD_KINDS[card.card_type] ?? { label: 'Card', points: 0 };
     const ps = owner ? null : (game.status === 'STARTED' && mine()?.status === 'active' ? mine() : null);
     const cost = cardCost(card);
-    const costLabel = card.card_type === 'cup_doubler'
-        ? 'three of any one spirit'
-        : `${cost.length} ${ING[cost[0]]?.label ?? ''}`;
-    const label = `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} Needs ${costLabel} in your bladder.${claimable ? ' You can claim it.' : ''}`;
+    const have = costHave(card, ps);
+    const short = Math.max(0, cost.length - have);
+    const label = `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} Costs ${costCaption(card)} in your bladder.${ps && short ? ` You need ${short} more.` : ''}${claimable ? ' You can claim it.' : ''}`;
+    const subject = cardSubject(card);
+
     const face = h(claimable ? 'button.card' : 'div.card', {
         cls: `kind-${card.card_type}${claimable ? ' is-claimable' : ''}${compact ? ' is-compact' : ''}`,
         type: claimable ? 'button' : undefined,
@@ -630,19 +643,26 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
         role: claimable ? undefined : 'group',
         'data-k': claimable ? `card-${card.id}` : undefined,
     },
-    h('span.card-band', {},
-        h('span.card-kind-icon', { svg: KIND_ICONS[card.card_type] ?? '', 'aria-hidden': 'true' }),
-        h('span.card-kind', { text: kind.label }),
-        h('span.card-points', { text: kind.points, 'aria-hidden': 'true' })),
-    h('span.card-name', { text: card.name }),
-    compact ? null : h('span.card-text', { text: cardText(card) }),
-    h('span.card-cost', { 'aria-hidden': 'true' }, costTokens(card, owner ? null : ps)));
+    h('span.card-art', { 'aria-hidden': 'true' },
+        h('span.card-lights'),
+        h('span.card-emblem', { svg: KIND_ICONS[card.card_type] ?? '' }),
+        subject ? h('span.card-subject', {}, token(subject, { print: true })) : null,
+        h('span.card-costbadge', { cls: ps && short ? 'is-short' : '' },
+            h('span.card-costtoks', {}, cost.map((name, i) => token(name, { print: true, state: i >= have ? 'missing' : undefined }))),
+            h('span.card-costcap', { text: costCaption(card) })),
+        h('span.card-star', {},
+            h('span.card-star-shape', { svg: STAR }),
+            h('span.card-star-num', { text: kind.points }),
+            h('span.card-star-cap', { text: 'Points' }))),
+    h('span.card-ribbon', {}, h('span.card-name', { text: card.name })),
+    h('span.card-kind', { text: kind.label }),
+    compact ? null : h('span.card-rule', {}, h('span', { text: cardText(card) })));
 
     if (card.card_type === 'store' && owner) {
         face.append(h('span.card-store', { 'aria-label': `${plural(card.stored_spirits.length, 'spirit')} stored` },
             card.stored_spirits.length
-                ? card.stored_spirits.map((s) => token(s, { small: true }))
-                : h('span.card-store-empty', { text: 'Empty' })));
+                ? card.stored_spirits.map((s) => token(s))
+                : h('span.card-store-empty', { text: 'Nothing stored' })));
         if (owner === me.id && index !== undefined) {
             const drink = actionsOf('drink_stored_spirit').some((a) => a.params.store_card_index === index && a.params.count === 1);
             const pours = actionsOf('use_stored_spirit').filter((a) => a.params.store_card_index === index);
@@ -769,9 +789,9 @@ function glass(pid, cupIndex, { interactive }) {
     const placing = interactive && ui.selected;
     const room = cup.ingredients.length + incoming.length < CUP_SIZE;
     const contents = [
-        ...cup.ingredients.map((name) => token(name, { small: true })),
+        ...cup.ingredients.map((name) => token(name)),
         ...incoming.map((it) => token(it.name, {
-            small: true, state: 'placed', key: `staged-${it.key}`,
+            state: 'placed', key: `staged-${it.key}`,
             label: `${ING[it.name].label} going into glass ${cupIndex + 1}. Tap to pick it back up.`,
             onclick: () => selectInHand(it.key),
         })),
@@ -840,7 +860,7 @@ function mouth() {
     return h('div.mouth-spot', {},
         node,
         h('div.mouth-tokens', {}, drinks.map((it) => token(it.name, {
-            small: true, state: 'placed', key: `staged-${it.key}`,
+            state: 'placed', key: `staged-${it.key}`,
             label: `${ING[it.name].label} to drink. Tap to pick it back up.`,
             onclick: () => selectInHand(it.key),
         }))),
@@ -857,7 +877,7 @@ function bladder(pid, { interactive }) {
     const slots = Array.from({ length: INITIAL_BLADDER }, (_, i) => {
         if (i >= ps.bladder_capacity) return slot(h('span.loo', { role: 'img', 'aria-label': 'Sealed by a toilet token' }), 'is-sealed');
         const f = filled[i];
-        return slot(f ? token(f.n, { small: true, state: f.staged ? 'placed' : undefined }) : null, f ? '' : 'is-empty');
+        return slot(f ? token(f.n, { state: f.staged ? 'placed' : undefined }) : null, f ? '' : 'is-empty');
     });
     const overflow = filled.length > ps.bladder_capacity;
     const full = filled.length >= ps.bladder_capacity;
@@ -988,9 +1008,9 @@ function menu() {
     if (menuNode) return menuNode;
     const pairs = h('table.pairings', {},
         h('caption', { text: 'What mixes with what' }),
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col', text: '' }), SPIRITS.map((s) => h('th', { scope: 'col' }, token(s, { small: true }))))),
+        h('thead', {}, h('tr', {}, h('th', { scope: 'col', text: '' }), SPIRITS.map((s) => h('th', { scope: 'col' }, token(s))))),
         h('tbody', {}, MIXERS.map((m) => h('tr', {},
-            h('th', { scope: 'row' }, token(m, { small: true })),
+            h('th', { scope: 'row' }, token(m)),
             SPIRITS.map((s) => h('td', { 'aria-label': `${ING[s].label} with ${ING[m].label}: ${PAIRINGS[s].includes(m) ? 'yes' : 'no'}` },
                 h('span', { cls: PAIRINGS[s].includes(m) ? 'yes' : 'no', text: PAIRINGS[s].includes(m) ? '✓' : '✕', 'aria-hidden': 'true' })))))));
     menuNode = h('section.menu', { 'aria-label': 'Drinks menu' },
@@ -1005,7 +1025,7 @@ function menu() {
         h('p.menu-note', { text: 'One kind of mixer per drink, no more than two spirits. Cocktails must match exactly: specials come from your mat.' }),
         h('ul.cocktails', {}, COCKTAILS.map((c) => h('li.cocktail', {},
             h('span.cocktail-name', { text: c.name }),
-            h('span.cocktail-recipe', {}, c.cup.map((i) => token(i, { small: true })), c.specials.map((s) => token(s, { small: true }))),
+            h('span.cocktail-recipe', {}, c.cup.map((i) => token(i)), c.specials.map((s) => token(s))),
             h('b.cocktail-points', { text: c.points })))));
     return menuNode;
 }
