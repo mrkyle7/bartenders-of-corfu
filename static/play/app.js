@@ -2,6 +2,7 @@
 // player taps into API actions. Rendering lives in render.js, primitives in ui.js.
 
 import { api } from './api.js';
+import { inviteBox } from '/static/invite.js';
 import {
     CARD_TYPES, ING, SPECIAL_TYPES, MOVE_ICONS, STATUS_LABELS,
     describeMove, drinkName,
@@ -1001,6 +1002,8 @@ const MODE_LABELS = {
 let lobbyStrategies = null;
 let lobbyModes = null;
 
+let invite = null; // built once so re-renders keep its state
+
 async function renderLobby() {
     document.body.classList.remove('my-turn');
     $('turnIndicator').replaceChildren(el('span.turn-other', { text: 'Waiting to start' }));
@@ -1044,6 +1047,14 @@ async function renderLobby() {
             }) : null,
         ),
     ];
+
+    if (isMember && game.players.length < 4) {
+        invite ??= inviteBox(gameId, {
+            classes: { button: 'btn btn-ghost' },
+            onCopied: (ok) => (ok ? banner('Invite link copied', { icon: '🔗' }) : toastError('Press Ctrl+C (or Cmd+C) to copy the link')),
+        });
+        sections.push(el('div.lobby-card', {}, invite));
+    }
 
     if (isHost) {
         const select = el('select.lobby-select', { 'aria-label': 'Bot strategy' },

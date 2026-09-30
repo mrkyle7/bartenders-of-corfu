@@ -6,6 +6,8 @@ and table views.
 
 import re
 
+import pytest
+
 from tests.ui.conftest import _api_get, _api_post
 
 
@@ -32,6 +34,19 @@ def test_bar_lobby_start_disabled_for_lone_host(page, base_url, new_user, new_ga
     assert page.locator("#lobby button", has_text="Needs a second player").is_disabled()
 
 
+@pytest.mark.parametrize("view", ["bar", "play", "game"])
+def test_lobby_invite_link_copies(page, base_url, new_user, new_game, view):
+    """Every view's lobby offers the game's /game link to copy and share."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.goto(f"{base_url}/{view}?id={new_game}")
+    link = page.locator("#inviteLink")
+    link.wait_for(state="visible", timeout=10000)
+    assert link.input_value().endswith(f"/game?id={new_game}")
+    page.locator(".invite-copy").click()
+    page.locator(".invite-copy", has_text="Copied!").wait_for(timeout=5000)
+    assert page.evaluate("navigator.clipboard.readText()") == link.input_value()
+
+
 def test_bar_lobby_start_lays_out_the_table(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
@@ -44,8 +59,11 @@ def test_bar_lobby_start_lays_out_the_table(
     page.locator(".display .tok").first.wait_for(state="visible", timeout=10000)
     assert page.locator(".display .tok").count() == 5
     assert page.locator(".bag").is_visible()
+    # Every karaoke card, three orders and three ability cards
     assert page.locator(".market .card-row").count() == 3
-    assert page.locator(".market .row-cards .card").count() == 9
+    assert page.locator(".market .row-cards .card").count() == 11
+    assert page.locator(".market .row-cards .kind-karaoke").count() == 5
+    assert page.locator(".market .row-cards .kind-order").count() == 3
     # Both mats are on show, each with two glasses of five spaces
     assert page.locator(".mat").count() == 2
     assert page.locator(".mat.is-mine .glass").count() == 2
@@ -53,9 +71,13 @@ def test_bar_lobby_start_lays_out_the_table(
     # A fresh bladder: eight open spaces, four toilet tokens in reserve
     assert page.locator(".mat.is-mine .bladder-slots .slot.is-empty").count() == 8
     assert page.locator(".mat.is-mine .loo-reserve .loo").count() == 4
-    # The drinks menu and score track are always on the table
-    assert page.locator(".menu .cocktail").count() == 9
+    # The score track is on the table; the drinks menu opens from the turn bar
     assert page.locator(".score-track .score-cell").count() == 41
+    page.locator('[data-k="open-menu"]').click()
+    page.locator("#sheet .menu .menu-item").first.wait_for(
+        state="visible", timeout=5000
+    )
+    assert page.locator("#sheet .menu .menu-item").count() == 9
 
 
 def test_bar_take_from_display_into_a_glass(
@@ -128,3 +150,41 @@ def test_home_choice_sends_game_page_to_bar(page, base_url, new_user, new_game):
     assert page.is_checked("#uiBar")
     page.goto(f"{base_url}/game?id={new_game}")
     page.wait_for_url(re.compile(r".*/bar\?id=.*"), timeout=10000)
+
+
+def test_bar_rules_and_actions_are_on_show(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """The rule book opens from the turn bar, and on your turn the action
+    strip shows your main action and the free ones."""
+    game = _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator('[data-k="open-rules"]').click(timeout=10000)
+    page.locator("#sheet .rulebook").wait_for(state="visible", timeout=10000)
+    assert page.locator("#sheet .rulebook .rule-part").count() >= 6
+    assert "40" in page.locator("#sheet .rulebook").inner_text()
+    page.keyboard.press("Escape")
+    page.locator("#sheet").wait_for(state="hidden", timeout=5000)
+    if game["game_state"]["player_turn"] == new_user["user"]["id"]:
+        strip = page.locator(".action-strip")
+        strip.wait_for(state="visible", timeout=10000)
+        assert "Main action" in strip.inner_text()
+        assert "Claim a card" in strip.inner_text()
+
+
+def test_bar_drinks_menu_shows_your_glasses(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """The drinks menu opens from the turn bar with your glasses kept in view
+    at its top, and the specials tray is on the table."""
+    _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".specials-tray").wait_for(state="visible", timeout=10000)
+    assert page.locator(".menu").count() == 0  # not on the table all the time
+    page.locator('[data-k="open-menu"]').click()
+    sheet = page.locator("#sheet")
+    sheet.locator(".menu").wait_for(state="visible", timeout=5000)
+    assert sheet.locator(".sheet-glass").count() == 2
+    assert "Mojito" in sheet.inner_text()
+    page.locator('[data-k="sheet-close"]').click()
+    sheet.wait_for(state="hidden", timeout=5000)

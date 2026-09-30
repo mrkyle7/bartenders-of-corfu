@@ -8,6 +8,23 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 
+# What each free-action card lets you do once per turn, by its spirit.
+# (The whisky one, Cocktail Shaker, re-rolled specials; re-rolls are no longer
+# part of the game, so it left the deck.)
+FREE_ACTION_TYPES: dict[str, str] = {
+    "RUM": "take_ingredients",
+    "VODKA": "sell_cup",
+    "GIN": "go_for_a_wee",
+}
+
+# The market: row 1 holds every karaoke card, row 2 the drink orders, row 3
+# the ability cards.
+KARAOKE_ROW = 1
+ORDERS_ROW = 2
+ABILITY_ROW = 3
+ROW_SIZE = 3
+
+
 @dataclass
 class IngredientRequirement:
     kind: str  # "spirit" | "mixer" | "special"
@@ -24,24 +41,24 @@ class IngredientRequirement:
 @dataclass
 class Card:
     id: str  # UUID as string
-    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler" | "specialist" | "free_action"
+    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler" | "specialist" | "free_action" | "order"
     name: str = ""
     spirit_type: str | None = None  # "WHISKEY" | "RUM" | "VODKA" | "GIN" | "TEQUILA"
     mixer_type: str | None = None  # "COLA" | "SODA" | "TONIC" | "CRANBERRY"
     stored_spirits: list[str] = field(default_factory=list)
+    # Order cards only: what drink is wanted and the bonus for serving it.
+    # drink is "simple" (a spirit and mixer, single or double), "slammer" or
+    # "cocktail" (named by ``cocktail``).
+    drink: str | None = None
+    cocktail: str | None = None
+    bonus: int = 0
 
     @property
     def free_action_type(self) -> str | None:
         """For free_action cards, the action type granted as a free action."""
         if self.card_type != "free_action":
             return None
-        mapping = {
-            "RUM": "take_ingredients",
-            "WHISKEY": "reroll_specials",
-            "VODKA": "sell_cup",
-            "GIN": "go_for_a_wee",
-        }
-        return mapping.get(self.spirit_type)
+        return FREE_ACTION_TYPES.get(self.spirit_type)
 
     @property
     def is_karaoke(self) -> bool:
@@ -77,6 +94,8 @@ class Card:
         }
         if self.free_action_type:
             d["free_action_type"] = self.free_action_type
+        if self.card_type == "order":
+            d.update(drink=self.drink, cocktail=self.cocktail, bonus=self.bonus)
         return d
 
     @classmethod
@@ -93,6 +112,9 @@ class Card:
             spirit_type=d.get("spirit_type"),
             mixer_type=d.get("mixer_type"),
             stored_spirits=list(d.get("stored_spirits", [])),
+            drink=d.get("drink"),
+            cocktail=d.get("cocktail"),
+            bonus=d.get("bonus", 0),
         )
 
 
@@ -113,18 +135,15 @@ class CardRow:
 
 
 def build_deck(game_modes: list[str] | None = None) -> list[Card]:
-    """Build the 25-card deck per cards.allium spec (unshuffled).
+    """Build the karaoke and ability cards (unshuffled), 24 in all.
 
     5 KaraokeCards (one per spirit), 5 StoreCards (one per spirit),
     4 RefresherCards (one per mixer), 2 CupDoublerCards,
-    5 SpecialistCards (one per spirit), 4 FreeActionCards (RUM, WHISKEY, VODKA, GIN).
+    5 SpecialistCards (one per spirit), 3 FreeActionCards (RUM, VODKA, GIN).
 
-    When the ``reroll_specials_free_action`` game mode is enabled, the
-    Cocktail Shaker (WHISKEY → reroll_specials) free-action card is excluded;
-    the deck shrinks to 24 cards.
+    ``game_modes`` is accepted for older callers and ignored: there are no
+    optional modes that change the deck any more.
     """
-    modes = set(game_modes or [])
-    skip_reroll_card = "reroll_specials_free_action" in modes
     cards: list[Card] = []
 
     # 5 KaraokeCards — one per spirit type
@@ -180,15 +199,12 @@ def build_deck(game_modes: list[str] | None = None) -> list[Card]:
             Card(id=str(uuid4()), card_type="specialist", name=name, spirit_type=spirit)
         )
 
-    # 4 FreeActionCards — one each for RUM, WHISKEY, VODKA, GIN
+    # 3 FreeActionCards — rum, vodka and gin
     for name, spirit in [
         ("Greedy Bartender", "RUM"),
-        ("Cocktail Shaker", "WHISKEY"),
         ("Entrepreneur", "VODKA"),
         ("Weak Bladder", "GIN"),
     ]:
-        if skip_reroll_card and name == "Cocktail Shaker":
-            continue
         cards.append(
             Card(
                 id=str(uuid4()), card_type="free_action", name=name, spirit_type=spirit
@@ -198,30 +214,92 @@ def build_deck(game_modes: list[str] | None = None) -> list[Card]:
     return cards
 
 
-def deal_initial_rows(deck: list[Card]) -> tuple[list[CardRow], list[Card]]:
-    """Deal cards into 3 rows per cards.allium spec.
+# Simple orders: any drink of this spirit and mixer, single or double.
+_SIMPLE_ORDERS = [
+    ("Vodka and Cola", "VODKA", "COLA"),
+    ("Vodka Soda", "VODKA", "SODA"),
+    ("Vodka Tonic", "VODKA", "TONIC"),
+    ("Vodka Cranberry", "VODKA", "CRANBERRY"),
+    ("Rum and Cola", "RUM", "COLA"),
+    ("Whisky and Cola", "WHISKEY", "COLA"),
+    ("Whisky Soda", "WHISKEY", "SODA"),
+    ("Gin and Tonic", "GIN", "TONIC"),
+]
+SIMPLE_ORDER_BONUS = 2
+SLAMMER_ORDER_BONUS = 3
+COCKTAIL_ORDER_BONUS = 4
+LONG_ISLAND_ORDER_BONUS = 5
 
-    Row 1: 3 random karaoke cards (never refreshable).
-    Remaining 18 shuffled: 3 → row 2, 3 → row 3, 12 remain as deck.
+
+def build_order_deck() -> list[Card]:
+    """Build the 18 drink orders (unshuffled).
+
+    8 simple drinks (+2), the Tequila Slammer (+3) and one order per
+    cocktail (+4; the Long Island Iced Tea +5).
     """
-    karaoke_cards = [c for c in deck if c.card_type == "karaoke"]
-    non_karaoke = [c for c in deck if c.card_type != "karaoke"]
+    from app.cocktails import COCKTAIL_NAMES
 
-    # Pick 3 random karaoke cards for row 1
-    row1_cards = random.sample(karaoke_cards, 3)
-    remaining_karaoke = [c for c in karaoke_cards if c not in row1_cards]
-
-    # Shuffle remaining (2 karaoke + non-karaoke others)
-    remaining_all = remaining_karaoke + non_karaoke
-    random.shuffle(remaining_all)
-
-    row2_cards = remaining_all[:3]
-    row3_cards = remaining_all[3:6]
-    remaining_deck = remaining_all[6:]
-
-    rows = [
-        CardRow(position=1, cards=row1_cards),
-        CardRow(position=2, cards=row2_cards),
-        CardRow(position=3, cards=row3_cards),
+    orders = [
+        Card(
+            id=str(uuid4()),
+            card_type="order",
+            name=name,
+            spirit_type=spirit,
+            mixer_type=mixer,
+            drink="simple",
+            bonus=SIMPLE_ORDER_BONUS,
+        )
+        for name, spirit, mixer in _SIMPLE_ORDERS
     ]
-    return rows, remaining_deck
+    orders.append(
+        Card(
+            id=str(uuid4()),
+            card_type="order",
+            name="Tequila Slammer",
+            spirit_type="TEQUILA",
+            drink="slammer",
+            bonus=SLAMMER_ORDER_BONUS,
+        )
+    )
+    for cocktail in COCKTAIL_NAMES:
+        bonus = (
+            LONG_ISLAND_ORDER_BONUS
+            if cocktail == "Long Island Iced Tea"
+            else COCKTAIL_ORDER_BONUS
+        )
+        orders.append(
+            Card(
+                id=str(uuid4()),
+                card_type="order",
+                name=cocktail,
+                drink="cocktail",
+                cocktail=cocktail,
+                bonus=bonus,
+            )
+        )
+    return orders
+
+
+def deal_market(
+    deck: list[Card], orders: list[Card]
+) -> tuple[list[CardRow], list[Card], list[Card]]:
+    """Lay out the three rows of the market.
+
+    Row 1: every karaoke card, face up (never cleared or replaced).
+    Row 2: three orders off the top of the shuffled order deck.
+    Row 3: three ability cards off the top of the shuffled ability deck.
+
+    Returns (rows, ability_deck, order_deck); both decks are drawn from the
+    front and cleared cards go to the back.
+    """
+    karaoke = [c for c in deck if c.card_type == "karaoke"]
+    abilities = [c for c in deck if c.card_type != "karaoke"]
+    random.shuffle(abilities)
+    orders = list(orders)
+    random.shuffle(orders)
+    rows = [
+        CardRow(position=KARAOKE_ROW, cards=karaoke),
+        CardRow(position=ORDERS_ROW, cards=orders[:ROW_SIZE]),
+        CardRow(position=ABILITY_ROW, cards=abilities[:ROW_SIZE]),
+    ]
+    return rows, abilities[ROW_SIZE:], orders[ROW_SIZE:]

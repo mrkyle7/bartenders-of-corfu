@@ -1,22 +1,27 @@
 -- cards.allium
--- Card definitions, row setup, claiming, and discard mechanics for Bartenders of Corfu.
+-- The card market (karaoke, orders, abilities), claiming, clearing rows,
+-- orders, and the free-action turn rules for Bartenders of Corfu.
 --
 -- This file extends game.allium. It supersedes the following rules from that file:
---   ClaimCard         — point rewards per card type; uses ReplaceCardSlot
---   RefreshCardRow    — row 1 cannot be refreshed; removed cards go to discard
---   ReplaceCard       — superseded by ReplaceCardSlot (deck → discard fallback)
+--   ClaimCard          — free action; point rewards per card type; uses ReplaceCardSlot
+--   RefreshCardRow     — clearing the orders row / swiping the ability row
+--   ReplaceCard        — superseded by ReplaceCardSlot (top of the row's deck)
 --   ApplyDrunkModifier — Refresher cards modify drunk calculation
---   SellCup           — CupDoubler and Specialist cards modify points calculation
+--   SellCup            — CupDoubler, Specialist and order bonuses modify points
 --
--- Deck composition (25 cards total — see GameModes below for mode-conditional changes):
---   5 × KaraokeCard     (one per spirit type)
+-- The market has three rows:
+--   Row 1 (karaoke): all 5 KaraokeCards, face up. Never cleared or refilled.
+--   Row 2 (orders):  3 OrderCards from the shuffled order deck (18 orders).
+--   Row 3 (ability): 3 ability cards from the shuffled ability deck (19 cards).
+--
+-- Ability deck (19 cards):
 --   5 × StoreCard       (one per spirit type)
 --   4 × RefresherCard   (one per mixer type)
 --   2 × CupDoublerCard  (Bendy Straw, Cocktail Umbrella)
 --   5 × SpecialistCard  (one per spirit type)
---   4 × FreeActionCard  (one each for RUM, WHISKEY, VODKA, GIN)
--- When the reroll_specials_free_action mode is enabled, the Cocktail Shaker
--- (WHISKEY → reroll_specials) FreeActionCard is excluded; deck shrinks to 24.
+--   3 × FreeActionCard  (RUM, VODKA, GIN)
+-- The WHISKEY free-action card (Cocktail Shaker, re-roll specials) is retired
+-- along with re-rolling.
 
 use "./game.allium" as game
 
@@ -25,13 +30,14 @@ use "./game.allium" as game
 
 entity Card {
     id: String
-    kind: Karaoke | Store | Refresher | CupDoubler | Specialist | FreeAction
+    kind: Karaoke | Store | Refresher | CupDoubler | Specialist | FreeAction | Order
 }
 
 variant KaraokeCard : Card {
     spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
     name: String
-    -- cost: exactly 3 bladder spirits of this card's spirit_type
+    -- cost: 2 bladder spirits of this card's spirit_type (stored spirits don't count),
+    --   and drunk_level >= config.min_drunk_to_sing (checked, not paid)
     -- worth 5 points when claimed; counts toward win condition
 }
 
@@ -41,8 +47,10 @@ variant StoreCard : Card {
     stored_spirits: List<game/Spirit>
     -- cost: 1 bladder spirit of this card's spirit_type
     -- worth 1 point when claimed
-    -- on claim: player can choose any number of spirits of spirit_type from bladder and move to this card
-    -- stored spirits may be moved to a cup or drunk at any time. Drinking would increase drunk level as normal
+    -- on claim: the cost spirit goes into the bag; every other spirit of
+    --   spirit_type in the bladder moves onto this card
+    -- stored spirits may be poured into a cup or drunk at any time on the
+    --   owner's turn (free actions). Drinking raises drunk level as normal
     -- stored spirits are consumed when spent (not reusable)
     -- stored spirits are unaffected by GoForAWee
 }
@@ -67,7 +75,9 @@ variant CupDoublerCard : Card {
 variant SpecialistCard : Card {
     spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
     name: String
-    -- cost: 2 bladder spirits of this card's spirit_type
+    -- cost: 2 bladder spirits of this card's spirit_type, OR 1 of its special
+    --   (WHISKEY: bitters, TEQUILA: cointreau, VODKA: vermouth, RUM: sugar,
+    --   GIN: lemon); the player chooses when they could pay either way
     -- worth 2 points when claimed
     -- ongoing: all non-cocktail drinks containing this spirit_type score +2 bonus points
     -- the specialist bonus is applied after cup doubler doubling:
@@ -76,34 +86,30 @@ variant SpecialistCard : Card {
 }
 
 variant FreeActionCard : Card {
-    spirit_type: RUM | WHISKEY | VODKA | GIN
+    spirit_type: RUM | VODKA | GIN
     name: String
-    free_action_type: take_ingredients | reroll_specials | sell_cup | go_for_a_wee
+    free_action_type: take_ingredients | sell_cup | go_for_a_wee
     -- cost: 3 bladder spirits of this card's spirit_type
     -- worth 2 points when claimed
     -- ongoing: grants the player one free additional action of free_action_type per turn.
-    --   The free action does not consume the player's main action for the turn.
-    --   The player may use the free action before or after their main action.
-    --   The turn only advances once the main action has been taken AND either
-    --   all available free actions have been used or the player explicitly ends their turn.
-    --   Each free action card may be used at most once per turn.
     -- Mapping:
     --   RUM     → take_ingredients  (Greedy Bartender)
-    --   WHISKEY → reroll_specials   (Cocktail Shaker)
     --   VODKA   → sell_cup          (Entrepreneur)
     --   GIN     → go_for_a_wee      (Weak Bladder)
 }
 
--- ─── Ingredient requirements ─────────────────────────────────────────────────
--- Extends game/IngredientRequirement.
--- spirit_type / mixer_type are set when a specific subtype is required;
--- when null, any ingredient of that kind is accepted.
-
-value IngredientRequirement {
-    kind: Spirit | Mixer | Special
-    spirit_type: (WHISKEY | RUM | VODKA | GIN | TEQUILA)?  -- null = any spirit accepted
-    mixer_type:  (COLA | SODA | TONIC | CRANBERRY)?        -- null = any mixer accepted
-    count: Integer
+variant OrderCard : Card {
+    name: String
+    drink: simple | slammer | cocktail
+    spirit_type: (WHISKEY | RUM | VODKA | GIN | TEQUILA)?   -- simple and slammer orders
+    mixer_type: (COLA | SODA | TONIC | CRANBERRY)?           -- simple orders
+    cocktail: String?                                        -- cocktail orders
+    bonus: Integer
+    -- Not claimable. Served by selling a matching drink (see SellCup):
+    --   simple:   a non-cocktail drink of exactly spirit_type and mixer_type,
+    --             single or double
+    --   slammer:  a Tequila Slammer
+    --   cocktail: that named cocktail
 }
 
 -- ─── Card catalogue ───────────────────────────────────────────────────────────
@@ -134,148 +140,145 @@ default SpecialistCard tequila_specialist = { spirit_type: TEQUILA, name: "Tequi
 default SpecialistCard vodka_specialist   = { spirit_type: VODKA,   name: "Vodka Specialist" }
 default SpecialistCard whisky_specialist  = { spirit_type: WHISKEY, name: "Whisky Specialist" }
 
-default FreeActionCard greedy_bartender = { spirit_type: RUM,     name: "Greedy Bartender", free_action_type: take_ingredients }
-default FreeActionCard cocktail_shaker  = { spirit_type: WHISKEY, name: "Cocktail Shaker",  free_action_type: reroll_specials }
-default FreeActionCard entrepreneur     = { spirit_type: VODKA,   name: "Entrepreneur",     free_action_type: sell_cup }
-default FreeActionCard weak_bladder     = { spirit_type: GIN,     name: "Weak Bladder",     free_action_type: go_for_a_wee }
+default FreeActionCard greedy_bartender = { spirit_type: RUM,   name: "Greedy Bartender", free_action_type: take_ingredients }
+default FreeActionCard entrepreneur     = { spirit_type: VODKA, name: "Entrepreneur",     free_action_type: sell_cup }
+default FreeActionCard weak_bladder     = { spirit_type: GIN,   name: "Weak Bladder",     free_action_type: go_for_a_wee }
+
+-- 18 orders:
+--   simple (+2): Vodka and Cola, Vodka Soda, Vodka Tonic, Vodka Cranberry,
+--                Rum and Cola, Whisky and Cola, Whisky Soda, Gin and Tonic
+--   slammer (+3): Tequila Slammer
+--   cocktail (+4): Mojito, Old Fashioned, Margarita, Cosmopolitan, Gin Martini,
+--                  Vodka Martini, Tom Collins, Manhattan
+--   cocktail (+5): Long Island Iced Tea
 
 -- ─── Config ───────────────────────────────────────────────────────────────────
 
 config {
     karaoke_card_points:    Integer = 5
+    min_drunk_to_sing:      Integer = 3    -- drunk level needed to claim a karaoke card
+    karaoke_spirits:        Integer = 2    -- spirits of the song's type paid to claim it
     store_card_points:      Integer = 1
     refresher_card_points:  Integer = 1
     cup_doubler_card_points: Integer = 2
     specialist_card_points:  Integer = 2
     specialist_sell_bonus:   Integer = 2    -- added to non-cocktail drink score per matching specialist
     free_action_card_points: Integer = 2
+    simple_order_bonus:      Integer = 2
+    slammer_order_bonus:     Integer = 3
+    cocktail_order_bonus:    Integer = 4
+    long_island_order_bonus: Integer = 5
+    row_size:                Integer = 3    -- orders and ability rows
 }
 
 -- ─── Cup amendment ────────────────────────────────────────────────────────────
 -- Adds has_cup_doubler to game/Cup. Set permanently when a CupDoublerCard is
 -- assigned to this cup at claim time.
--- Amends game/SellCup: non-cocktail drinks from a flagged cup score double.
 
 amendment game/Cup {
     has_cup_doubler: Boolean = false
 }
 
+-- ─── Selling (amended) ────────────────────────────────────────────────────────
+-- Supersedes game/SellCup for the points calculation. A player may sell one
+-- cup or both cups in one action; each cup is scored on its own.
+
 rule SellCup {
-    -- Supersedes game/SellCup for the points calculation only.
-    -- Points calculation order: base → cup doubler doubling → specialist bonus.
-    when: SellCup(player, cup, declared_specials)
+    when: SellCup(player, cups: List<(cup, declared_specials)>)
     requires: player.status = active
     requires: it is player's turn
-    requires: cup.owner.player_id = player.player_id
-    requires: declared_specials ⊆ player.special_ingredients
-    requires: (cup, declared_specials) is a valid sellable drink
-    let base_points = drink_points(cup, declared_specials)
-    let is_cocktail = (cup, declared_specials) matches a named cocktail recipe
-    let doubled_points = base_points * 2 when cup.has_cup_doubler and not is_cocktail, else base_points
-    -- Specialist bonus: for each spirit type in the cup, if the player holds a SpecialistCard
-    -- for that spirit type, add config.specialist_sell_bonus. Cocktails are exempt.
-    let specialist_spirit_types = { card.spirit_type for card in player.cards where kind = Specialist }
-    let cup_spirit_types = { s.spirit_type for s in cup.spirits }
-    let matching_specialist_count = (specialist_spirit_types ∩ cup_spirit_types).count
-    let specialist_bonus = matching_specialist_count * config.specialist_sell_bonus when not is_cocktail, else 0
-    let points = doubled_points + specialist_bonus
-    ensures: player.points = player.points + points
-    ensures: player.special_ingredients = player.special_ingredients - declared_specials
-    let sold_ingredients = cup.ingredients (before sale)
-    ensures: cup.ingredients = []
-    ensures: board.bag_contents = board.bag_contents + sold_ingredients + declared_specials
+    requires: 1 <= cups.count <= 2, no cup twice
+    requires: all declared_specials together ⊆ player.special_ingredients  -- legacy games; else empty
+    requires: each (cup, declared_specials) is a valid sellable drink
+    -- A cup's specials are the ones in it plus any declared (legacy games).
+    for (cup, declared_specials) in cups:
+        let base_points = drink_points(cup, declared_specials)
+        let is_cocktail = (cup, declared_specials) matches a named cocktail recipe
+        let doubled_points = base_points * 2 when cup.has_cup_doubler and not is_cocktail, else base_points
+        -- Specialist bonus: +specialist_sell_bonus per spirit type in the cup that
+        -- the player holds a SpecialistCard for. Cocktails are exempt.
+        let specialist_bonus = matching_specialists * config.specialist_sell_bonus when not is_cocktail, else 0
+        -- Order bonus: the first order in the orders row this drink matches is
+        -- served. Its bonus is added flat (never doubled). The order goes to the
+        -- bottom of the order deck and ReplaceCardSlot refills the row.
+        let order = first OrderCard in orders row matching (cup, declared_specials)
+        let order_bonus = order.bonus when order exists, else 0
+        ensures: player.points = player.points + doubled_points + specialist_bonus + order_bonus
+        ensures: player.special_ingredients = player.special_ingredients - declared_specials
+        ensures: board.bag_contents = board.bag_contents + cup.ingredients (before sale)
+        ensures: cup.ingredients = []
+    -- Specials in a cup go back in the bag with it; declared ones (legacy
+    -- games) return to the supply.
     ensures: CheckVictory(player)
-    -- has_cup_doubler is NOT cleared after sale; the effect is permanent.
-    -- specialist bonus is NOT cleared after sale; the effect is permanent.
-}
-
--- ─── Discard pile ─────────────────────────────────────────────────────────────
-
-entity DiscardPile {
-    board: game/BoardState
-    cards: List<Card>
+    -- Selling (one cup or both) is one main action.
 }
 
 -- ─── Setup ────────────────────────────────────────────────────────────────────
--- 3 random karaoke cards are placed in row 1 (the top row).
--- The remaining cards (2 karaoke + the rest) are shuffled together;
--- 3 are dealt to row 2, 3 to row 3, and the rest form the draw deck.
--- Without modes the deck is 25 cards → 16 form the draw deck after row 2/3.
--- With reroll_specials_free_action enabled the deck is 24 → 15 form the draw deck.
 
 rule SetupCardRows {
     when: GameStarted()
-    let all_karaoke  = deck where kind = Karaoke          -- exactly 5 cards
-    let karaoke_row_cards = random 3 from all_karaoke
-    let remaining_after_row1 = shuffle(deck - karaoke_row_cards)
-    let row2_cards   = first 3 from remaining_after_row1
-    let row3_cards   = next 3 from remaining_after_row1 (after row2_cards)
-    ensures: game/CardRow.created(position: 1, cards: karaoke_row_cards)
-    ensures: game/CardRow.created(position: 2, cards: row2_cards)
-    ensures: game/CardRow.created(position: 3, cards: row3_cards)
-    ensures: deck = remaining_after_row1 - row2_cards - row3_cards
-    ensures: DiscardPile.created(board: board, cards: [])
+    let order_deck   = shuffle(all 18 OrderCards)
+    let ability_deck = shuffle(all 19 ability cards)
+    ensures: game/CardRow.created(position: 1, cards: all 5 KaraokeCards)
+    ensures: game/CardRow.created(position: 2, cards: first config.row_size of order_deck)
+    ensures: game/CardRow.created(position: 3, cards: first config.row_size of ability_deck)
+    ensures: both decks keep the rest, drawn from the top
 }
 
 -- ─── Slot replacement ─────────────────────────────────────────────────────────
 -- Supersedes game/ReplaceCard.
--- Draw from deck if cards remain; otherwise the slot stays empty permanently.
--- Discarded cards are never reshuffled back into the deck.
 
 rule ReplaceCardSlot {
     when: ReplaceCardSlot(board, row)
+    requires: row.position != 1          -- the karaoke row is never refilled
+    let deck = order_deck when row.position = 2, else ability_deck
     if deck.count > 0:
-        let replacement = first card from deck
-        ensures: deck = deck - replacement
-        ensures: row.cards = row.cards + replacement
-    -- If deck is empty, the slot remains empty.
+        ensures: the top card of deck moves into row
+    -- If the deck is empty, the slot stays empty.
 }
 
--- ─── Available spirit count (helper) ─────────────────────────────────────────
--- For any action that checks spirit costs, the player may draw from both their
--- bladder and any StoreCard they hold for the matching spirit_type.
--- Stored spirits are consumed when spent (removed from the card, not reusable).
-
--- available_of(player, spirit_type) =
---   bladder spirits of that type
---   + stored_spirits on StoreCard in player.cards where spirit_type matches
-
 -- ─── Claiming a card (amended) ────────────────────────────────────────────────
--- Supersedes game/ClaimCard.
+-- Supersedes game/ClaimCard. Claiming is always a free action, once per turn.
 
 rule ClaimCard {
     when: ClaimCard(player, card)
     requires: player.status = active
     requires: it is player's turn
-    requires: card in any row of board.card_rows
+    requires: no TakeIngredients batch is in progress
+    requires: "claim_card" not in free_actions_used_this_turn
+    requires: card in row 1 or row 3            -- orders can't be claimed
     requires card.kind = Karaoke:
-        available_of(player, card.spirit_type) >= 3
+        player.drunk_level >= config.min_drunk_to_sing          -- checked, not paid
+        and player.bladder where spirit_type = card.spirit_type has count >= config.karaoke_spirits
     requires card.kind = Store:
         player.bladder where spirit_type = card.spirit_type has count >= 1
     requires card.kind = Refresher:
         player.bladder where mixer_type = card.mixer_type has count >= 2
     requires card.kind = CupDoubler:
         player.bladder has 3 or more spirits all of the same spirit_type
-        -- player declares spent_type at claim time
+        -- player declares the spirit type and the cup at claim time
     requires card.kind = Specialist:
         player.bladder where spirit_type = card.spirit_type has count >= 2
+        or player.bladder contains specialist_special(card.spirit_type)
     requires card.kind = FreeAction:
         player.bladder where spirit_type = card.spirit_type has count >= 3
-    -- Costs are threshold checks only; no bladder ingredients are consumed on claim.
-    -- Apply per-type effects.
+    -- The cost is paid: exactly the cost's ingredients leave the bladder and
+    -- go back into the bag.
+    let paid = the cost's ingredients (for a Specialist: 1 special or 2 spirits,
+               the special by default when held)
+    ensures: player.bladder = player.bladder - paid
+    ensures: board.bag_contents = board.bag_contents + paid
     if card.kind = Karaoke:
         ensures: player.points = player.points + config.karaoke_card_points
         ensures: player.karaoke_cards_claimed = player.karaoke_cards_claimed + 1
     if card.kind = Store:
-        -- The player chooses any number of matching spirits from bladder to stored_spirits (the card effect, not cost). Must transfer at least 1.
-        let transferred = player.bladder where spirit_type = card.spirit_type
+        let transferred = (player.bladder - paid) where spirit_type = card.spirit_type
         ensures: player.bladder = player.bladder - transferred
         ensures: card.stored_spirits = transferred
         ensures: player.points = player.points + config.store_card_points
     if card.kind = Refresher:
         ensures: player.points = player.points + config.refresher_card_points
     if card.kind = CupDoubler:
-        -- cup is an additional parameter declared alongside the ClaimCard action
         ensures: cup.has_cup_doubler = true
         ensures: player.points = player.points + config.cup_doubler_card_points
     if card.kind = Specialist:
@@ -284,28 +287,33 @@ rule ClaimCard {
         ensures: player.points = player.points + config.free_action_card_points
     ensures: player.cards = player.cards + [card]
     ensures: card removed from its CardRow
-    ensures: ReplaceCardSlot(board, card's row)
+    if card in row 3:
+        ensures: ReplaceCardSlot(board, row 3)
+    ensures: free_actions_used_this_turn = free_actions_used_this_turn + ["claim_card"]
     ensures: CheckVictory(player)
 }
 
--- ─── Refreshing a card row (amended) ──────────────────────────────────────────
+-- ─── Clearing rows (amended) ──────────────────────────────────────────────────
 -- Supersedes game/RefreshCardRow.
--- Row 1 (the top row) cannot be refreshed.
--- Rows 2 and 3 can always be refreshed regardless of which card types they contain.
--- All cards removed go to the discard pile (including any karaoke cards present).
 
 rule RefreshCardRow {
     when: RefreshCardRow(player, row)
     requires: player.status = active
     requires: it is player's turn
-    requires: player.drunk_level >= game/config.min_drunk_to_refresh
-    requires: row in board.card_rows
-    requires: row.position != 1    -- top row is never refreshable
-    let removed = row.cards
-    ensures: discard.cards = discard.cards + removed
-    ensures: row.cards = []
-    for _ in removed:
-        ensures: ReplaceCardSlot(board, row)
+    requires: no TakeIngredients batch is in progress
+    requires: row.position != 1                  -- the karaoke row is never cleared
+    requires row.position = 2:                   -- clearing the orders: free action
+        player.drunk_level >= game/config.min_drunk_to_refresh
+        and "refresh_orders_row" not in free_actions_used_this_turn
+    requires row.position = 3:                   -- swiping the abilities: free action
+        player.drunk_level >= game/config.min_drunk_to_swipe
+        and "refresh_ability_row" not in free_actions_used_this_turn
+    ensures: every card in row goes to the bottom of its deck, in order
+    ensures: config.row_size new cards are dealt from the top (fewer if the deck runs out)
+    if row.position = 2:
+        ensures: free_actions_used_this_turn = free_actions_used_this_turn + ["refresh_orders_row"]
+    if row.position = 3:
+        ensures: free_actions_used_this_turn = free_actions_used_this_turn + ["refresh_ability_row"]
 }
 
 -- ─── Drunk calculation (amended) ─────────────────────────────────────────────
@@ -315,12 +323,16 @@ rule RefreshCardRow {
 
 rule ApplyDrunkModifier {
     when: ApplyDrunkModifier(player, consumed: List<Ingredient>)
+    let boozy        = {bitters, cointreau, vermouth}
     let spirits      = consumed where kind = Spirit
+                                   or (kind = Special and special_type in boozy)
     let refresher_mixer_types = { card.mixer_type for card in player.cards where kind = Refresher }
     let hot_mixers   = consumed where kind = Mixer and mixer_type in refresher_mixer_types
-    let plain_mixers = consumed where kind = Mixer and mixer_type not in refresher_mixer_types
-    -- Spirits raise drunk level; hot_mixers always lower it (-1 each);
-    -- plain mixers lower it only when no spirits were consumed.
+    let plain_mixers = consumed where (kind = Mixer and mixer_type not in refresher_mixer_types)
+                                   or (kind = Special and special_type not in boozy)
+    -- Spirits (and bitters, cointreau, vermouth) raise drunk level; hot_mixers
+    -- always lower it (-1 each); plain mixers, lemon and sugar lower it only
+    -- when none of those were consumed.
     let delta = spirits.count - hot_mixers.count
     if spirits.count = 0:
         let delta = delta - plain_mixers.count
@@ -328,61 +340,14 @@ rule ApplyDrunkModifier {
     ensures: CheckElimination(player)
 }
 
--- ─── Guarantees ───────────────────────────────────────────────────────────────
-
-guarantee: row 1 always contains exactly 3 karaoke cards at game start
-guarantee: row 1 is never passed to RefreshCardRow
-guarantee: rows 2 and 3 may always be refreshed regardless of which card types they contain
-guarantee: a karaoke card in row 2 or 3 is discarded (not returned to the karaoke row) when that row is refreshed
-guarantee: a karaoke card in row 2 or 3 may be claimed and counts toward the win condition
-guarantee: discarded cards are never reshuffled; the discard pile is a permanent graveyard
-guarantee: card costs are threshold checks only — no bladder ingredients are removed on claim
-guarantee: the Store card effect (transferring spirits to stored_spirits) is not a cost consumption
-guarantee: ClaimCard for a CupDoubler card requires a cup parameter; invalid without one
-guarantee: cup.has_cup_doubler is set at claim time and never cleared; persists through sell/refill cycles
-guarantee: the CupDoubler doubling applies only to non-cocktail scoring categories (3–5 in game.allium)
-guarantee: all cards removed from rows 2 or 3 (any kind) go to the discard pile
-guarantee: stored spirits on a StoreCard are unaffected by GoForAWee
-guarantee: stored spirits are consumed (removed from the card) when spent on an action
-guarantee: ReplaceCardSlot is called exactly once per vacated slot
-guarantee: the Specialist sell bonus applies only to non-cocktail scoring categories (3–5 in game.allium)
-guarantee: the Specialist sell bonus is applied after cup doubler doubling: final = doubled_points + specialist_bonus
-guarantee: multiple specialist cards stack: a cup with 2 matching spirit types adds the bonus for each
-guarantee: specialist card effect is permanent; it is never cleared after claiming
-
--- ─── Re-roll specials ───────────────────────────────────────────────────────
--- The player chooses one or more specials from their mat and re-rolls each
--- using the special die. A successful roll replaces the old special with a
--- new type on the mat. A "nothing" result means that special is simply lost.
--- No ingredients are added to or removed from the bag.
--- This is a full turn action.
-
-rule ReRollSpecials {
-    when: ReRollSpecials(player, chosen_specials: List<Special>)
-    requires: player.status = active
-    requires: it is player's turn
-    requires: chosen_specials.count >= 1
-    requires: chosen_specials ⊆ player.special_ingredients
-
-    -- Remove chosen specials from the mat.
-    ensures: player.special_ingredients = player.special_ingredients - chosen_specials
-
-    -- Roll the special die once per chosen special.
-    for _ in chosen_specials:
-        if rolled_result != nothing:
-            ensures: player.special_ingredients = player.special_ingredients + [Special(rolled_result)]
-        -- "nothing" → the special is lost; nothing is returned to the bag.
-}
-
-guarantee: ReRollSpecials consumes the player's one action for the turn unless used as a free action — either via the Cocktail Shaker FreeActionCard or via the reroll_specials_free_action GameMode
-guarantee: no ingredients are added to or removed from the bag during ReRollSpecials
-guarantee: "nothing" results produce no new special — the player simply loses that special
-guarantee: the player may re-roll any number of their specials (1 to all) in a single action
-
--- ─── Free action turn rules ────────────────────────────────────────────────
--- FreeActionCards modify the normal one-action-per-turn constraint.
--- A player holding one or more FreeActionCards may take additional actions
--- of the matching type without consuming their main action for the turn.
+-- ─── Free action turn rules ──────────────────────────────────────────────────
+-- A turn is one main action (TakeIngredients, SellCup, DrinkCup, GoForAWee)
+-- plus free actions, each at most once per turn:
+--   claim_card           — always available (ClaimCard)
+--   refresh_orders_row   — always available at drunk 3+ (clearing row 2)
+--   refresh_ability_row  — always available at drunk 2+ (swiping row 3)
+--   take_ingredients / sell_cup / go_for_a_wee — granted by FreeActionCards
+-- DrinkStoredSpirit and UseStoredSpirit are free and unlimited.
 
 amendment game/BoardState {
     main_action_taken_this_turn: Boolean = false
@@ -390,82 +355,63 @@ amendment game/BoardState {
 }
 
 rule FreeActionTurnLogic {
-    -- When a player performs a turn action (TakeIngredients, SellCup, DrinkCup,
-    -- GoForAWee, ClaimCard, RefreshCardRow, ReRollSpecials):
+    -- When a player performs a turn action:
+    --   If the action type is an unused free action for the player → it is
+    --   free; record it in free_actions_used_this_turn.
+    --   Otherwise, if main_action_taken is false → it is the main action.
+    --   Otherwise → reject: "You have already taken your main action this turn".
     --
-    -- 1. If the action type matches a FreeActionCard held by the player AND
-    --    that free action has not been used this turn:
-    --      → perform the action as a free action (does not set main_action_taken)
-    --      → mark the free action type as used in free_actions_used_this_turn
-    --
-    --    Or if the action type is granted as a free action by an enabled
-    --    GameMode (claim_card_free_action → ClaimCard,
-    --    reroll_specials_free_action → ReRollSpecials) AND that free action
-    --    has not been used this turn:
-    --      → same treatment as branch 1 above
-    --
-    -- 2. Otherwise, if main_action_taken is false:
-    --      → perform the action as the main action
-    --      → set main_action_taken = true
-    --
-    -- 3. Otherwise:
-    --      → reject: "You have already taken your main action this turn"
-    --
-    -- After performing the action:
-    --   If main_action_taken is true AND no unused free actions remain:
-    --      → advance the turn to the next player
-    --   Otherwise:
-    --      → the turn stays with the current player
+    -- After the action: the turn advances when main_action_taken is true AND no
+    -- unused free action could be used right now. claim_card counts only while
+    -- the player can afford a card in row 1 or row 3; refresh_orders_row only
+    -- at drunk 3+ with orders to clear; refresh_ability_row only at drunk 2+
+    -- with ability cards to swipe. Card-granted free actions count
+    -- while unused.
     requires: true  -- applied inline in each action handler
 }
 
--- ─── Game modes ──────────────────────────────────────────────────────────────
--- Optional rule variations selected by the host in the lobby. Modes are locked
--- once the game starts and travel with the game state.
-
-amendment game/BoardState {
-    -- Enabled mode keys (empty list under standard rules). Validated against
-    -- the GameMode enum below.
-    game_modes: List<String> = []
-}
-
-enum GameMode {
-    sell_both_cups
-        -- SellCup may sell both cups in one main action.
-    claim_card_free_action
-        -- ClaimCard is always treated as a free additional action (once per
-        -- turn, mirroring FreeActionCard semantics). No FreeActionCard exists
-        -- for ClaimCard, so deck composition is unchanged.
-    reroll_specials_free_action
-        -- ReRollSpecials is always treated as a free additional action (once
-        -- per turn). The Cocktail Shaker FreeActionCard (WHISKEY →
-        -- reroll_specials) is excluded from the deck, since it would otherwise
-        -- be redundant — total deck size becomes 24.
-}
-
-guarantee: game_modes is set in the lobby and locked once the game starts
-guarantee: claim_card_free_action grants ClaimCard as a free action at most once per turn
-guarantee: reroll_specials_free_action grants ReRollSpecials as a free action at most once per turn
-guarantee: when reroll_specials_free_action is enabled, the Cocktail Shaker FreeActionCard is not present in the deck
-guarantee: a partial TakeIngredients batch still blocks ClaimCard and ReRollSpecials regardless of mode (the player must finish or end the take first)
-
 rule EndTurn {
     -- A player may explicitly end their turn, forfeiting any unused free actions.
-    -- This is only available after the main action has been taken.
     when: EndTurn(player)
     requires: player.status = active
     requires: it is player's turn
     requires: main_action_taken_this_turn = true
+    requires: at least one unused free action could be used
     ensures: turn advances to next active player
     ensures: main_action_taken_this_turn = false
     ensures: free_actions_used_this_turn = []
 }
 
-guarantee: each FreeActionCard grants at most one free action per turn
-guarantee: free actions do not consume the player's main action
-guarantee: the turn only advances when main_action_taken AND no unused free actions remain, or the player explicitly ends the turn
-guarantee: free action cards cost 3 bladder spirits of the matching type (threshold check only)
-guarantee: free action card effects are permanent; the free action ability persists every turn after claiming
-guarantee: a player may use their free action(s) before or after their main action
-guarantee: existing free actions (DrinkStoredSpirit, UseStoredSpirit) are unaffected by FreeActionCard rules — they remain always-free
+-- ─── Game modes ──────────────────────────────────────────────────────────────
+-- There are no optional modes. The former ones were settled: sell_both_cups
+-- and claim_card_free_action are standard rules; reroll_specials_free_action
+-- went with re-rolling. Saved games that list them still load and ignore them.
+
+amendment game/BoardState {
+    game_modes: List<String> = []
+}
+
+-- ─── Guarantees ───────────────────────────────────────────────────────────────
+
+guarantee: row 1 holds all 5 karaoke cards at game start and is never cleared or refilled
+guarantee: row 2 holds only order cards; row 3 holds only ability cards
+guarantee: cleared cards go to the bottom of their own deck; nothing is discarded for good
+guarantee: order cards are never claimed; a sale serves at most one order per cup
+guarantee: order bonuses are never doubled and never get the specialist bonus
+guarantee: claiming a card moves exactly its cost from the bladder into the bag
+guarantee: stored spirits never count toward a card cost; specials only pay for a specialist
+guarantee: the Store card effect (transferring spirits to stored_spirits) is not a cost consumption
+guarantee: ClaimCard for a CupDoubler card requires a cup parameter; invalid without one
+guarantee: cup.has_cup_doubler is set at claim time and never cleared; persists through sell/refill cycles
+guarantee: the CupDoubler doubling applies only to non-cocktail scoring categories (3–5 in game.allium)
+guarantee: stored spirits on a StoreCard are unaffected by GoForAWee
+guarantee: stored spirits are consumed (removed from the card) when spent on an action
+guarantee: the Specialist sell bonus applies only to non-cocktail scoring categories (3–5 in game.allium)
+guarantee: the Specialist sell bonus is applied after cup doubler doubling: final = doubled_points + specialist_bonus
+guarantee: multiple specialist cards stack: a cup with 2 matching spirit types adds the bonus for each
+guarantee: claiming a card is always a free action, at most once per turn
+guarantee: swiping the ability row is a free action at most once per turn
+guarantee: clearing the orders row is a free action at most once per turn
+guarantee: a partial TakeIngredients batch blocks ClaimCard and RefreshCardRow until the take is finished
+guarantee: a free action only holds the turn open while it could be used
 guarantee: FreeActionCard free_action_type is visible to all players on the claimed card

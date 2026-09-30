@@ -1,52 +1,39 @@
-Feature: Game modes
-  As a host
-  I want to enable optional rule variations in the lobby
-  So that I can play test variations of the game
+Feature: Former game modes
+  As a player
+  I want the rules that used to be lobby options to just be the rules
+  So that every game plays the same way
 
-  Scenario: Host enables sell_both_cups mode in the lobby
-    Given a new game with 2 players in the lobby
-    When the host enables the "sell_both_cups" game mode
-    Then the request should succeed
-    And the game's enabled modes should include "sell_both_cups"
+  # Selling both glasses and claiming a card as a free action are standard
+  # rules now, and re-rolling specials is gone. The lobby offers no modes.
 
-  Scenario: Host disables a previously-enabled mode
-    Given a new game with 2 players in the lobby
-    And the host has enabled the "sell_both_cups" game mode
-    When the host clears all game modes
-    Then the request should succeed
-    And the game should have no enabled modes
+  Scenario: No optional game modes are advertised
+    When the available game modes are listed
+    Then the list should be empty
 
-  Scenario: Non-host cannot change game modes
+  Scenario: Retired game modes are rejected in the lobby
     Given a new game with 2 players in the lobby
-    When the non-host tries to enable the "sell_both_cups" game mode
-    Then the action should be rejected with a 403 error
+    When the host tries to enable the "sell_both_cups" game mode
+    Then the action should be rejected with a 400 error
 
   Scenario: Unknown game modes are rejected
     Given a new game with 2 players in the lobby
     When the host tries to enable the "definitely_not_a_real_mode" game mode
     Then the action should be rejected with a 400 error
 
+  Scenario: Non-host cannot change game modes
+    Given a new game with 2 players in the lobby
+    When the non-host tries to enable the "sell_both_cups" game mode
+    Then the action should be rejected with a 403 error
+
   Scenario: Game modes are locked once the game starts
     Given a started game with 2 players
     When the host tries to enable the "sell_both_cups" game mode after start
     Then the action should be rejected with a 409 error
 
-  Scenario: Selected game modes persist into the started game
-    Given a new game with 2 players in the lobby
-    And the host has enabled the "sell_both_cups" game mode
-    When the host starts the game
-    Then the started game's enabled modes should include "sell_both_cups"
+  # ── Selling both glasses ───────────────────────────────────────────────────
 
-  Scenario: Available game modes are advertised by the API
-    When the available game modes are listed
-    Then the list should include "sell_both_cups"
-    And the list should include "claim_card_free_action"
-    And the list should include "reroll_specials_free_action"
-
-  # ── Sell both cups action ──────────────────────────────────────────────────
-
-  Scenario: Player sells both cups in one action when sell_both_cups mode is on
-    Given a started game with 2 players and sell_both_cups mode enabled
+  Scenario: Player sells both glasses in one action
+    Given a started game with 2 players
     And it is player 1's turn
     And player 1's cup 0 contains 1 VODKA and 1 COLA
     And player 1's cup 1 contains 2 WHISKEY and 1 COLA
@@ -56,16 +43,8 @@ Feature: Game modes
     And player 1's cup 1 should be empty
     And it should be player 2's turn
 
-  Scenario: Sell-both action is rejected when sell_both_cups mode is off
+  Scenario: Selling both rejects an invalid cup combination on either cup
     Given a started game with 2 players
-    And it is player 1's turn
-    And player 1's cup 0 contains 1 VODKA and 1 COLA
-    And player 1's cup 1 contains 2 WHISKEY and 1 COLA
-    When player 1 tries to sell both cups with no declared specials
-    Then the action should be rejected with a 400 error
-
-  Scenario: Sell-both rejects an invalid cup combination on either cup
-    Given a started game with 2 players and sell_both_cups mode enabled
     And it is player 1's turn
     And player 1's cup 0 contains 1 VODKA and 1 COLA
     And player 1's cup 1 contains 1 GIN and 1 COLA
@@ -73,8 +52,8 @@ Feature: Game modes
     Then the action should be rejected with a 400 error
     And player 1 should have 0 points
 
-  Scenario: Sell-both rejects when the same special is declared on both cups
-    Given a started game with 2 players and sell_both_cups mode enabled
+  Scenario: Selling both rejects the same special declared on both cups
+    Given a started game with 2 players
     And it is player 1's turn
     And player 1's cup 0 contains 2 RUM and 1 SODA
     And player 1's cup 1 contains 2 RUM and 1 SODA
@@ -82,73 +61,39 @@ Feature: Game modes
     When player 1 tries to sell both cups declaring sugar on each
     Then the action should be rejected with a 400 error
 
-  Scenario: Sell-both with the same cup_index twice is rejected
-    Given a started game with 2 players and sell_both_cups mode enabled
+  Scenario: Selling the same cup twice in one action is rejected
+    Given a started game with 2 players
     And it is player 1's turn
     And player 1's cup 0 contains 1 VODKA and 1 COLA
     When player 1 tries to sell cup 0 twice in one action
     Then the action should be rejected with a 400 error
 
-  Scenario: Sell-both counts as a single main action (turn advances once)
-    Given a started game with 2 players and sell_both_cups mode enabled
-    And it is player 1's turn
-    And player 1's cup 0 contains 1 VODKA and 1 COLA
-    And player 1's cup 1 contains 1 RUM and 1 COLA
-    When player 1 sells both cups with no declared specials
-    Then it should be player 2's turn
-    And a move record should be created for the game
+  # ── Claiming a card is a free action ───────────────────────────────────────
 
-  # ── Claim card free action mode ────────────────────────────────────────────
-
-  Scenario: Claim card is treated as a free action when claim_card_free_action mode is on
-    Given a started game with 2 players and claim_card_free_action mode enabled
+  Scenario: Claiming a card is a free action
+    Given a started game with 2 players
     And it is player 1's turn
     And player 1's bladder has 1 VODKA spirit
-    And a store card is available in row 2
+    And a store card is available in row 3
     When player 1 claims that card
     Then the request should succeed
     And the claim should be recorded as a free action
     And it should still be player 1's turn
 
-  Scenario: Claim card consumes the main action when claim_card_free_action mode is off
+  Scenario: A take in progress blocks a claim
     Given a started game with 2 players
     And it is player 1's turn
     And player 1's bladder has 1 VODKA spirit
-    And a store card is available in row 2
-    When player 1 claims that card
-    Then the request should succeed
-    And the claim should be recorded as a main action
-    And it should be player 2's turn
-
-  Scenario: Partial take blocks a free claim under claim_card_free_action mode
-    Given a started game with 2 players and claim_card_free_action mode enabled
-    And it is player 1's turn
-    And player 1's bladder has 1 VODKA spirit
-    And a store card is available in row 2
+    And a store card is available in row 3
     And player 1 has a take in progress with 1 ingredient already taken
     When player 1 tries to claim that card
     Then the action should be rejected with a 409 error
 
-  # ── Reroll specials free action mode ───────────────────────────────────────
+  # ── Re-rolling specials is gone ────────────────────────────────────────────
 
-  Scenario: Re-roll specials is treated as a free action when reroll_specials_free_action mode is on
-    Given a started game with 2 players and reroll_specials_free_action mode enabled
-    And it is player 1's turn
-    And player 1 has "lemon" on their player mat
-    When player 1 re-rolls "lemon"
-    Then the request should succeed
-    And the reroll should be recorded as a free action
-    And it should still be player 1's turn
-
-  Scenario: Re-roll specials consumes the main action when reroll_specials_free_action mode is off
+  Scenario: Re-rolling specials is rejected
     Given a started game with 2 players
     And it is player 1's turn
     And player 1 has "lemon" on their player mat
-    When player 1 re-rolls "lemon"
-    Then the request should succeed
-    And the reroll should be recorded as a main action
-    And it should be player 2's turn
-
-  Scenario: Cocktail Shaker free-action card is excluded from the deck under reroll mode
-    Given a started game with 2 players and reroll_specials_free_action mode enabled
-    Then the deck should not contain the Cocktail Shaker card
+    When player 1 tries to re-roll specials "lemon"
+    Then the action should be rejected with a 400 error

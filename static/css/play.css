@@ -1097,6 +1097,28 @@ button.my-card { border-color: rgba(245, 182, 74, 0.5); }
 .lobby-card h3 { margin: 0; font-size: 14px; color: var(--amber); }
 .lobby-sub { margin: 0; color: var(--muted); font-size: 13px; }
 
+.invite { display: flex; flex-direction: column; gap: 8px; }
+.invite-label { font-size: 14px; font-weight: 700; color: var(--amber); }
+.invite-row { display: flex; gap: 8px; }
+/* .lobby-card scoping: #board.lobby-mode's checkbox rule would shrink it. */
+.lobby-card .invite-url {
+    flex: 1;
+    width: auto;
+    height: auto;
+    margin: 0;
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-overflow: ellipsis;
+}
+.invite-copy { flex: none; }
+
 .lobby-players { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 
 .lobby-player {

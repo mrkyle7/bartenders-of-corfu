@@ -1901,6 +1901,27 @@
     outline-offset: 1px;
 }
 
+/* Invite link in the lobby */
+#gbInviteSection .invite { display: flex; flex-direction: column; gap: 6px; }
+#gbInviteSection .invite-label { font-weight: 700; color: var(--theme-gold-accent); }
+#gbInviteSection .invite-row { display: flex; gap: 8px; align-items: center; }
+#gbInviteSection .invite-url {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 0.9em;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    border: 1px solid rgba(var(--theme-shadow-rgb), 0.35);
+    border-radius: 6px;
+    text-overflow: ellipsis;
+}
+#gbInviteSection .invite-url:focus { outline: 2px solid var(--theme-accent); outline-offset: 1px; }
+#gbInviteSection .invite-copy { flex: none; margin: 0; }
+
 /* ---------- Toast ---------- */
 .gb-toast {
     position: fixed;

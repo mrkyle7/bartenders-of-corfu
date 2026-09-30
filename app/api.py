@@ -1313,6 +1313,8 @@ async def get_valid_actions(game_id: str, request: Request):
     actions: list[dict] = []
     can_end_turn = False
     available_types: dict[str, dict] = {}
+    main_action_taken = False
+    free_actions_left: list[str] = []
 
     try:
         if game.status == Status.STARTED and game.game_state is not None:
@@ -1346,23 +1348,30 @@ async def get_valid_actions(game_id: str, request: Request):
                     existing["is_free"] = True
 
             # End-turn legality mirrors actions.end_turn — main taken AND at
-            # least one free action remaining.
+            # least one free action remaining that could still be used.
             ps = gs.player_states.get(token_user.id)
             if (
                 gs.player_turn == token_user.id
                 and ps is not None
                 and not ps.is_eliminated
-                and gs.main_action_taken_this_turn
             ):
-                remaining = _available_free_actions(
-                    gs, ps, gs.free_actions_used_this_turn
+                main_action_taken = gs.main_action_taken_this_turn
+                free_actions_left = sorted(
+                    _available_free_actions(
+                        gs, ps, gs.free_actions_used_this_turn, usable_only=True
+                    )
                 )
-                can_end_turn = len(remaining) > 0
+                can_end_turn = main_action_taken and len(free_actions_left) > 0
         return JSONResponse(
             content={
                 "actions": actions,
                 "available_types": available_types,
                 "can_end_turn": can_end_turn,
+                # Your turn: whether the main action is spent, and the free
+                # actions you could still use (claim_card, refresh_ability_row,
+                # and any granted by your free-action cards).
+                "main_action_taken": main_action_taken,
+                "free_actions_left": free_actions_left,
             }
         )
     except Exception:

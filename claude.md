@@ -24,19 +24,20 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 - `/static` — frontend assets. Three game UIs share the same API; players pick one on the home page (`bocUi` in localStorage) and `/game` redirects to it:
   - classic: `/game` (`game.html`, `game.js`)
   - table view: `/play` (`play.html`, `play/`, `css/play.css`)
-  - bar top: `/bar` (`bar.html`, `bar/`, `css/bar.css`) — the physical box on a table: every mat, card, token and the menu always on show; you act by touching the piece. Legality comes from `/valid-actions`.
+  - bar top: `/bar` (`bar.html`, `bar/`, `css/bar.css`) — the physical box on a table: every mat, card and token on show; you act by touching the piece. The drinks menu and rules open in a panel from the turn bar. Legality comes from `/valid-actions`.
 - `/tests` — BDD tests (`features/*.feature` + `test_game_actions_bdd.py`), UI tests (`ui/`)
 - `/specs` — allium specs (source of truth for game rules, see below)
 
 ## Domain Model
 Formal specs live in `specs/game.allium` and `specs/cards.allium`. Use the `spec-reader` agent to extract rules before implementing game logic. Key rules to know:
 
-**Winning:** 40+ pts OR 3 karaoke cards claimed OR last player standing
+**Winning:** reaching the target (40 / 35 / 30 pts for 2 / 3 / 4 players) starts a last round, most points then wins; OR 3 karaoke cards claimed (instant; each needs drunk 3+ and 2 of its spirit, the spirits paid); OR last player standing
 **Elimination:** `drunk_level > 5` → hospitalised; `bladder.count > bladder_capacity` → wet
-**Turn:** player takes exactly ONE action per turn. `TakeIngredients` may span multiple API batches — the turn only advances when the cumulative total reaches `take_count`. No other action is permitted while a batch is in progress.
-**Cards:** costs are threshold checks only — no bladder ingredients are consumed on claim. `cards.allium` rules supersede same-named rules in `game.allium` (ClaimCard, RefreshCardRow, ReplaceCard, ApplyDrunkModifier, SellCup).
-**Row 1:** always contains karaoke cards, can never be refreshed.
-**Discard:** permanent graveyard (`gs.discard`), never reshuffled.
+**Turn:** one MAIN action (take ingredients, sell one or both cups, drink a cup, wee) plus FREE actions, each once a turn: claim a card (always free), clear the orders row (drunk 3+), swipe the ability row (drunk 2+), and those granted by free-action cards. A free action only holds the turn open while it could be used. `TakeIngredients` may span multiple API batches — the turn only advances when the cumulative total reaches `take_count`.
+**Market:** row 1 = all 5 karaoke cards (never cleared or refilled); row 2 = 3 drink orders (serve one by selling a matching drink for its bonus); row 3 = 3 ability cards. Cleared or served cards go to the bottom of their deck (`order_deck`, `deck`).
+**Cards:** claiming pays the cost: those ingredients go from the bladder into the bag (`card_payment` in `app/actions.py`); a Store pays one spirit and stores the rest. `cards.allium` rules supersede same-named rules in `game.allium`.
+**Specials:** ingredients in the bag, 2 each of bitters/cointreau/lemon/sugar/vermouth (`Ingredient.BITTERS`…). One drawn from the bag goes to `specials_display` and the draw carries on (`draw_token`), so the display holds 5 spirits/mixers and blind draws never give a special. Taking one (source `"specials"`) counts toward the take: into a cup (max 2 per cup, on top of its 5) or drunk (lemon/sugar sober like a mixer; bitters/cointreau/vermouth count as spirits, `BOOZY_SPECIALS`). Specials never count toward card costs, except one pays for its specialist (`SPECIALIST_SPECIAL`). Cocktails read specials from the cup. Games started with the old special dice (`Ingredient.SPECIAL`, mat specials, `app/specials.py`) keep those rules.
+**Rules text:** `Game Rules.md` is the player-facing rulebook and the bar top view shows the same rules (`static/bar/data.js`); keep all three in step with the specs.
 
 ## Definition of Done
 A task is complete when:

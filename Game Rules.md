@@ -1,208 +1,166 @@
 # Bartenders of Corfu
 
-You are playing the role of a busy bartender in a bustling bar in Corfu. Make drinks and cocktails to sell to the thirsty punters quicker than your opponent to win! Bartending is also thirsty work though, so you’ll get to sample your own drinks for some special skills, be careful not to get too drunk though or you’ll end up on a fast trip to the nearest hospital!
+You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails to sell to the thirsty punters quicker than your rivals to win! Bartending is thirsty work, so you'll sample your own drinks along the way. Just don't get too drunk, or you'll end up on a fast trip to the nearest hospital.
 
-## Objective
+## Winning
 
-First person to sell 40 points or more worth of drinks will win the game. Additionally, if someone manages to claim 3 karaoke cards, they will instantly win the game!
+- **Points:** the first player to reach the target starts the last round. The target is **40 points with 2 players, 35 with 3, and 30 with 4**. The round is played out so everyone has had the same number of turns, then the player with the most points wins (on a tie, the one earliest in turn order).
+- **Karaoke:** sing **3 karaoke songs** and you win on the spot, even during the last round. A song needs you to be drunk 3 or more, with 2 of its spirit in your bladder.
+- **Last one standing:** if everyone else has gone to hospital, wet themselves or left, you win.
 
-## Contents
+## What's in the box
 
-Spirit Ingredients:
+Ingredient tokens go in the bag. Each spirit and each mixer has **players + 3** tokens (5 each with two players, 7 each with four):
 
-5 x Whisky Ingredients
-5 x Rum Ingredients
-5 x Vodka Ingredients
-5 x Gin Ingredients
-5 x Tequila Ingredients
+- Spirits: whisky, rum, vodka, gin, tequila
+- Mixers: cola, soda water, tonic water, cranberry
+- Specials (purple): **2 each** of bitters, cointreau, lemon, sugar and vermouth, whatever the number of players
 
-Mixer Ingredients:
+Also:
 
-4 x Cola Ingredients
-4 x Soda Water Ingredients
-4 x Tonic Water Ingredients
-4 x Cranberry Ingredients
+- 5 karaoke cards, 19 ability cards and 18 order cards.
+- For each player: a player mat with two glasses, a bladder track, a drunk track and 4 toilet tokens.
 
-Specials:
+## Setting up
 
-4 x Special Ingredient tokens
-
-8 x Cups
-4 x Player mats
-4 x Drunk Trackers
-4 x Bladder trackers
-16 x Toilet Tokens
-1 x Score tracker
-4 x Player tracker tokens
-20 x cards
-
-## Set up
-
-Give every player:
-2 empty cups
-1 player mat
-Drunk tracker (set to sober (0))
-Bladder tracker 
-4 toilet tokens
-
-Put all ingredients in the bag, then take 5 ingredients randomly from the bag and display them in the open ingredients area. 
-
-Shuffle the five karaoke cards and lay out three. Shuffle the other two with the rest of the cards and lay out two more rows of three. 
+- Put all the ingredient tokens in the bag, then draw onto the open display until it shows 5 spirits and mixers. Any special that comes out goes to the specials tray instead (see "Specials").
+- Lay out the market:
+  - **Karaoke row:** all 5 karaoke cards, face up.
+  - **Orders row:** shuffle the orders and deal 3.
+  - **Ability row:** shuffle the ability cards and deal 3.
+- Everyone starts sober (drunk 0), with an empty bladder of 8 spaces and 4 toilet tokens. The turn order is random.
 
 ## Your turn
 
-On your turn, you must take ONE of the following actions:
+On your turn you take **one main action**, and you may also take any **free actions** you have, before or after it.
+
+**Main actions** (pick one):
+
 - Take ingredients
-- Sell a cup
+- Sell your glasses
+- Drink a glass
 - Go for a wee
+
+**Free actions** (each once a turn):
+
 - Claim a card
-- Refresh a row of cards (Only if drunk enough)
-- Drink a cup
+- Clear the orders row (drunk 3 or more)
+- Swipe the ability row (drunk 2 or more)
+- Whatever your free-action cards give you (see "Ability cards")
+- Pour or drink from a Store card (any number of times)
 
-### Take Ingredients
+Your turn ends once you've taken your main action and have no free action left that you could use. You can also end it yourself after your main action, giving up the free actions you haven't used.
 
-You must take exactly 3 ingredients plus how drunk you are. For example, if you are 2 levels drunk, you must take exactly 5 ingredients.
+### Take ingredients
 
-You can take ingredients from the open display of ingredients or blindly from the bag or both in any order. You can switch between the bag and the open display as much as you like, up until your limit.
+- You must take exactly **3 ingredients plus your drunk level**. At drunk 2 you take 5.
+- Take them from the open display, the specials tray, blind from the bag, or any mix, in any order.
+- You can take several at once, but you must decide where every ingredient in hand goes before taking more:
+  - **Into a glass.** Each glass holds at most 5 spirits and mixers, plus up to 2 specials.
+  - **Drink it.** It goes into your bladder.
+- Nothing goes back in the bag.
+- You can't take ingredients if the bag, the display and the specials tray together hold fewer than you need.
+- When you've taken them all, your drunk level changes once for everything you drank (see "Drinking"), and the display is refilled from the bag.
 
-You cannot put any ingredients back in the bag once you have taken them.
+### Specials
 
-You may take multiple ingredients at once (for example, drawing 3 from the bag in one go). You must decide what to do with every ingredient in your current batch before taking any more. The options are:
+- **In the bag like everything else.** There are two each of bitters, cointreau, lemon, sugar and vermouth.
+- **They go to the specials tray.** Whenever a special comes out of the bag, whether refilling the display or drawn blind, put it on the specials tray and keep drawing. The display always shows 5 spirits and mixers, and a blind draw never hands you a special.
+- **Anyone can take them.** Taking a special from the tray is one of the ingredients you take this turn. It goes straight into one of your glasses (up to 2 specials per glass, on top of its 5 spirits and mixers), or you drink it.
+- **Only for cocktails.** A glass with a special in it can only be sold as the cocktail it makes.
+- **Drinking one.** It goes into your bladder. Lemon and sugar sober you like a mixer; bitters, cointreau and vermouth get you drunk like a spirit. Why drink one? So nobody else gets it, or to pay for a specialist card.
+- **Paying for a specialist.** One special pays for the specialist card of its spirit: bitters for whisky, cointreau for tequila, vermouth for vodka, sugar for rum, lemon for gin. Otherwise specials never count toward a card's cost.
 
-1. Put them in one of your cups
-2. Drink them.
+### Drinking
 
-The exception to this rule are the purple special ingredients dice. If you choose this dice, roll it to see what special ingredient it is and place it on the special ingredient section on your player mat. 
+- You can drink ingredients as you take them, or drink a whole glass as your main action.
+- **Everything you drink goes into your bladder.**
+- **Drunk level:** each spirit, bitters, cointreau or vermouth drunk in the action raises it by 1. If you drank **none of those**, you sober up by 1 per mixer, lemon or sugar instead (never below 0).
+- **Hospital:** above drunk 5 you are out of the game.
+- **Wetting yourself:** more ingredients in your bladder than it has spaces, and you are out of the game.
+- **When you're out:** everything you held (bladder, glasses, stored spirits) goes back in the bag for the others to use.
 
-The Special Ingredients are:
+### Sell your glasses
 
-1. Bitters
-2. Cointreau
-3. Lemon
-4. Sugar
-5. Vermouth
-6. Nothing! Unlucky, no special ingredient this time, place the special ingredient die back in the bag
+- Sell one glass, or both in one action. Sold ingredients, specials included, go back in the bag.
 
-_*Putting ingredients in cups*_
+Drinks you can sell:
 
-There is no limitation on what you can put in the cup except that you cannot have more than five ingredients per cup. 
+| Drink | Points |
+|---|---|
+| One spirit with one kind of mixer | 1 |
+| Two of the **same** spirit with one kind of mixer | 3 |
+| Tequila slammer: two tequila, nothing else | 3 |
+| A cocktail from the menu | 10 |
+| Long Island Iced Tea | 15 |
 
-Tip: see “Sell a cup” for limitations on what drinks you are able to sell
+Which mixers go with which spirit:
 
-_Drinking ingredients_
-
-Place drunk ingredients in your mouth on the player mat. Once you have chosen all your ingredients, count the number of spirits and mixers you have drunk.
-
-If you have drunk any spirits, increase your drunk level by the number of spirits drunk.
-
-If your drunk level goes above 5 - you pass out and need to go hospital, losing the game! You are now out of the game - maybe go make some reall drinks for your friends. 
-
-If you have only drunk mixers, sober up and decrease your drunk level by the number of mixers drunk. You cannot go below 0 drunk. 
-
-Then place all drunk ingredients into your bladder.
-
-If you cannot fit any more ingredients in your bladder you wet yourself and lose the game! Your bladder starts with a capacity of 8. 
-
-### Sell a cup
-
-You can only sell valid combinations of spirits and mixers as per the following matrix:
-
-||Vodka|Rum|Whisky|Gin|Tequila*|
+| | Vodka | Rum | Whisky | Gin | Tequila |
 |-|-|-|-|-|-|
-|Cola|✅|✅|✅|❌|❌
-|Tonic Water|✅|❌|❌|✅|❌
-|Soda Water|✅|❌|✅|❌|❌
-|Cranberry|✅|❌|❌|❌|❌
+| Cola | ✓ | ✓ | ✓ | | |
+| Soda water | ✓ | | ✓ | | |
+| Tonic water | ✓ | | | ✓ | |
+| Cranberry | ✓ | | | | |
 
-*Tequila is the only spirit that can be sold on its own as a Tequila Slammer
+- **Simple drinks:** at most two spirits, and only one kind of mixer (any number of it).
+- **Cocktails:** the glass must hold exactly the recipe: its spirits, mixers and specials, nothing extra.
 
-You gain the following points for selling drinks:
+### Orders
 
-Single spirit and mixer(s): 1 point
-Double spirit and mixer(s): 3 points
-Tequila Slammer (2 tequilas): 3 points
-Cocktail: 10 points
-Long island iced tea: 15 points 
-
-Note: you cannot sell a drink with more than 2 spirit ingredients except cocktails, however you can have any number of valid mixers in a drink. 
-
-Cocktails are defined on the cocktail menu and require 1 or 2 special ingredients (purple dice). The cup must contain exactly the spirits and mixers listed in the recipe — no extras — and you must declare exactly the specials listed from your player mat.
-
-When you sell a cup, put the ingredients back into the bag.
+- **Serving an order:** three drink orders sit in the orders row. Sell a drink an order asks for and you collect its bonus on top of the drink's points.
+- **Bonuses:**
+  - +2 for a simple drink such as "Rum and Cola" (single or double)
+  - +3 for a Tequila Slammer
+  - +4 for a cocktail
+  - +5 for the Long Island Iced Tea
+- **Where they go:** a served order goes to the bottom of the order deck, and the next one is dealt.
+- **One order per glass,** and each glass sold can serve a different order.
+- **Not doubled:** order bonuses aren't doubled by a cup doubler, and no specialist bonus is added to them.
 
 ### Go for a wee
 
-At some point you may need to empty your bladder to allow you to drink more. If you do, you also sober up 1 level (decrease drunk track by 1).
+- **Only with something in your bladder.** Empty it back into the bag and sober up 1 level.
+- **Breaking the seal:** each wee places one of your toilet tokens on a bladder space, so your bladder shrinks by 1.
+- **Four toilet tokens:** once they're all placed your bladder stays at 4, and you can still wee as often as you like.
 
-The more you wee, the quicker you will need to wee next time: you broke the seal! After taking this action, place one of your toilet tokens on one bladder space, decreasing your bladder size by one.
+### Claim a card (free action)
 
-Note: the smallest size your bladder can be is four. Once all four toilet tokens have been placed your bladder size stays at four, but you may still go for a wee as many times as you like.
+- Take a karaoke card or an ability card if your bladder holds its cost.
+- **The cost is paid:** those ingredients leave your bladder and go back into the bag. Stored spirits don't count.
+- A karaoke card also needs you to be **drunk 3 or more**. Your drunk level is only checked, not paid.
+- Karaoke cards aren't replaced. A claimed ability card is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
+- Orders can't be claimed: you serve them by selling the drink.
 
-Note 2: you can only go for a wee if you have ingredients in your bladder
+### Clearing the rows
 
-### Claim a card
+- **The karaoke row** is never cleared.
+- **The orders row** (free action once a turn, drunk 3 or more): put all three orders on the bottom of the order deck and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
+- **The ability row** (free action once a turn, drunk 2 or more): put all three cards on the bottom of the ability deck and deal three new ones.
 
-From the three rows of cards, you can take one if you meet its cost requirement. To meet this, you count the ingredients you have drunk (ie currently in your bladder). 
+## Cards
 
-Place the card permanently in front of you and enjoy its special ability! Replace the card in the row with a new card from the deck. If the deck is exhausted, the slot stays empty for the rest of the game.
-
-### Refresh a row of cards
-
-Only if you are at least 3 levels of drunk, you may choose to discard all three cards in a row and replace them with new cards from the deck. If the deck is exhausted, any replaced slots stay empty.
-
-Note: you CANNOT clear Kareoke cards - leave them where they are and replace the rest
-
-### Drink a cup
-
-You may drink the full contents of a cup you have made - the same rules for drinking as taking ingredients apply, so be careful!
-
+| Card | Cost (in your bladder) | Points | What it does |
+|---|---|---|---|
+| Karaoke (one per spirit) | 2 of that spirit, and drunk 3 or more | 5 | Claim three and you win. |
+| Store (one per spirit) | 1 of that spirit | 1 | The rest of that spirit in your bladder moves onto the card. Pour stored spirits into a glass or drink them whenever you like on your turn (free); a wee doesn't flush them. |
+| Refresher (one per mixer) | 2 of that mixer | 1 | That mixer always sobers you up by 1, even when you drink spirits with it. |
+| Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |
+| Specialist (one per spirit) | 2 of that spirit, or 1 of its special (whisky: bitters, tequila: cointreau, vodka: vermouth, rum: sugar, gin: lemon) | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
+| Greedy Bartender | 3 rum | 2 | Take ingredients a second time each turn (free). |
+| Entrepreneur | 3 vodka | 2 | Sell a second time each turn (free). |
+| Weak Bladder | 3 gin | 2 | A free wee each turn. |
 
 ## Cocktail menu
 
-Mojito
-- 2x Rum
-- 1x Soda Water
-- 1x sugar
-
-Old fashioned
-- 3x whisky
-- 1x bitters
-
-Margherita
-- 2x tequila
-- 1x Cointreau
-- 1x lemon
-
-Cosmopolitan
-- 1x vodka
-- 1x cranberry
-- 1x Cointreau
-- 1x lemon
-
-Gin martini
-- 3x gin
-- 1x Vermouth
-
-Vodka martini
-- 3x vodka
-- 1x Vermouth
-
-Tom Collins
-- 1x gin
-- 1x soda water
-- 1x lemon
-- 1x sugar
-
-Manhattan
-- 2x whisky
-- 1x Vermouth
-- 1x bitters
-
-Long island iced tea
-- 1x gin
-- 1x vodka
-- 1x tequila
-- 1x rum 
-- 1x cola
-- 1x sugar
-- 1x lemon
+| Cocktail | Glass | Specials | Points |
+|---|---|---|---|
+| Mojito | 2 rum, 1 soda water | sugar | 10 |
+| Old Fashioned | 3 whisky | bitters | 10 |
+| Margarita | 2 tequila | cointreau, lemon | 10 |
+| Cosmopolitan | 1 vodka, 1 cranberry | cointreau, lemon | 10 |
+| Gin Martini | 3 gin | vermouth | 10 |
+| Vodka Martini | 3 vodka | vermouth | 10 |
+| Tom Collins | 1 gin, 1 soda water | lemon, sugar | 10 |
+| Manhattan | 2 whisky | vermouth, bitters | 10 |
+| Long Island Iced Tea | 1 gin, 1 vodka, 1 tequila, 1 rum, 1 cola | sugar, lemon | 15 |

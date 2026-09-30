@@ -29,6 +29,6 @@ export const INGREDIENT_ICONS = {
 };
 
 export const CARD_COST_TOKEN = { karaoke: 'spirit', store: 'spirit', refresher: 'mixer', cup_doubler: 'spirit', specialist: 'spirit', free_action: 'spirit' };
-export const CARD_COST_COUNT = { karaoke: 3, store: 1, refresher: 2, cup_doubler: 3, specialist: 2, free_action: 3 };
+export const CARD_COST_COUNT = { karaoke: 2, store: 1, refresher: 2, cup_doubler: 3, specialist: 2, free_action: 3 };
 
 export const MAX_SLOTS = 5;

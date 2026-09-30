@@ -7,12 +7,20 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from uuid import UUID
 
-from app.game_modes import GameMode
-from app.GameState import GameState
-from app.Ingredient import Ingredient
+from app.GameState import GameState, regular_in_bag
+from app.Ingredient import SPECIALIST_SPECIAL, Ingredient
 from app.PlayerState import PlayerState
-from app.actions import MIN_DRUNK_TO_REFRESH, _SPIRITS
-from app.cocktails import drink_points, is_cocktail
+from app.actions import (
+    CLAIM_CARD,
+    CLEAR_ORDERS,
+    MIN_DRUNK_TO_REFRESH,
+    MIN_DRUNK_TO_SWIPE,
+    SWIPE_ABILITIES,
+    _SPIRITS,
+    card_payment,
+)
+from app.card import ABILITY_ROW, FREE_ACTION_TYPES, KARAOKE_ROW, ORDERS_ROW
+from app.cocktails import drink_points, is_cocktail, matches_order
 
 _SPIRIT_MAP: dict[str, Ingredient] = {
     "WHISKEY": Ingredient.WHISKEY,
@@ -28,14 +36,9 @@ _MIXER_MAP: dict[str, Ingredient] = {
     "CRANBERRY": Ingredient.CRANBERRY,
 }
 
-# Mirrors _FREE_ACTION_TYPE_MAP in app/actions.py. Held FreeActionCards turn
-# their spirit's matching action into a once-per-turn free action.
-_CARD_FREE_ACTION_MAP: dict[str, str] = {
-    "RUM": "take_ingredients",
-    "WHISKEY": "reroll_specials",
-    "VODKA": "sell_cup",
-    "GIN": "go_for_a_wee",
-}
+# Held FreeActionCards turn their spirit's matching action into a
+# once-per-turn free action (see app.card.FREE_ACTION_TYPES).
+_CARD_FREE_ACTION_MAP: dict[str, str] = FREE_ACTION_TYPES
 
 
 @dataclass
@@ -48,10 +51,36 @@ class Action:
     description: str = ""
 
 
+def _order_served(
+    gs: GameState | None,
+    ps: PlayerState,
+    cup_idx: int,
+    declared_specials: list[str],
+    skip: set[str] = frozenset(),
+):
+    """The order on the table this sale would serve, if any (first match)."""
+    if gs is None:
+        return None
+    cup = ps.cups[cup_idx]
+    for row in gs.card_rows:
+        if row.position != ORDERS_ROW:
+            continue
+        for card in row.cards:
+            if card.card_type != "order" or card.id in skip:
+                continue
+            if matches_order(card.to_dict(), cup.ingredients, declared_specials):
+                return card
+    return None
+
+
 def _full_sell_points(
-    ps: PlayerState, cup_idx: int, declared_specials: list[str]
+    ps: PlayerState,
+    cup_idx: int,
+    declared_specials: list[str],
+    gs: GameState | None = None,
+    skip_orders: set[str] = frozenset(),
 ) -> int | None:
-    """Calculate full sell points including cup_doubler and specialist bonuses."""
+    """Calculate full sell points including cup_doubler, specialist and order bonuses."""
     cup = ps.cups[cup_idx]
     pts = drink_points(cup.ingredients, declared_specials)
     if pts is None:
@@ -73,6 +102,10 @@ def _full_sell_points(
         cup_spirit_types = {i.name for i in cup.ingredients if i in _SPIRITS}
         matching = specialist_spirit_types & cup_spirit_types
         pts += len(matching) * 2
+
+    order = _order_served(gs, ps, cup_idx, declared_specials, skip_orders)
+    if order is not None:
+        pts += order.bonus
 
     return pts
 
@@ -127,37 +160,26 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
         _add_take_ingredients(gs, ps, result, mid_batch=True)
     else:
         _add_take_ingredients(gs, ps, result, mid_batch=False)
-        _add_sell_cup(ps, result)
-        if gs.has_mode(GameMode.SELL_BOTH_CUPS.value):
-            _add_sell_both_cups(ps, result)
+        _add_sell_cup(ps, result, gs)
+        _add_sell_both_cups(ps, result, gs)
         _add_drink_cup(ps, result)
         _add_go_for_a_wee(ps, result)
-        _add_claim_card(gs, ps, result)
-        _add_refresh_card_row(gs, ps, result)
-        _add_reroll_specials(gs, ps, result)
+        used = set(gs.free_actions_used_this_turn or [])
+        if CLAIM_CARD not in used:
+            _add_claim_card(gs, ps, result)
+        _add_refresh_card_row(
+            gs,
+            ps,
+            result,
+            swiped=SWIPE_ABILITIES in used,
+            cleared=CLEAR_ORDERS in used,
+        )
 
-    # Mark claim_card / reroll_specials as free when the relevant mode is on
-    # and the matching free action hasn't been used yet this turn. Doing this
-    # after collection keeps each _add_* helper focused on legality.
     used_free = set(gs.free_actions_used_this_turn or [])
-    if (
-        gs.has_mode(GameMode.CLAIM_CARD_FREE_ACTION.value)
-        and "claim_card" not in used_free
-    ):
-        for a in result:
-            if a.action_type == "claim_card":
-                a.is_free = True
-    if (
-        gs.has_mode(GameMode.REROLL_SPECIALS_FREE_ACTION.value)
-        and "reroll_specials" not in used_free
-    ):
-        for a in result:
-            if a.action_type == "reroll_specials":
-                a.is_free = True
 
     # FreeActionCards held by the player turn matching turn actions into free
-    # actions (RUM→take_ingredients, VODKA→sell_cup, WHISKEY→reroll_specials,
-    # GIN→go_for_a_wee), once per turn. Mark them so callers — UI and bots —
+    # actions (RUM→take_ingredients, VODKA→sell_cup, GIN→go_for_a_wee), once
+    # per turn. Mark them so callers — UI and bots —
     # can route them through the free-action slot before the main action.
     card_free_types: set[str] = set()
     for cd in ps.cards:
@@ -235,7 +257,7 @@ def _add_take_ingredients(
         return
 
     if not mid_batch:
-        available = len(gs.bag_contents) + len(gs.open_display)
+        available = regular_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
         if available < take_count:
             return
 
@@ -248,7 +270,7 @@ def _add_take_ingredients(
     )
 
 
-def _add_sell_cup(ps: PlayerState, result: list[Action]):
+def _add_sell_cup(ps: PlayerState, result: list[Action], gs: GameState | None = None):
     specials = ps.special_ingredients
 
     for cup_idx in (0, 1):
@@ -257,16 +279,16 @@ def _add_sell_cup(ps: PlayerState, result: list[Action]):
             continue
 
         # Try selling with no specials first
-        pts = _full_sell_points(ps, cup_idx, [])
+        pts = _full_sell_points(ps, cup_idx, [], gs)
         if pts is not None:
+            params = {"cup_index": cup_idx, "declared_specials": [], "points": pts}
+            order = _order_served(gs, ps, cup_idx, [])
+            if order is not None:
+                params["order"] = order.name
             result.append(
                 Action(
                     action_type="sell_cup",
-                    params={
-                        "cup_index": cup_idx,
-                        "declared_specials": [],
-                        "points": pts,
-                    },
+                    params=params,
                     description=f"Sell cup {cup_idx} for {pts}pts (no specials)",
                 )
             )
@@ -281,7 +303,7 @@ def _add_sell_cup(ps: PlayerState, result: list[Action]):
                         continue
                     seen.add(key)
                     combo_list = list(combo)
-                    pts = _full_sell_points(ps, cup_idx, combo_list)
+                    pts = _full_sell_points(ps, cup_idx, combo_list, gs)
                     if pts is not None:
                         result.append(
                             Action(
@@ -296,7 +318,9 @@ def _add_sell_cup(ps: PlayerState, result: list[Action]):
                         )
 
 
-def _cup_sell_options(ps: PlayerState, cup_idx: int) -> list[tuple[list[str], int]]:
+def _cup_sell_options(
+    ps: PlayerState, cup_idx: int, gs: GameState | None = None
+) -> list[tuple[list[str], int]]:
     """Enumerate (declared_specials, points) options for selling a single cup.
 
     Returns an empty list when the cup is empty or no combination is sellable.
@@ -305,7 +329,7 @@ def _cup_sell_options(ps: PlayerState, cup_idx: int) -> list[tuple[list[str], in
     if cup.is_empty:
         return []
     options: list[tuple[list[str], int]] = []
-    pts = _full_sell_points(ps, cup_idx, [])
+    pts = _full_sell_points(ps, cup_idx, [], gs)
     if pts is not None:
         options.append(([], pts))
     specials = ps.special_ingredients
@@ -318,7 +342,7 @@ def _cup_sell_options(ps: PlayerState, cup_idx: int) -> list[tuple[list[str], in
                     continue
                 seen.add(key)
                 combo_list = list(combo)
-                pts = _full_sell_points(ps, cup_idx, combo_list)
+                pts = _full_sell_points(ps, cup_idx, combo_list, gs)
                 if pts is not None:
                     options.append((combo_list, pts))
     return options
@@ -334,15 +358,17 @@ def _specials_fit_mat(mat: list[str], used_a: list[str], used_b: list[str]) -> b
     return True
 
 
-def _add_sell_both_cups(ps: PlayerState, result: list[Action]):
+def _add_sell_both_cups(
+    ps: PlayerState, result: list[Action], gs: GameState | None = None
+):
     """Emit combined sell_cup actions covering both cups in one turn action.
 
-    Only invoked when the sell_both_cups game mode is active. Each combined
-    option pairs a sellable cup-0 option with a sellable cup-1 option and
-    verifies the player's mat has enough specials for both declarations.
+    Each combined option pairs a sellable cup-0 option with a sellable cup-1
+    option and verifies the player's mat has enough specials for both
+    declarations. An order served by cup 0 can't also be served by cup 1.
     """
-    cup0_opts = _cup_sell_options(ps, 0)
-    cup1_opts = _cup_sell_options(ps, 1)
+    cup0_opts = _cup_sell_options(ps, 0, gs)
+    cup1_opts = _cup_sell_options(ps, 1, gs)
     if not cup0_opts or not cup1_opts:
         return  # Need both cups sellable to combine
 
@@ -351,6 +377,9 @@ def _add_sell_both_cups(ps: PlayerState, result: list[Action]):
         for ds1, pts1 in cup1_opts:
             if not _specials_fit_mat(mat, ds0, ds1):
                 continue
+            first = _order_served(gs, ps, 0, ds0)
+            if first is not None:
+                pts1 = _full_sell_points(ps, 1, ds1, gs, {first.id})
             total = pts0 + pts1
             result.append(
                 Action(
@@ -395,16 +424,21 @@ def _add_go_for_a_wee(ps: PlayerState, result: list[Action]):
 
 
 def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
+    """Claimable karaoke and ability cards. Claiming is always a free action."""
     for row in gs.card_rows:
+        if row.position == ORDERS_ROW:
+            continue
         for card in row.cards:
             ct = card.card_type
 
             if ct == "karaoke":
-                if card.spirit_type and _available_spirits(ps, card.spirit_type) >= 3:
+                # Drunk 3+ and 2 of its spirit in the bladder
+                if card_payment(ps, card) is not None:
                     result.append(
                         Action(
                             action_type="claim_card",
                             params={"card_id": card.id},
+                            is_free=True,
                             description=f"Claim karaoke '{card.name}' ({card.spirit_type})",
                         )
                     )
@@ -415,6 +449,7 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
                         Action(
                             action_type="claim_card",
                             params={"card_id": card.id},
+                            is_free=True,
                             description=f"Claim store '{card.name}' ({card.spirit_type})",
                         )
                     )
@@ -425,18 +460,33 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
                         Action(
                             action_type="claim_card",
                             params={"card_id": card.id},
+                            is_free=True,
                             description=f"Claim refresher '{card.name}' ({card.mixer_type})",
                         )
                     )
 
             elif ct == "specialist":
-                # Needs 2 of matching spirit in bladder (not store)
-                if card.spirit_type and _bladder_spirits(ps, card.spirit_type) >= 2:
+                # Pay with 2 of its spirit, or 1 of its special (not store)
+                special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
+                for pay in (special.name if special else None, card.spirit_type):
+                    if pay and card_payment(ps, card, pay) is not None:
+                        result.append(
+                            Action(
+                                action_type="claim_card",
+                                params={"card_id": card.id, "spirit_type": pay},
+                                is_free=True,
+                                description=f"Claim specialist '{card.name}' paying {pay}",
+                            )
+                        )
+
+            elif ct == "free_action":
+                if card.spirit_type and _bladder_spirits(ps, card.spirit_type) >= 3:
                     result.append(
                         Action(
                             action_type="claim_card",
                             params={"card_id": card.id},
-                            description=f"Claim specialist '{card.name}' ({card.spirit_type})",
+                            is_free=True,
+                            description=f"Claim free action '{card.name}' ({card.spirit_type})",
                         )
                     )
 
@@ -454,44 +504,42 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
                                         "cup_index": cup_idx,
                                         "spirit_type": spirit_name,
                                     },
+                                    is_free=True,
                                     description=f"Claim cup doubler '{card.name}' with {spirit_name} on cup {cup_idx}",
                                 )
                             )
 
 
-def _add_refresh_card_row(gs: GameState, ps: PlayerState, result: list[Action]):
-    if ps.drunk_level < MIN_DRUNK_TO_REFRESH:
-        return
-
+def _add_refresh_card_row(
+    gs: GameState,
+    ps: PlayerState,
+    result: list[Action],
+    swiped: bool = False,
+    cleared: bool = False,
+):
+    """Clearing the orders row (drunk 3+) and swiping the ability row (drunk
+    2+): each a free action once a turn. The karaoke row is never cleared."""
     for row in gs.card_rows:
-        if row.position == 1:
-            continue  # Row 1 never refreshable
-        if row.cards:  # Only if row has cards to refresh
+        if row.position == KARAOKE_ROW:
+            continue
+        if row.position == ABILITY_ROW:
+            if swiped or ps.drunk_level < MIN_DRUNK_TO_SWIPE:
+                continue
+            if row.cards or gs._deck_dicts:
+                result.append(
+                    Action(
+                        action_type="refresh_card_row",
+                        params={"row_position": row.position},
+                        is_free=True,
+                        description="Swipe the ability cards",
+                    )
+                )
+        elif not cleared and ps.drunk_level >= MIN_DRUNK_TO_REFRESH and row.cards:
             result.append(
                 Action(
                     action_type="refresh_card_row",
                     params={"row_position": row.position},
-                    description=f"Refresh card row {row.position}",
+                    is_free=True,
+                    description="Clear the orders",
                 )
             )
-
-
-def _add_reroll_specials(gs: GameState, ps: PlayerState, result: list[Action]):
-    """Surface reroll_specials as a single "reroll all" action.
-
-    This action only registers as a turn action when the player holds at least
-    one special. Bots only need a single representative option — picking which
-    specials to re-roll is left up to the strategy. Re-rolling all of them is
-    the most common useful case, especially under the mode that makes this
-    free.
-    """
-    if not ps.special_ingredients:
-        return
-    chosen = list(ps.special_ingredients)
-    result.append(
-        Action(
-            action_type="reroll_specials",
-            params={"chosen_specials": chosen},
-            description=f"Re-roll all {len(chosen)} special(s)",
-        )
-    )

@@ -320,7 +320,11 @@ class TestStartGame(GameManagerTestCase):
         )
         state = game_resp.json()["game_state"]
         self.assertEqual(len(state["open_display"]), 5)
-        self.assertEqual(len(state["bag_contents"]), 45)  # 50 - 5 open
+        # 45 spirits and mixers + 10 specials, less the 5 on show; specials
+        # drawn while filling the display wait on the specials display
+        self.assertEqual(
+            len(state["bag_contents"]) + len(state["specials_display"]), 50
+        )
         self.assertIn(host_id, state["player_states"])
         self.assertIn(player_id, state["player_states"])
         self.assertIsNotNone(state["player_turn"])
@@ -336,7 +340,10 @@ class TestStartGame(GameManagerTestCase):
         )
         state = game_resp.json()["game_state"]
         self.assertEqual(len(state["open_display"]), 5)
-        self.assertEqual(len(state["bag_contents"]), 65)  # 70 - 5 open
+        # 63 spirits and mixers + 10 specials, less the 5 on show
+        self.assertEqual(
+            len(state["bag_contents"]) + len(state["specials_display"]), 68
+        )
         self.assertIn(host_id, state["player_states"])
         self.assertIn(player_id, state["player_states"])
         self.assertIn(player_id3, state["player_states"])

@@ -5,7 +5,7 @@ Implements the drink_points() function per the scoring rules in game.allium.
 
 from collections import Counter
 
-from app.Ingredient import Ingredient, SpecialType
+from app.Ingredient import Ingredient, SpecialType, special_type_of
 
 _SPIRITS = {
     Ingredient.WHISKEY,
@@ -99,10 +99,20 @@ _RECIPES: list[tuple[Counter, Counter, Counter, int, str]] = [
 ]
 
 
+def _with_glass_specials(
+    cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> list[str]:
+    """Specials that go into the drink: those in the glass, plus any declared
+    from the player's mat (games started before specials were ingredients)."""
+    in_glass = [special_type_of(i) for i in cup_ingredients]
+    return list(declared_specials) + [s for s in in_glass if s]
+
+
 def is_cocktail(
     cup_ingredients: list[Ingredient], declared_specials: list[str]
 ) -> bool:
     """Return True if the cup+specials combo matches a named cocktail recipe."""
+    declared_specials = _with_glass_specials(cup_ingredients, declared_specials)
     cup_spirits = [i for i in cup_ingredients if i in _SPIRITS]
     cup_mixers = [i for i in cup_ingredients if i in _MIXERS]
 
@@ -145,6 +155,7 @@ def drink_points(
       4. Double spirit drink   → 3 pts
       5. Single spirit drink   → 1 pt
     """
+    declared_specials = _with_glass_specials(cup_ingredients, declared_specials)
     cup_spirits = [i for i in cup_ingredients if i in _SPIRITS]
     cup_mixers = [i for i in cup_ingredients if i in _MIXERS]
 
@@ -217,3 +228,53 @@ def drink_points(
 
     # Single spirit drink
     return 1
+
+
+COCKTAIL_NAMES: list[str] = [name for *_rest, name in _RECIPES]
+
+
+def cocktail_name(
+    cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> str | None:
+    """The named cocktail this cup and these specials make, if any."""
+    declared_specials = _with_glass_specials(cup_ingredients, declared_specials)
+    cup_spirits = Counter(i for i in cup_ingredients if i in _SPIRITS)
+    cup_mixers = Counter(i for i in cup_ingredients if i in _MIXERS)
+    try:
+        specials = Counter(SpecialType(s) for s in declared_specials)
+    except ValueError:
+        return None
+    for r_spirits, r_mixers, r_specials, _pts, name in _RECIPES:
+        if (
+            cup_spirits == r_spirits
+            and cup_mixers == r_mixers
+            and specials == r_specials
+        ):
+            return name
+    return None
+
+
+def matches_order(
+    order: dict, cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> bool:
+    """Whether selling this cup (a sellable drink) serves this order card.
+
+    A simple order ("Rum and Cola") takes that spirit and mixer, single or
+    double; a slammer order takes a Tequila Slammer; a cocktail order takes
+    that cocktail.
+    """
+    drink = order.get("drink")
+    name = cocktail_name(cup_ingredients, declared_specials)
+    if drink == "cocktail":
+        return name is not None and name == order.get("cocktail")
+    if name is not None:
+        return False
+    spirits = {i.name for i in cup_ingredients if i in _SPIRITS}
+    mixers = {i.name for i in cup_ingredients if i in _MIXERS}
+    if drink == "slammer":
+        return spirits == {"TEQUILA"} and not mixers
+    if drink == "simple":
+        return spirits == {order.get("spirit_type")} and mixers == {
+            order.get("mixer_type")
+        }
+    return False

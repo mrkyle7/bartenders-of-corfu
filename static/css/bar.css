@@ -284,7 +284,6 @@ button.tok { cursor: pointer; }
 
 .extras {
     display: grid;
-    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
     gap: 22px;
     align-items: start;
 }
@@ -295,27 +294,23 @@ button.tok { cursor: pointer; }
 
 /* ─── Cards ───────────────────────────────────────────────────────────── */
 
-.market {
-    display: grid;
-    grid-template-columns: auto auto;
-    gap: 18px;
-    align-items: start;
-}
-.piles { display: grid; gap: 18px; justify-items: center; }
+.market { display: grid; gap: 16px; align-content: start; }
 .pile { display: grid; justify-items: center; gap: 6px; }
 .pile .card-back { box-shadow: 2px 2px 0 #0d2a42, 4px 4px 0 #0a2236, 6px 6px 0 #081b2c, 0 10px 16px rgba(0, 0, 0, 0.45); }
 .pile-count { font-size: 13px; color: var(--whitewash-dim); }
+.card-row .pile { --cw: 118px; }
 
-.rows { display: grid; gap: 14px; }
-.card-row { display: grid; grid-template-columns: 72px auto; gap: 10px; align-items: center; }
-.row-tag { display: grid; gap: 6px; justify-items: start; font: 700 14px/1.15 var(--display); }
-.row-note { font: 400 12px/1.3 var(--ui); color: var(--whitewash-dim); }
-.row-cards { display: flex; gap: 10px; }
-
-/* Cards, printed like the real ones: parchment with a Greek-key border, an
-   art panel carrying the cost badge and points star, the name on a ribbon,
-   the kind, and the rule in a gilt frame. Everything is sized in em, and
-   the em follows the card width, so a card scales as one piece. */
+.card-row {
+    display: grid;
+    grid-template-columns: 112px auto auto;
+    gap: 12px;
+    align-items: center;
+    justify-content: start;
+}
+.card-row.is-karaoke { grid-template-columns: 112px auto; --cw: 146px; }
+.row-tag { display: grid; gap: 6px; justify-items: start; font: 700 15px/1.15 var(--display); }
+.row-note { font: 400 12px/1.35 var(--ui); color: var(--whitewash-dim); }
+.row-cards { display: flex; flex-wrap: wrap; gap: 10px; }
 
 .card, .card-space {
     width: var(--cw);
@@ -413,6 +408,10 @@ button.tok { cursor: pointer; }
     opacity: 0.38;
 }
 .card-costcap { font: 800 0.8em/1.1 var(--ui); color: #2a2116; white-space: nowrap; }
+.card-costbadge.is-order { right: 4em; }
+.card-costbadge.is-order .card-costtoks { flex-wrap: wrap; row-gap: 0.15em; }
+.card-costbadge.is-order .card-costtoks .tok + .tok { margin-left: -0.35em; }
+.kind-order { --scene-top: #3a1418; --scene-bottom: #b2452c; --emblem: #fff1d6; }
 .card-costbadge.is-short .card-costcap { color: #a3261b; }
 
 .card-star { right: 0.25em; width: 3em; }
@@ -578,6 +577,17 @@ button.card { cursor: pointer; }
 .display .slot.is-empty { border-color: rgba(13, 42, 66, 0.35); }
 .display .slot.is-lifted { border: 2px dashed rgba(13, 42, 66, 0.55); }
 
+/* Specials that came out of the bag wait on their own small tray. */
+.specials-tray {
+    flex: 1 1 100%;
+    padding: 8px 12px 10px;
+    border-radius: 10px;
+    background: rgba(74, 38, 114, 0.35);
+    border: 1.5px dashed rgba(214, 190, 240, 0.6);
+}
+.specials-tray-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: var(--ts); }
+.specials-tray .slot.is-lifted { border: 2px dashed rgba(214, 190, 240, 0.7); }
+
 /* ─── Score track ─────────────────────────────────────────────────────── */
 
 .plaque { font: 700 16px/1.2 var(--display); margin-bottom: 8px; }
@@ -707,6 +717,9 @@ button.glass { cursor: pointer; }
     background: rgba(255, 255, 255, 0.08);
 }
 .glass-foot { width: calc(var(--t) * 2 + 26px); height: 6px; margin-top: -1px; border-radius: 3px; background: rgba(234, 241, 245, 0.55); }
+/* Specials sit on the rim, on top of the five spirits and mixers. */
+.glass-rim { display: flex; gap: 3px; justify-content: center; margin-bottom: 4px; }
+.glass-rim .slot.is-empty { border-color: rgba(214, 190, 240, 0.7); }
 .glass.is-target .glass-body { border-color: var(--kumquat); box-shadow: 0 0 0 3px rgba(240, 138, 36, 0.4), inset 0 0 14px rgba(240, 138, 36, 0.35); }
 .glass.is-target:hover .glass-body { background: rgba(240, 138, 36, 0.2); }
 .glass-label { font-size: 12px; font-weight: 600; color: var(--whitewash-dim); text-align: center; }
@@ -739,13 +752,11 @@ button.glass { cursor: pointer; }
 }
 button.mouth { cursor: pointer; }
 .mouth.is-target { border-color: var(--kumquat); border-style: solid; background: rgba(240, 138, 36, 0.14); }
-.lips {
-    width: 54px;
-    height: 24px;
-    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-    background: radial-gradient(ellipse at 50% 50%, #5a0f1c 0 22%, #d23a4f 24%);
-    box-shadow: 0 2px 0 #8c1f30;
-}
+.lips { display: block; width: 60px; height: 32px; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.35)); }
+.lips svg { display: block; width: 100%; height: 100%; }
+button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
+@keyframes lips-open { 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { button.mouth.is-target .lips { animation: none; } }
 .mouth-word { font-weight: 700; font-size: 13px; }
 .mouth-tokens { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 120px; }
 .mouth-note { font-size: 12px; text-align: center; }
@@ -780,12 +791,19 @@ button.mouth { cursor: pointer; }
     position: relative;
     display: grid;
     place-items: center;
+    align-content: center;
+    gap: 2px;
     flex: 1 1 0;
-    min-width: 24px;
-    height: 34px;
+    min-width: 34px;
+    min-height: 50px;
+    padding: 5px 1px 4px;
     border-radius: 5px;
     font: 800 13px/1 var(--display);
 }
+.drunk-word { font: 700 9.5px/1 var(--ui); white-space: nowrap; }
+.drunk-ambulance { display: block; width: 26px; height: 16px; }
+.drunk-ambulance svg { display: block; width: 100%; height: 100%; }
+.drunk-step.lvl-6 .drunk-word { background: #fff; border-radius: 3px; padding: 1px 3px; }
 .drunk-step.lvl-0 { background: #cfe8d2; color: #1d4a26; }
 .drunk-step.lvl-1 { background: #e2ebb9; color: #3d4410; }
 .drunk-step.lvl-2 { background: #f3e2a2; color: #4a3a05; }
@@ -793,11 +811,11 @@ button.mouth { cursor: pointer; }
 .drunk-step.lvl-4 { background: #f39b77; color: #4d1604; }
 .drunk-step.lvl-5 { background: #e0452b; color: #fff; }
 .drunk-step.lvl-6 { background: repeating-linear-gradient(45deg, #fff 0 4px, #e0452b 4px 8px); color: #7d1f15; }
-.drunk-step.lvl-6 .drunk-num { background: #fff; border-radius: 3px; padding: 2px 3px; }
 .drunk-step.is-here { box-shadow: 0 0 0 3px var(--whitewash); }
-.drunk-step .pawn { position: absolute; bottom: 3px; right: 3px; width: 11px; height: 15px; }
+.drunk-step .pawn { position: absolute; top: -6px; right: -3px; width: 11px; height: 15px; }
 .drunk-step .pawn::before { width: 8px; height: 8px; top: -5px; }
-.drunk-step.is-here .drunk-num { opacity: 0.55; }
+.drunk-step.is-here .drunk-num, .drunk-step.is-here .drunk-word { opacity: 0.6; }
+.drunk-step.lvl-5 { box-shadow: inset 0 0 0 2px #7d1f15; }
 
 .specials { padding: 8px 10px; border: 1.5px dashed var(--line); border-radius: 8px; }
 .specials-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: var(--ts); }
@@ -822,33 +840,57 @@ button.mouth { cursor: pointer; }
 
 /* ─── Menu and chalkboard ─────────────────────────────────────────────── */
 
+/* The drinks menu: a printed taverna menu card. */
 .menu {
-    padding: 18px 20px 20px;
-    border-radius: 6px;
-    background: #f4f7f8;
-    color: var(--aegean-ink);
-    box-shadow: 0 1px 0 #c7d3da, 0 10px 20px rgba(0, 0, 0, 0.45);
-    border-top: 10px solid var(--aegean);
+    padding: 22px 24px 24px;
+    border-radius: 4px;
+    background:
+        linear-gradient(#f7f9fa, #eef3f5);
+    color: #1b2f3f;
+    box-shadow: inset 0 0 0 6px #f7f9fa, inset 0 0 0 7.5px #1d4f7a, 0 1px 0 #c7d3da, 0 12px 22px rgba(0, 0, 0, 0.45);
+    --tp: 22px;
 }
-.menu-title { font: 800 22px/1.1 var(--display); color: var(--aegean); margin-bottom: 10px; }
-.menu-simple, .cocktails { list-style: none; margin: 0; padding: 0; }
-.menu-simple li, .cocktail {
+.menu-head { text-align: center; margin-bottom: 8px; }
+.menu-house { font: 700 13px/1.2 var(--display); color: #9a4f0c; letter-spacing: 0.04em; }
+.menu-title { font: 800 34px/1 var(--display); color: var(--aegean); margin: 2px 0 4px; }
+.menu-sub { font-size: 13px; color: #4c6273; }
+.menu-section {
+    margin: 18px 0 4px;
+    font: 800 18px/1.2 var(--display);
+    color: var(--aegean);
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 5px 0;
-    border-bottom: 1px dotted #9fb3c2;
 }
-.menu-simple li span, .cocktail-name { flex: 1; }
-.menu-simple b, .cocktail-points { font: 800 17px/1 var(--display); color: var(--aegean); min-width: 26px; text-align: right; }
-.cocktail-name { font: 700 14px/1.2 var(--display); min-width: 110px; }
-.cocktail-recipe { display: flex; flex-wrap: wrap; gap: 3px; }
-.pairings { margin: 14px 0 8px; border-collapse: collapse; }
-.pairings caption { text-align: left; font: 700 14px/1.2 var(--display); margin-bottom: 6px; }
-.pairings th, .pairings td { padding: 3px 5px; text-align: center; }
-.pairings .yes { color: #1f7a3a; font-weight: 800; }
-.pairings .no { color: #b7c3cb; }
-.menu-note { font-size: 13px; margin-bottom: 8px; max-width: 60ch; }
+.menu-section::after { content: ""; flex: 1; height: 0; border-bottom: 1.5px solid #9fb3c2; }
+.menu-note { font-size: 13px; margin: 0 0 8px; color: #4c6273; max-width: 64ch; }
+.menu-list, .menu-longs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.menu-item { padding: 6px 8px; border-radius: 4px; }
+.menu-item.is-wanted, .menu-long.is-wanted { background: #fff3e0; box-shadow: inset 3px 0 0 var(--kumquat); }
+.menu-line { display: flex; align-items: baseline; gap: 8px; }
+.menu-name { font: 700 15px/1.2 var(--display); }
+.menu-dots { flex: 1; border-bottom: 2px dotted #9fb3c2; transform: translateY(-3px); }
+.menu-points { font: 800 18px/1 var(--display); color: var(--aegean); }
+.menu-wanted {
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--kumquat);
+    color: var(--kumquat-ink);
+    font: 800 11px/1.4 var(--ui);
+    white-space: nowrap;
+}
+.menu-recipe { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 4px; }
+.menu-toks { display: inline-flex; gap: 2px; }
+.menu-toks .tok { margin-bottom: 0; }
+.menu-special { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #4c6273; }
+.menu-special .tok { margin-bottom: 0; }
+.menu-special.is-yours { color: #1f7a3a; font-weight: 800; }
+.menu-glasses { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.menu-glass { padding: 1px 6px; border-radius: 3px; background: #dfe8ee; font-size: 12px; font-weight: 700; }
+.menu-glass.is-ready { background: #d5eeda; color: #1d4a26; }
+.menu-longs { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 14px; }
+.menu-long { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 6px; border-radius: 4px; }
+.menu-long .menu-name { font-size: 14px; }
 
 .chalk {
     padding: 18px 20px;
@@ -859,8 +901,103 @@ button.mouth { cursor: pointer; }
     color: #eef0ea;
 }
 .chalk-title { font: 700 20px/1.1 var(--display); margin-bottom: 10px; }
-.chalk-list { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
-.chalk-list li:first-child { font-weight: 700; }
+.chalk-list { margin: 0; padding-left: 30px; display: grid; gap: 5px; }
+.chalk-list li::marker { color: #aeb5aa; }
+.chalk-list li.is-mine { color: #ffe3b8; }
+.chalk-more { margin-top: 12px; }
+
+.extras-side { display: grid; gap: 22px; align-content: start; }
+
+/* The rule book: a small printed booklet. */
+.rulebook {
+    padding: 20px 22px;
+    border-radius: 4px;
+    background: #f7f9fa;
+    color: #1b2f3f;
+    box-shadow: inset 0 0 0 6px #f7f9fa, inset 0 0 0 7.5px #9a4f0c, 0 12px 22px rgba(0, 0, 0, 0.45);
+}
+.rulebook-title { font: 800 24px/1.1 var(--display); color: #9a4f0c; margin-bottom: 8px; }
+.rulebook-pages { display: grid; gap: 14px; }
+.rule-part h3 { font: 800 16px/1.2 var(--display); color: var(--aegean); margin: 0 0 4px; }
+.rule-part ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; max-width: 70ch; }
+
+/* The drinks menu and rules open in a panel from the turn bar: at the side
+   on wide screens (the table moves over), from the bottom on phones. The
+   drinks menu keeps your glasses in view at its top. */
+.btn.sheet-btn.is-open { background: var(--aegean); color: var(--whitewash); border-color: var(--aegean-ink); }
+.sheet {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 35;
+    display: flex;
+    flex-direction: column;
+    width: min(460px, 100vw);
+    background: var(--wood-dark);
+    border-left: 3px solid rgba(0, 0, 0, 0.45);
+    box-shadow: -12px 0 30px rgba(0, 0, 0, 0.55);
+}
+.sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+}
+.sheet-title { font: 800 20px/1.1 var(--display); }
+.sheet-glasses {
+    --tp: 30px;
+    display: grid;
+    gap: 6px;
+    padding: 10px 16px;
+    background: var(--aegean);
+    border-bottom: 3px solid var(--aegean-deep);
+}
+.sheet-glass { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.sheet-glass-name { flex: none; width: 60px; font: 700 14px/1 var(--display); }
+.sheet-glass-toks { display: flex; flex-wrap: wrap; gap: 3px; }
+.sheet-glass-toks .tok { margin-bottom: 0; }
+.sheet-glass-empty { font-size: 13px; color: var(--whitewash-dim); }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px; }
+@media (min-width: 1200px) {
+    body.has-sheet .table, body.has-sheet .turnbar { margin-right: 460px; }
+}
+
+/* What's left of your turn. */
+.action-strip {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.act {
+    display: grid;
+    gap: 1px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: 2px solid rgba(42, 20, 4, 0.55);
+    background: rgba(255, 255, 255, 0.35);
+    min-width: 120px;
+}
+.act-kind { font-weight: 800; font-size: 13px; }
+.act-state { font-size: 12px; }
+.act.is-open { background: #fff; border-color: var(--kumquat-ink); }
+.act.is-used { opacity: 0.6; text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.act.is-used .act-state { text-decoration: none; }
+.act.is-off { border-style: dashed; background: transparent; }
+
+/* Choosing what a special token becomes. */
+.special-choice { margin-top: 10px; padding: 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); }
+.special-choice p { margin-bottom: 8px; font-weight: 600; }
+.special-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.special-options .btn { flex-direction: row; gap: 6px; --tp: 22px; }
+.special-options .tok { margin-bottom: 0; }
+.btn.quiet-dark { background: transparent; color: var(--whitewash); border-color: var(--line); box-shadow: none; }
 .chalk-empty { color: #c9cec6; }
 
 /* ─── Lobby ───────────────────────────────────────────────────────────── */
@@ -897,6 +1034,25 @@ button.mouth { cursor: pointer; }
 .house-rules legend { font: 700 15px var(--display); padding: 0 6px; }
 .rule { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
 .rule input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--kumquat); }
+
+/* Invite link: a read-only box and a Copy button. */
+.invite { display: grid; gap: 6px; width: 100%; text-align: left; }
+.invite-label { font: 700 15px var(--display); }
+.invite-row { display: flex; gap: 8px; }
+.invite-url {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    padding: 6px 10px;
+    border: 2px solid var(--line);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--whitewash);
+    font: 500 14px var(--ui);
+    text-overflow: ellipsis;
+}
+.invite-url:focus-visible { outline: 3px solid var(--kumquat); outline-offset: 1px; }
+.invite-copy { flex: none; }
 
 .empty-table { text-align: center; font: 700 20px var(--display); margin: 40px 0 16px; }
 
@@ -972,6 +1128,18 @@ button.mouth { cursor: pointer; }
     .housekeeping { order: 7; }
     .mat-board { grid-template-columns: 1fr; }
     .bar-area { justify-content: center; flex-wrap: wrap; }
+    .sheet {
+        top: auto;
+        left: 0;
+        width: 100%;
+        max-height: 82vh;
+        border-left: 0;
+        border-top: 3px solid rgba(0, 0, 0, 0.45);
+        border-radius: 14px 14px 0 0;
+        box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.55);
+    }
+    /* leave room to scroll the table clear of the panel */
+    body.has-sheet .table { padding-bottom: 60vh; }
 }
 
 @media (max-width: 600px) {
@@ -985,11 +1153,16 @@ button.mouth { cursor: pointer; }
     .turn-head { font-size: 20px; }
     .turn-detail { font-size: 14px; }
     .wordmark { font-size: 17px; }
-    .market { grid-template-columns: 1fr; }
-    .piles { display: flex; justify-content: center; gap: 22px; }
-    .pile .card, .pile .card-space { --cw: 84px; }
-    .card-row { grid-template-columns: 1fr; gap: 6px; }
-    .row-tag { display: flex; align-items: center; gap: 10px; }
+    .card-row, .card-row.is-karaoke { grid-template-columns: 1fr; gap: 6px; --cw: calc((100vw - 32px - 20px) / 3); }
+    .card-row .pile { --cw: 84px; justify-self: start; }
+    .row-tag { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+    .menu { padding: 16px; }
+    .menu-title { font-size: 28px; }
+    .act { min-width: 0; flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; padding: 3px 7px; }
+    .act-kind { font-size: 12px; }
+    .act-state { font-size: 11px; }
+    .action-strip { gap: 4px; }
+    .turnbar { gap: 6px 12px; }
     .row-cards { gap: 10px; }
     .supply { justify-content: center; }
     .display { padding: 12px 12px; gap: 5px; flex-wrap: wrap; justify-content: center; }
@@ -999,9 +1172,7 @@ button.mouth { cursor: pointer; }
     .mat-cards .card { --cw: 150px; }
     .is-theirs .mat-cards .card { --cw: 110px; }
     .glass-spot { max-width: 130px; }
-    .menu, .chalk { padding: 14px; }
-    .menu .cocktail { flex-wrap: wrap; }
-    .cocktail-name { flex: 1 1 60%; }
+    .chalk, .rulebook { padding: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

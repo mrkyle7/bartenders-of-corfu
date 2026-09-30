@@ -1,5 +1,10 @@
 """Optional rule variations a host can enable in the lobby.
 
+There are none at the moment. The three there were have been settled:
+selling both cups in one action and claiming a card as a free action are
+now standard rules, and re-rolling specials is no longer part of the game.
+Games saved with those modes still load; the modes are simply ignored.
+
 To add a new mode:
   1. Add a new value to ``GameMode``.
   2. Have action / bot / UI code check ``gs.has_mode("...")``.
@@ -16,16 +21,11 @@ from enum import Enum
 class GameMode(str, Enum):
     """Optional rule variations selected in the lobby."""
 
-    SELL_BOTH_CUPS = "sell_both_cups"
-    # ClaimCard is always available as a free additional action, regardless of
-    # whether the player holds the (non-existent) matching free-action card.
-    # Once-per-turn, mirroring FreeActionCard semantics.
-    CLAIM_CARD_FREE_ACTION = "claim_card_free_action"
-    # ReRollSpecials is always available as a free additional action. The
-    # FreeActionCard that grants this (Cocktail Shaker) is excluded from the
-    # deck when this mode is active.
-    REROLL_SPECIALS_FREE_ACTION = "reroll_specials_free_action"
 
+# Former modes, kept so old saved games are recognised.
+RETIRED_GAME_MODES: frozenset[str] = frozenset(
+    {"sell_both_cups", "claim_card_free_action", "reroll_specials_free_action"}
+)
 
 VALID_GAME_MODES: frozenset[str] = frozenset(m.value for m in GameMode)
 

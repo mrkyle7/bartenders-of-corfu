@@ -17,17 +17,29 @@ config {
     min_bladder_capacity: Integer = 4
     initial_toilet_tokens: Integer = 4    -- tokens available to place; wees are unlimited
     initial_cup_count: Integer = 2
-    max_cup_ingredients: Integer = 5      -- spirits and mixers only; specials are always separate
+    max_cup_ingredients: Integer = 5      -- spirits and mixers only; specials sit on top
+    max_cup_specials: Integer = 2         -- specials a cup can hold on top of its spirits and mixers
+    specials_per_type: Integer = 2        -- tokens of each special in the bag
     open_display_size: Integer = 5
-    score_to_win: Integer = 40
+    -- Points that start the last round, by player count: 40 / 35 / 30 for 2 / 3 / 4
+    score_to_win: Integer = 40            -- two players; see score_to_win_for
     karaoke_cards_to_win: Integer = 3     -- claiming this many karaoke cards = instant win
-    min_drunk_to_refresh: Integer = 3     -- drunk level required to refresh a card row
+    min_drunk_to_refresh: Integer = 3     -- drunk level required to clear the orders row
+    min_drunk_to_swipe: Integer = 2       -- drunk level required to swipe the ability row
+    max_specials_per_player: Integer = 2  -- games with special dice only (see LegacySpecials)
     karaoke_card_total: Integer = 5       -- total karaoke cards in the game
 }
 
+-- score_to_win_for(players) = 40 when players <= 2, 35 when 3, 30 when 4+
+
 -- ─── Ingredients ──────────────────────────────────────────────────────────────
--- Specials are always placed on the player mat when drawn; they cannot be drunk
--- directly and do not count toward the cup ingredient limit.
+-- The bag holds players + 3 tokens of each spirit and each mixer, and
+-- config.specials_per_type tokens of each special (bitters, cointreau, lemon,
+-- sugar, vermouth), whatever the number of players.
+-- A special that comes out of the bag goes to the specials display
+-- (BoardState.specials_display) and the draw carries on: see DrawToken.
+-- From there anyone may take it as part of TakeIngredients, into a cup or
+-- to drink.
 
 entity Ingredient {
     kind: Spirit | Mixer | Special
@@ -42,20 +54,25 @@ variant Mixer : Ingredient {
 }
 
 variant Special : Ingredient {
-    -- Resolved by rolling the special die when drawn from the bag.
-    -- "nothing" is never stored; the token is returned to the bag immediately.
     special_type: bitters | cointreau | lemon | sugar | vermouth
 }
 
--- ─── Cocktail menu ────────────────────────────────────────────────────────────
--- A cup matches a recipe when:
---   (a) the cup's spirit/mixer contents match the recipe's required spirits and
---       mixers exactly (no substitutions, no extras), AND
---   (b) the player's declared specials from their mat match the recipe's
---       required specials exactly.
+-- ─── Legacy: special dice ─────────────────────────────────────────────────────
+-- Games started before specials were ingredients have special die tokens
+-- (Ingredient SPECIAL) instead. They keep playing by those rules: a die token
+-- is rolled as it leaves the bag (RollSpecialFace) and taking it puts a special
+-- on the player mat (DrawSpecialIngredient); those specials are declared when
+-- selling. New games never contain die tokens.
 --
--- Specials are declared at sell time; they live on the player mat and do not
--- physically enter the cup.
+-- The face a special die token shows. The blank face is "choose any".
+value SpecialFace {
+    face: bitters | cointreau | lemon | sugar | vermouth | any
+}
+
+-- ─── Cocktail menu ────────────────────────────────────────────────────────────
+-- A cup matches a recipe when its spirits, mixers and specials match the
+-- recipe exactly (no substitutions, no extras). The specials are the ones in
+-- the cup, plus (legacy games only) specials declared from the player mat.
 --
 -- Name              Spirits               Mixers        Specials            Pts
 -- Mojito            2×RUM                 1×SODA        1×sugar              10
@@ -84,7 +101,7 @@ entity PlayerState {
     bladder_capacity: Integer                -- starts at config.initial_bladder_capacity
     toilet_tokens: Integer                   -- starts at config.initial_toilet_tokens
     cups: List<Cup>                          -- exactly config.initial_cup_count cups
-    special_ingredients: List<Special>       -- resolved specials sitting on the player mat
+    special_ingredients: List<Special>       -- legacy games only: specials on the player mat
     cards: List<Card>                        -- permanently claimed ability cards
     karaoke_cards_claimed: Integer           -- count of karaoke cards held
     status: active | hospitalised | wet      -- wet = bladder overflow; hospitalised = drunk out
@@ -97,13 +114,14 @@ entity PlayerState {
 
 entity Cup {
     owner: PlayerState
-    ingredients: List<Ingredient>            -- spirits and mixers only; max config.max_cup_ingredients
+    ingredients: List<Ingredient>            -- spirits, mixers and specials
 
     -- Derived
     spirits: ingredients where kind = Spirit
     mixers: ingredients where kind = Mixer
+    specials: ingredients where kind = Special   -- at most config.max_cup_specials
     spirit_count: spirits.count
-    is_full: ingredients.count >= config.max_cup_ingredients
+    is_full: (spirits.count + mixers.count) >= config.max_cup_ingredients
     is_empty: ingredients.count = 0
 }
 
@@ -112,12 +130,14 @@ entity Cup {
 entity BoardState {
     game: session/Game
     bag_contents: List<Ingredient>
-    open_display: List<Ingredient>           -- up to config.open_display_size; may be fewer if bag empty
+    open_display: List<Ingredient>           -- spirits and mixers; up to config.open_display_size
+    specials_display: List<Special>          -- specials drawn from the bag, for anyone to take
     card_rows: List<CardRow>                 -- exactly 3 rows; each holds up to 3 cards
     player_turn: UUID                        -- whose turn it is
 
     -- Derived
-    available_ingredients: bag_contents + open_display
+    drawable: bag_contents where kind != Special
+    available_ingredients: drawable + open_display + specials_display
 }
 
 entity CardRow {
@@ -143,6 +163,8 @@ value IngredientRequirement {
 -- 1. Long Island Iced Tea  exact recipe match (4 spirits allowed)    → 15 pts
 -- 2. Any other cocktail    exact recipe match                        → 10 pts
 -- 3. Tequila Slammer       exactly 2×tequila, no mixers, no specials →  3 pts
+--
+-- A cup holding any special is only sellable as the cocktail it makes.
 -- 4. Double spirit drink   2 spirits (same type), ≥1 mixer of exactly one type,
 --                          that mixer type valid for the spirit type    →  3 pts
 -- 5. Single spirit drink   1 spirit, ≥1 mixer of exactly one type,
@@ -170,15 +192,16 @@ rule TakeIngredients {
     requires: player.status = active
     requires: it is player's turn
     requires: board.available_ingredients.count >= player.take_count
-        -- if fewer than take_count ingredients exist across bag + display,
-        -- this action is unavailable; player must choose another action.
+        -- if fewer than take_count ingredients exist across the bag's spirits
+        -- and mixers, the display and the specials display, this action is
+        -- unavailable; player must choose another action.
         -- This check is performed only at the start of the first batch.
     requires: chosen.count = player.take_count across all batches this turn
-    requires: chosen drawn from board.open_display ∪ board.bag_contents in any order
+    requires: chosen drawn from board.open_display ∪ board.specials_display ∪ bag (via DrawToken)
     -- Bag draws are random: the player cannot choose which ingredient they receive from
-    -- board.bag_contents. The system selects a random ingredient from the bag on each
-    -- bag draw. The player may only choose specific ingredients when taking from
-    -- board.open_display (where all contents are visible).
+    -- board.bag_contents; each bag draw is a DrawToken, which never hands the
+    -- player a special. The player may only choose specific ingredients when
+    -- taking from board.open_display or board.specials_display (both visible).
     --
     -- Multi-batch API protocol:
     -- The player takes ingredients in one or more API calls (batches) until
@@ -203,29 +226,60 @@ rule TakeIngredients {
 rule PlaceIngredientInCup {
     when: PlaceIngredientInCup(player, ingredient, cup)
     requires: cup.owner.player_id = player.player_id
-    requires: not cup.is_full
-    requires: ingredient.kind in {Spirit, Mixer}
+    if ingredient.kind in {Spirit, Mixer}:
+        requires: not cup.is_full
+    if ingredient.kind = Special:
+        requires: cup.specials.count < config.max_cup_specials
     ensures: cup.ingredients = cup.ingredients + [ingredient]
 }
 
+rule DrawToken {
+    -- One random draw from the bag, for ReplenishDisplay, DrawFromBag or a
+    -- direct bag draw. A special that comes out goes to the specials display
+    -- and the draw carries on, so the result is always a spirit or mixer (or
+    -- a legacy die token), or nothing when the bag has none left.
+    when: DrawToken(board)
+    let token = random from board.bag_contents
+    ensures: board.bag_contents = board.bag_contents - [token]
+    if token.kind = Special:
+        ensures: board.specials_display = board.specials_display + [token]
+        ensures: DrawToken(board)
+}
+
+rule RollSpecialFace {
+    -- Legacy games only. Called for each special die token as it comes out of
+    -- the bag (ReplenishDisplay, DrawFromBag, or a direct bag draw).
+    when: RollSpecialFace(token)
+    let shown = specials on any player mat + faces showing on the display or in a hand
+    -- Roll the die; a face whose special is in `shown` is rolled again.
+    -- The blank face gives "any".
+    ensures: token.face in (special types not in shown) + [any]
+}
+
 rule DrawSpecialIngredient {
-    -- Called when a player draws a Special token during TakeIngredients.
-    -- The die is rolled immediately to resolve the ingredient type.
-    when: DrawSpecialIngredient(player)
-    if rolled_result != nothing:
-        ensures: player.special_ingredients = player.special_ingredients + [Special(rolled_result)]
-    if rolled_result = nothing:
-        ensures: the special token is returned to board.bag_contents
-    -- Specials may never be drunk directly; they always go to the player mat.
+    -- Legacy games only. Called when a player takes a special die token (from
+    -- the display or the bag) during TakeIngredients. The token goes back into
+    -- the bag.
+    when: DrawSpecialIngredient(player, token, choice?, swap?)
+    ensures: board.bag_contents = board.bag_contents + [token]
+    let special = token.face                      when token.face != any
+                  choice (a special nobody holds)  when token.face = any
+    if player.special_ingredients.count < config.max_specials_per_player:
+        ensures: player.special_ingredients = player.special_ingredients + [special]
+    if player.special_ingredients.count = config.max_specials_per_player:
+        -- The player swaps one of theirs back to the supply, or leaves the new one.
+        if swap in player.special_ingredients:
+            ensures: player.special_ingredients = player.special_ingredients - [swap] + [special]
+    -- A die token is never drunk or put in a cup; its special goes to the mat.
 }
 
 rule DrinkIngredient {
-    -- Called during TakeIngredients or DrinkCup for each spirit or mixer consumed.
+    -- Called during TakeIngredients or DrinkCup for each spirit, mixer or special consumed.
     -- Drunk level is NOT adjusted per ingredient; it is assessed once at end of turn
     -- via ApplyDrunkModifier after all ingredients for that action have been consumed.
     when: DrinkIngredient(player, ingredient)
     requires: player.status = active
-    requires: ingredient.kind in {Spirit, Mixer}
+    requires: ingredient.kind in {Spirit, Mixer, Special}
     ensures: player.bladder = player.bladder + [ingredient]
     -- Note: drunk_level change is deferred to ApplyDrunkModifier.
 }
@@ -233,11 +287,14 @@ rule DrinkIngredient {
 rule ApplyDrunkModifier {
     -- Called once per action after all ingredients consumed in that action are known.
     -- Applies to both TakeIngredients (drink disposition) and DrinkCup.
-    -- A player only sobers up if every ingredient consumed this action is a Mixer.
-    -- If any Spirit was consumed, Mixers provide no sobering effect.
+    -- Bitters, cointreau and vermouth count as spirits; lemon and sugar as
+    -- mixers. A player only sobers up if no spirit was consumed this action;
+    -- then each mixer sobers by one. If any spirit was consumed, mixers provide
+    -- no sobering effect. (Refresher cards: see cards.allium.)
     when: ApplyDrunkModifier(player, consumed: List<Ingredient>)
-    let spirits = consumed where kind = Spirit
-    let mixers  = consumed where kind = Mixer
+    let boozy   = {bitters, cointreau, vermouth}
+    let spirits = consumed where kind = Spirit or (kind = Special and special_type in boozy)
+    let mixers  = consumed where kind = Mixer or (kind = Special and special_type not in boozy)
     ensures: player.drunk_level = player.drunk_level + spirits.count
     if spirits.count = 0:
         ensures: player.drunk_level = max(0, player.drunk_level - mixers.count)
@@ -277,15 +334,17 @@ rule SellCup {
     requires: player.status = active
     requires: it is player's turn
     requires: cup.owner.player_id = player.player_id
-    requires: declared_specials ⊆ player.special_ingredients
+    requires: declared_specials ⊆ player.special_ingredients   -- legacy games; else empty
     requires: (cup, declared_specials) is a valid sellable drink
-        -- exact recipe match for cocktails; spirit+mixer matrix for standard drinks
+        -- exact recipe match (cup specials + declared) for cocktails;
+        -- spirit+mixer matrix for standard drinks
     let points = drink_points(cup, declared_specials)
     ensures: player.points = player.points + points
     ensures: player.special_ingredients = player.special_ingredients - declared_specials
     let sold_ingredients = cup.ingredients (before sale)
     ensures: cup.ingredients = []
-    ensures: board.bag_contents = board.bag_contents + sold_ingredients + declared_specials
+    ensures: board.bag_contents = board.bag_contents + sold_ingredients
+    -- Specials in the cup go back in the bag with everything else.
     ensures: CheckVictory(player)
 }
 
@@ -344,10 +403,13 @@ rule ClaimCard {
 }
 
 rule RefreshCardRow {
+    -- Clearing the orders row (drunk min_drunk_to_refresh+) and swiping the
+    -- ability row (drunk min_drunk_to_swipe+) are each a free action, once a
+    -- turn. The karaoke row is never cleared. See cards.allium.
     when: RefreshCardRow(player, row)
     requires: player.status = active
     requires: it is player's turn
-    requires: player.drunk_level >= config.min_drunk_to_refresh
+    requires: player.drunk_level >= config.min_drunk_to_refresh   -- orders row
     requires: row in board.card_rows
     let non_karaoke = row.cards where not is_karaoke
     ensures: non_karaoke removed from row
@@ -362,13 +424,12 @@ rule RefreshCardRow {
 
 rule ReplenishDisplay {
     when: ReplenishDisplay(board)
-    let deficit = config.open_display_size - board.open_display.count
-    requires: deficit > 0
-    let fill = min(deficit, board.bag_contents.count)
-    ensures: board.open_display refilled by fill ingredients randomly selected from board.bag_contents
-    -- Selection is random: the fill ingredients are chosen uniformly at random from
-    -- the bag, preserving the blind-draw nature of the ingredient bag.
-    -- Display may remain below config.open_display_size if the bag is empty.
+    requires: board.open_display.count < config.open_display_size
+    ensures: DrawToken(board) onto board.open_display until it holds
+        config.open_display_size tokens or the bag has no spirits or mixers left
+    -- Selection is random, preserving the blind-draw nature of the bag. Specials
+    -- drawn on the way go to the specials display (DrawToken), so the display
+    -- always shows spirits and mixers.
 }
 
 rule ReplaceCard {
@@ -399,9 +460,10 @@ entity RecordedAction {
 variant TakenIngredients : RecordedAction {
     taken: List<{
         ingredient: Ingredient,
+        source: display | bag | pending | specials,
         disposition: placed_in_cup | drunk_directly | drawn_as_special,
         cup_index: Integer?,    -- set when disposition = placed_in_cup
-        special_type: Special?  -- set when disposition = drawn_as_special and result != nothing
+        special_type: Special?  -- legacy: set when disposition = drawn_as_special and result != nothing
     }>
 }
 
@@ -429,6 +491,8 @@ variant RefreshedRow : RecordedAction {
     row_position: Integer
 }
 
+-- Historic only: re-rolling specials was removed from the game; old games
+-- move histories may still contain these records.
 variant ReRolledSpecials : RecordedAction {
     chosen_specials: List<Special>       -- specials the player chose to re-roll
     results: List<Special?>              -- outcomes in order; null = "nothing"
@@ -512,16 +576,19 @@ guarantee: ProposeUndoTurn is unavailable when there are no MoveRecords for the 
 -- ─── Victory and elimination ──────────────────────────────────────────────────
 
 rule CheckVictory {
-    -- Called after SellCup or ClaimCard. The active player's win takes precedence;
-    -- if another player also meets a condition on the same turn, the active player wins.
+    -- Called after SellCup or ClaimCard.
     when: CheckVictory(player)
     requires: player.status = active
-    if player.points >= config.score_to_win:
-        ensures: session/Game.status = ended
-        ensures: session/Game.winner = player.player_id
     if player.karaoke_cards_claimed >= config.karaoke_cards_to_win:
+        -- Instant win, even during the last round.
         ensures: session/Game.status = ended
         ensures: session/Game.winner = player.player_id
+    if player.points >= score_to_win_for(players.count):
+        -- Starts the last round: play continues until the turn returns to the
+        -- first active player in turn order, so everyone has had equal turns.
+        -- Then the active player with the most points wins (ties go to the
+        -- earliest in turn order).
+        ensures: board.last_round = true
 }
 
 -- ─── Surfaces ─────────────────────────────────────────────────────────────────
@@ -584,11 +651,8 @@ surface PlayerTurn {
         RefreshCardRow(player, row)
             when state.status = active
             and board.player_turn = player.id
-            and state.drunk_level >= config.min_drunk_to_refresh
-        ReRollSpecials(player, chosen_specials)
-            when state.status = active
-            and board.player_turn = player.id
-            and state.special_ingredients.count >= 1
+            and (row is the orders row and state.drunk_level >= config.min_drunk_to_refresh
+                 or row is the ability row and state.drunk_level >= config.min_drunk_to_swipe)
         ProposeUndoTurn(player)
             when state.status = active
             and game.status = started
@@ -600,13 +664,13 @@ surface PlayerTurn {
             and pending_undo.status = pending
             and player.player_id not in pending_undo.votes
 
-    guarantee: exactly one action is taken per turn
+    guarantee: exactly one main action is taken per turn, plus any free actions (see cards.allium)
     guarantee: an eliminated player (hospitalised or wet) takes no further turns; the game continues for others
-    guarantee: cup ingredient count never exceeds config.max_cup_ingredients
+    guarantee: a cup never holds more than config.max_cup_ingredients spirits and mixers, or config.max_cup_specials specials
     guarantee: drunk_level never goes below 0
     guarantee: bladder_capacity never goes below config.min_bladder_capacity
-    guarantee: specials are never placed in cups or drunk directly; they always go to the player mat
-    guarantee: TakeIngredients is unavailable when bag + display together hold fewer than take_count ingredients
+    guarantee: a special never counts toward a card's cost, except one pays for its specialist (see cards.allium)
+    guarantee: TakeIngredients is unavailable when the bag's spirits and mixers, the display and the specials display together hold fewer than take_count ingredients
     guarantee: a player may not cast a VoteOnUndoTurn vote if they already voted on the same request
     guarantee: the proposer of an UndoRequest is already recorded as agree and cannot vote again
 }
@@ -622,6 +686,8 @@ surface BoardView {
             i.kind
             i.spirit_type?
             i.mixer_type?
+        for s in board.specials_display:
+            s.special_type
         board.bag_contents.count         -- bag size is public; specific contents are hidden
         for row in board.card_rows:
             row.position

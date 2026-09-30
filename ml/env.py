@@ -14,7 +14,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from app.GameState import GameState
+from app.GameState import GameState, regular_in_bag
 from app.Ingredient import Ingredient
 from app.PlayerState import (
     INITIAL_BLADDER_CAPACITY,
@@ -365,8 +365,6 @@ class BartendersEnv(gym.Env):
             )
         elif t == "refresh_card_row":
             gs, _ = actions.refresh_card_row(gs, pid, p["row_position"])
-        elif t == "reroll_specials":
-            gs, _ = actions.reroll_specials(gs, pid, p["chosen_specials"])
         else:
             raise ValueError(f"Unknown action: {t}")
 
@@ -398,7 +396,7 @@ class BartendersEnv(gym.Env):
             if remaining <= 0:
                 break
 
-            bag_count = min(remaining, len(gs.bag_contents))
+            bag_count = min(remaining, regular_in_bag(gs))
             if bag_count <= 0:
                 # Try display again
                 display_assignments = strategy.choose_take_assignments(
@@ -556,8 +554,6 @@ class BartendersEnv(gym.Env):
             )
         elif t == "refresh_card_row":
             gs, _ = actions.refresh_card_row(gs, player_id, p["row_position"])
-        elif t == "reroll_specials":
-            gs, _ = actions.reroll_specials(gs, player_id, p["chosen_specials"])
 
         return gs
 

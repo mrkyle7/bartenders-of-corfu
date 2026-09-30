@@ -7,15 +7,33 @@ Turn advancement: after every action the turn advances to the next active
 (non-eliminated) player in turn_order.
 """
 
-import random
 from uuid import UUID
 
-from app.card import Card, CardRow
-from app.cocktails import drink_points, is_cocktail
+from app.card import (
+    ABILITY_ROW,
+    FREE_ACTION_TYPES,
+    KARAOKE_ROW,
+    ORDERS_ROW,
+    ROW_SIZE,
+    Card,
+    CardRow,
+)
+from app.cocktails import drink_points, is_cocktail, matches_order
 from app.game import GameException
-from app.GameState import OPEN_DISPLAY_SIZE, GameState
-from app.Ingredient import Ingredient, SpecialType
-from app.PlayerState import MAX_CUP_INGREDIENTS, MIN_BLADDER_CAPACITY, PlayerState
+from app.GameState import OPEN_DISPLAY_SIZE, GameState, draw_token, regular_in_bag
+from app.Ingredient import (
+    BOOZY_SPECIALS,
+    SPECIALIST_SPECIAL,
+    Ingredient,
+    is_special,
+)
+from app.PlayerState import (
+    MAX_CUP_INGREDIENTS,
+    MAX_CUP_SPECIALS,
+    MIN_BLADDER_CAPACITY,
+    PlayerState,
+)
+from app.specials import roll_face, take_special
 
 _SPIRITS = {
     Ingredient.WHISKEY,
@@ -26,10 +44,18 @@ _SPIRITS = {
 }
 _MIXERS = {Ingredient.SODA, Ingredient.TONIC, Ingredient.COLA, Ingredient.CRANBERRY}
 
+# The two-player target; games with more players aim lower (see
+# GameState.score_to_win).
 SCORE_TO_WIN = 40
 KARAOKE_CARDS_TO_WIN = 3
 MAX_DRUNK_LEVEL = 5
+# Clearing the orders row is your main action and needs drunk 3+; swiping the
+# ability row is a free action once a turn and needs drunk 2+.
 MIN_DRUNK_TO_REFRESH = 3
+MIN_DRUNK_TO_SWIPE = 2
+# Karaoke: sing when you're drunk enough, with 2 of the song's spirit drunk
+MIN_DRUNK_TO_SING = 3
+KARAOKE_SPIRITS = 2
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -128,6 +154,7 @@ def _reset_take_batch_state(gs: GameState):
     gs.ingredients_taken_this_turn = 0
     gs.drunk_ingredients_this_turn = []
     gs.bag_draw_pending = []
+    gs.bag_draw_pending_specials = []
     gs.taken_records_this_turn = []
 
 
@@ -158,38 +185,65 @@ def _advance_turn(gs: GameState) -> GameState:
     return gs
 
 
-# ─── Free action card helpers ────────────────────────────────────────────────
+# ─── Free action helpers ─────────────────────────────────────────────────────
 
-_FREE_ACTION_TYPE_MAP: dict[str, str] = {
-    "RUM": "take_ingredients",
-    "WHISKEY": "reroll_specials",
-    "VODKA": "sell_cup",
-    "GIN": "go_for_a_wee",
-}
+# Free actions every player has, once a turn: claiming a card, and clearing
+# the orders row or swiping the ability row away when drunk enough.
+CLAIM_CARD = "claim_card"
+CLEAR_ORDERS = "refresh_orders_row"
+SWIPE_ABILITIES = "refresh_ability_row"
 
-# Game modes that turn a specific action type into a free additional action,
-# regardless of whether the player holds the matching FreeActionCard. Each
-# such free action remains once-per-turn, mirroring FreeActionCard semantics.
-_MODE_FREE_ACTION_MAP: dict[str, str] = {
-    "claim_card_free_action": "claim_card",
-    "reroll_specials_free_action": "reroll_specials",
-}
+
+def _usable_now(gs: GameState, ps: "PlayerState", action_type: str) -> bool:
+    """Whether an always-there free action has anything to do right now."""
+    if action_type == CLAIM_CARD:
+        return any(
+            _can_afford(ps, card)
+            for row in gs.card_rows
+            if row.position != ORDERS_ROW
+            for card in row.cards
+        )
+    if action_type == SWIPE_ABILITIES:
+        row = _row(gs, ABILITY_ROW)
+        return (
+            ps.drunk_level >= MIN_DRUNK_TO_SWIPE
+            and row is not None
+            and (bool(row.cards) or bool(gs._deck_dicts))
+        )
+    if action_type == CLEAR_ORDERS:
+        row = _row(gs, ORDERS_ROW)
+        return (
+            ps.drunk_level >= MIN_DRUNK_TO_REFRESH
+            and row is not None
+            and bool(row.cards)
+        )
+    return True
 
 
 def _available_free_actions(
-    gs: GameState, ps: "PlayerState", used: list[str]
+    gs: GameState, ps: "PlayerState", used: list[str], usable_only: bool = False
 ) -> set[str]:
-    """Return the set of free action types available to the player this turn."""
+    """The free action types the player may still use this turn.
+
+    Each is once a turn: those granted by the player's free-action cards,
+    plus claiming a card, clearing the orders row and swiping the ability
+    row, which everyone has.
+    With ``usable_only`` the everyone-has ones count only when they could be
+    done right now, so they don't hold the turn open for nothing.
+    """
     actions = set()
     for card_dict in ps.cards:
         if card_dict.get("card_type") == "free_action":
             spirit = card_dict.get("spirit_type")
-            action_type = _FREE_ACTION_TYPE_MAP.get(spirit) if spirit else None
+            action_type = FREE_ACTION_TYPES.get(spirit) if spirit else None
             if action_type and action_type not in used:
                 actions.add(action_type)
-    for mode, action_type in _MODE_FREE_ACTION_MAP.items():
-        if gs.has_mode(mode) and action_type not in used:
-            actions.add(action_type)
+    for action_type in (CLAIM_CARD, CLEAR_ORDERS, SWIPE_ABILITIES):
+        if action_type in used:
+            continue
+        if usable_only and not _usable_now(gs, ps, action_type):
+            continue
+        actions.add(action_type)
     return actions
 
 
@@ -245,7 +299,9 @@ def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> boo
     # must advance regardless — otherwise the game stalls on a hospitalised
     # or wet player who still holds unused free action cards.
     if gs.main_action_taken_this_turn:
-        remaining_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
+        remaining_free = _available_free_actions(
+            gs, ps, gs.free_actions_used_this_turn, usable_only=True
+        )
         if len(remaining_free) == 0 or ps.is_eliminated:
             gs.turn_number += 1
             _advance_turn(gs)
@@ -265,14 +321,19 @@ def _require_no_take_in_progress(gs: GameState):
 
 
 def _replenish_display(gs: GameState):
-    """Randomly draw from the bag to fill the open display up to OPEN_DISPLAY_SIZE."""
-    deficit = OPEN_DISPLAY_SIZE - len(gs.open_display)
-    if deficit > 0 and gs.bag_contents:
-        fill = min(deficit, len(gs.bag_contents))
-        chosen = random.sample(gs.bag_contents, fill)
-        for item in chosen:
-            gs.bag_contents.remove(item)
-        gs.open_display.extend(chosen)
+    """Draw from the bag until the open display shows OPEN_DISPLAY_SIZE tokens.
+
+    Specials that come out go to the specials display and the drawing carries
+    on. (An old special die token is rolled as it comes out.)
+    """
+    while len(gs.open_display) < OPEN_DISPLAY_SIZE:
+        item = draw_token(gs)
+        if item is None:
+            return
+        gs.open_display.append(item)
+        gs.display_specials.append(
+            roll_face(gs) if item == Ingredient.SPECIAL else None
+        )
 
 
 def _return_player_ingredients_to_bag(gs: GameState, ps: PlayerState) -> None:
@@ -302,6 +363,9 @@ def _return_player_ingredients_to_bag(gs: GameState, ps: PlayerState) -> None:
                 gs.bag_contents.append(_spirit_ingredient(spirit_name))
             card_dict["stored_spirits"] = []
 
+    # Specials on the mat go back to the supply for others to take
+    ps.special_ingredients = []
+
 
 def _check_elimination(gs: GameState, player_id: UUID):
     ps = gs.player_states[player_id]
@@ -330,7 +394,7 @@ def _check_victory(gs: GameState, player_id: UUID) -> bool:
         gs.winner = player_id
         return True
     # Points threshold — trigger last round (don't end game yet)
-    if ps.points >= SCORE_TO_WIN and not gs.last_round:
+    if ps.points >= gs.score_to_win and not gs.last_round:
         gs.last_round = True
     return False
 
@@ -386,9 +450,11 @@ def _apply_drunk_modifier(
 
     Refresher cards make their mixer type always contribute -1 (hot mixers),
     even when spirits are consumed. Plain mixers only sober when no spirits.
+    Bitters, cointreau and vermouth count as spirits; lemon and sugar as
+    plain mixers.
     """
     ps = gs.player_states[player_id]
-    spirits = [i for i in ingredients if i in _SPIRITS]
+    spirits = [i for i in ingredients if i in _SPIRITS or i in BOOZY_SPECIALS]
 
     # Collect mixer types covered by player's refresher cards
     refresher_mixer_types: set[str] = set()
@@ -403,6 +469,9 @@ def _apply_drunk_modifier(
     ]
     plain_mixers = [
         i for i in ingredients if i in _MIXERS and i.name not in refresher_mixer_types
+    ]
+    plain_mixers += [
+        i for i in ingredients if is_special(i) and i not in BOOZY_SPECIALS
     ]
 
     # delta = spirits - hot_mixers; plain_mixers only subtract when no spirits
@@ -423,16 +492,108 @@ def _drink_ingredient(gs: GameState, player_id: UUID, ingredient: Ingredient):
     ps.bladder.append(ingredient)
 
 
+def _row(gs: GameState, position: int) -> CardRow | None:
+    return next((r for r in gs.card_rows if r.position == position), None)
+
+
+def _deck_for_row(gs: GameState, row: CardRow) -> list[dict] | None:
+    """The deck a row refills from: orders for the orders row, abilities for
+    the ability row, and nothing for the karaoke row.
+
+    Games dealt before the orders row existed hold ability cards in row 2;
+    those rows keep refilling from the ability deck.
+    """
+    if row.position == KARAOKE_ROW:
+        return None
+    if row.position == ORDERS_ROW and (
+        gs.order_deck or any(c.card_type == "order" for c in row.cards)
+    ):
+        return gs.order_deck
+    return gs._deck_dicts
+
+
 def _replace_card(gs: GameState, row: CardRow):
-    """Draw one random card from the deck into the row, if deck has cards."""
-    if gs._deck_dicts:
-        import random
+    """Deal the top card of the row's deck into the row, if there is one."""
+    deck = _deck_for_row(gs, row)
+    if deck:
+        row.cards.append(Card.from_dict(deck.pop(0)))
 
-        from app.card import Card
 
-        index = random.randrange(len(gs._deck_dicts))
-        card_dict = gs._deck_dicts.pop(index)
-        row.cards.append(Card.from_dict(card_dict))
+def _rotate_row(gs: GameState, row: CardRow) -> int:
+    """Put every card in the row on the bottom of its deck and deal a fresh row."""
+    deck = _deck_for_row(gs, row)
+    removed = list(row.cards)
+    row.cards = []
+    if deck is None:
+        return 0
+    deck.extend(c.to_dict() for c in removed)
+    for _ in range(ROW_SIZE):
+        _replace_card(gs, row)
+    return len(removed)
+
+
+def card_payment(
+    ps: PlayerState, card: Card, pay_with: str | None = None
+) -> list[Ingredient] | None:
+    """The bladder ingredients that pay for a card, or None if it can't be paid.
+
+    Claiming a karaoke or ability card takes its cost out of the bladder and
+    back into the bag. A karaoke song also needs drunk 3+ (checked, not paid). ``pay_with`` picks how to pay where there's a choice:
+    the spirit for a cup doubler (any spirit with three will do without it),
+    and for a specialist either its spirit (two) or its special (one; the
+    special is used by default when held).
+    """
+    counts: dict[str, int] = {}
+    for i in ps.bladder:
+        counts[i.name] = counts.get(i.name, 0) + 1
+
+    def take(name: str | None, n: int) -> list[Ingredient] | None:
+        if not name or counts.get(name, 0) < n:
+            return None
+        return [Ingredient[name]] * n
+
+    ct = card.card_type
+    if ct == "karaoke":
+        # Drunk level is checked, not paid; the two spirits are paid
+        if ps.drunk_level < MIN_DRUNK_TO_SING:
+            return None
+        return take(card.spirit_type, KARAOKE_SPIRITS)
+    if ct == "free_action":
+        return take(card.spirit_type, 3)
+    if ct == "store":
+        return take(card.spirit_type, 1)
+    if ct == "refresher":
+        return take(card.mixer_type, 2)
+    if ct == "specialist":
+        special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
+        with_special = take(special.name, 1) if special else None
+        with_spirit = take(card.spirit_type, 2)
+        if pay_with and pay_with.upper() == (card.spirit_type or ""):
+            return with_spirit
+        if pay_with and special and pay_with.upper() == special.name:
+            return with_special
+        return with_special or with_spirit
+    if ct == "cup_doubler":
+        if pay_with:
+            return take(pay_with.upper(), 3)
+        for s in _SPIRITS:
+            paid = take(s.name, 3)
+            if paid:
+                return paid
+        return None
+    return None
+
+
+def _can_afford(ps: PlayerState, card: Card, spirit_type: str | None = None) -> bool:
+    """Whether the player's bladder can pay for the card (see card_payment)."""
+    return card_payment(ps, card, spirit_type) is not None
+
+
+def _pay_for_card(gs: GameState, ps: PlayerState, paid: list[Ingredient]) -> None:
+    """Move a card's cost out of the bladder and into the bag."""
+    for ing in paid:
+        ps.bladder.remove(ing)
+        gs.bag_contents.append(ing)
 
 
 # ─── Turn actions ─────────────────────────────────────────────────────────────
@@ -446,7 +607,8 @@ def draw_from_bag(
     """DrawFromBag — reveals ingredients from the bag and holds them pending assignment.
 
     Draws `count` ingredients randomly from the bag and stores them in
-    gs.bag_draw_pending. The player must then call take_ingredients with
+    gs.bag_draw_pending. Specials that come out go to the specials display
+    and don't count: the draw carries on. The player must then call take_ingredients with
     source='pending' assignments to assign each drawn ingredient to a cup or drink.
     No other action is permitted while bag_draw_pending is non-empty.
     """
@@ -484,20 +646,30 @@ def draw_from_bag(
             status_code=400,
         )
 
-    if len(gs.bag_contents) < count:
+    in_bag = regular_in_bag(gs)
+    if in_bag < count:
         raise GameException(
-            f"Not enough ingredients in bag (need {count}, have {len(gs.bag_contents)}).",
+            f"Not enough ingredients in bag (need {count}, have {in_bag}).",
             status_code=409,
         )
 
+    specials_before = len(gs.specials_display)
     drawn: list[Ingredient] = []
     for _ in range(count):
-        ingredient = random.choice(gs.bag_contents)
-        gs.bag_contents.remove(ingredient)
-        drawn.append(ingredient)
+        drawn.append(draw_token(gs))
 
     gs.bag_draw_pending = drawn
-    payload = {"drawn": [i.name for i in drawn]}
+    # Special tokens are rolled as they come out of the bag
+    gs.bag_draw_pending_specials = []
+    for i in drawn:
+        gs.bag_draw_pending_specials.append(
+            roll_face(gs) if i == Ingredient.SPECIAL else None
+        )
+    payload = {
+        "drawn": [i.name for i in drawn],
+        "specials": list(gs.bag_draw_pending_specials),
+        "to_specials_display": [i.name for i in gs.specials_display[specials_before:]],
+    }
     return gs, payload
 
 
@@ -515,11 +687,24 @@ def take_ingredients(
     across all batches reaches take_count.
 
     assignments: list of {
-        ingredient: str,   # Ingredient enum name (required for source="display")
-        source: "bag" | "display",
+        ingredient: str,   # Ingredient enum name (required for source="display"/"specials")
+        source: "bag" | "display" | "pending" | "specials",
         disposition: "cup" | "drink",
         cup_index: 0 | 1   # required when disposition == "cup"
+        display_index: int # optional: which display slot (tells specials apart)
+        special_type: str  # optional: the special to take from a "choose any" token
+        swap_special: str  # optional: a special to give back when holding two
     }
+
+    Specials (bitters, cointreau, lemon, sugar, vermouth) are taken from the
+    specials display (source="specials") into a glass, where up to
+    MAX_CUP_SPECIALS sit on top of its spirits and mixers, or drunk like a
+    mixer. A blind bag draw never hands you one: specials that come out go
+    to the specials display and the draw carries on.
+
+    An old special die token (games started before specials were
+    ingredients) puts the special it shows on the player's mat (see
+    app/specials.py); disposition is ignored for it.
 
     Returns (new_game_state, move_payload) where move_payload includes
     "turn_complete": bool indicating whether the turn has ended.
@@ -552,7 +737,9 @@ def take_ingredients(
     else:
         # No pending draw — on the first batch verify enough ingredients exist
         if already_taken == 0:
-            available_count = len(gs.bag_contents) + len(gs.open_display)
+            available_count = (
+                regular_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
+            )
             if available_count < take_count:
                 raise GameException(
                     f"Not enough ingredients available ({available_count} < {take_count}). "
@@ -576,17 +763,26 @@ def take_ingredients(
         disposition = asn.get("disposition", "drink")
         cup_index = asn.get("cup_index", 0)
 
-        # Resolve ingredient from source
+        # Resolve ingredient from source; a special token also has its face
+        face: str | None = None
         if source == "display":
             try:
                 ingredient = Ingredient[raw_name]
             except KeyError:
                 raise GameException(f"Unknown ingredient: {raw_name}", status_code=400)
-            if ingredient not in gs.open_display:
-                raise GameException(
-                    f"{raw_name} is not in the open display", status_code=400
-                )
-            gs.open_display.remove(ingredient)
+            slot = asn.get("display_index")
+            if not (
+                isinstance(slot, int)
+                and 0 <= slot < len(gs.open_display)
+                and gs.open_display[slot] == ingredient
+            ):
+                if ingredient not in gs.open_display:
+                    raise GameException(
+                        f"{raw_name} is not in the open display", status_code=400
+                    )
+                slot = gs.open_display.index(ingredient)
+            gs.open_display.pop(slot)
+            face = gs.display_specials.pop(slot)
         elif source == "pending":
             # Use the next ingredient from the pending draw (already removed from bag)
             if not gs.bag_draw_pending:
@@ -594,52 +790,82 @@ def take_ingredients(
                     "No pending bag ingredient to assign.", status_code=400
                 )
             ingredient = gs.bag_draw_pending.pop(0)
+            face = gs.bag_draw_pending_specials.pop(0)
             raw_name = ingredient.name
-        else:
+        elif source == "specials":
+            try:
+                ingredient = Ingredient[raw_name]
+            except KeyError:
+                raise GameException(f"Unknown ingredient: {raw_name}", status_code=400)
+            if ingredient not in gs.specials_display:
+                raise GameException(
+                    f"{raw_name} is not on the specials display", status_code=400
+                )
+            gs.specials_display.remove(ingredient)
+        elif source == "bag":
             # Direct bag draw — only permitted when no pending draw exists
             if gs.bag_draw_pending:
                 raise GameException(
                     "Assign your pending bag ingredients before drawing more.",
                     status_code=409,
                 )
-            if not gs.bag_contents:
-                raise GameException("The bag is empty", status_code=400)
-            ingredient = random.choice(gs.bag_contents)
-            gs.bag_contents.remove(ingredient)
+            drawn = draw_token(gs)
+            if drawn is None:
+                raise GameException(
+                    "There are no spirits or mixers left in the bag", status_code=400
+                )
+            ingredient = drawn
             raw_name = ingredient.name
+            if ingredient == Ingredient.SPECIAL:
+                face = roll_face(gs)
+        else:
+            raise GameException(f"Unknown source: {source}", status_code=400)
 
         record: dict = {"ingredient": raw_name, "source": source}
 
-        if ingredient.value.special:
-            # Special token: roll the die
-            rolled = SpecialType.roll()
+        if ingredient == Ingredient.SPECIAL:
+            # Special token: its special goes on the mat, the token back in the bag
+            result = take_special(
+                gs,
+                ps,
+                face or "any",
+                choice=asn.get("special_type"),
+                swap=asn.get("swap_special"),
+            )
             record["disposition"] = "special"
-            record["special_type"] = rolled.value
-            if rolled != SpecialType.NOTHING:
-                ps.special_ingredients.append(rolled.value)
-            else:
-                # Token returned to bag
-                gs.bag_contents.append(ingredient)
+            record.update(result)
         elif disposition == "cup":
             if cup_index not in (0, 1):
                 raise GameException("cup_index must be 0 or 1", status_code=400)
             cup = ps.cups[cup_index]
-            if cup.is_full:
+            if is_special(ingredient):
+                if cup.specials_full:
+                    raise GameException(
+                        f"Cup {cup_index} already holds {MAX_CUP_SPECIALS} specials",
+                        status_code=400,
+                    )
+            elif cup.is_full:
                 raise GameException(
                     f"Cup {cup_index} is full (max {MAX_CUP_INGREDIENTS})",
                     status_code=400,
                 )
-            if ingredient not in _SPIRITS and ingredient not in _MIXERS:
+            elif ingredient not in _SPIRITS and ingredient not in _MIXERS:
                 raise GameException(
-                    "Only spirits and mixers may be placed in cups", status_code=400
+                    "Only spirits, mixers and specials may be placed in cups",
+                    status_code=400,
                 )
             cup.ingredients.append(ingredient)
             record["disposition"] = "cup"
             record["cup_index"] = cup_index
         elif disposition == "drink":
-            if ingredient not in _SPIRITS and ingredient not in _MIXERS:
+            if (
+                ingredient not in _SPIRITS
+                and ingredient not in _MIXERS
+                and not is_special(ingredient)
+            ):
                 raise GameException(
-                    "Only spirits and mixers may be drunk directly", status_code=400
+                    "Only spirits, mixers and specials may be drunk directly",
+                    status_code=400,
                 )
             _drink_ingredient(gs, player_id, ingredient)
             drunk_this_batch.append(ingredient)
@@ -728,21 +954,40 @@ def _sell_one_cup(
         matching = specialist_spirit_types & cup_spirit_types
         pts += len(matching) * 2
 
+    # A matching order on the table pays its bonus to whoever serves it first
+    served = None
+    orders = _row(gs, ORDERS_ROW)
+    if orders is not None:
+        for card in orders.cards:
+            if card.card_type == "order" and matches_order(
+                card.to_dict(), cup.ingredients, declared_specials
+            ):
+                served = card
+                break
+    if served is not None:
+        pts += served.bonus
+        orders.cards.remove(served)
+        gs.order_deck.append(served.to_dict())
+        _replace_card(gs, orders)
+
     sold_ingredients = list(cup.ingredients)
     gs.bag_contents.extend(sold_ingredients)
+    # Specials go back to the supply (their tokens went back in the bag when taken)
     for s in declared_specials:
-        gs.bag_contents.append(Ingredient.SPECIAL)
         ps.special_ingredients.remove(s)
 
     cup.ingredients = []
     ps.points += pts
 
-    return {
+    result = {
         "cup_index": cup_index,
         "ingredients": [i.name for i in sold_ingredients],
         "declared_specials": list(declared_specials),
         "points_earned": pts,
     }
+    if served is not None:
+        result["order"] = {"name": served.name, "bonus": served.bonus}
+    return result
 
 
 def sell_cup(
@@ -754,25 +999,16 @@ def sell_cup(
 ) -> tuple[GameState, dict]:
     """SellCup action.
 
-    When ``additional_cups`` is provided the action sells multiple cups in a
-    single turn action. This is only permitted when the ``sell_both_cups``
-    game mode is active. Each cup is validated and scored independently;
-    points stack and a single ``_finish_turn_action`` call advances the turn.
+    When ``additional_cups`` is provided the action sells both cups in one
+    action. Each cup is validated and scored independently (each may serve an
+    order); points stack and a single ``_finish_turn_action`` call advances
+    the turn.
     """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
     _require_no_take_in_progress(gs)
-
-    if additional_cups:
-        from app.game_modes import GameMode
-
-        if not gs.has_mode(GameMode.SELL_BOTH_CUPS.value):
-            raise GameException(
-                "Selling multiple cups requires the sell_both_cups game mode",
-                status_code=400,
-            )
 
     # Build the full list of (cup_index, declared_specials) to sell, in order.
     sales: list[tuple[int, list[str]]] = [(cup_index, list(declared_specials))]
@@ -812,6 +1048,9 @@ def sell_cup(
         "points_earned": total_points,
         "is_free_action": is_free,
     }
+    orders_served = [c["order"] for c in sold if "order" in c]
+    if orders_served:
+        payload["orders"] = orders_served
     if len(sold) > 1:
         payload["sold_cups"] = sold
     return gs, payload
@@ -897,7 +1136,11 @@ def claim_card(
     cup_index: int | None = None,
     spirit_type: str | None = None,
 ) -> tuple[GameState, dict]:
-    """ClaimCard action.
+    """ClaimCard — a free action, once a turn, before or after your main action.
+
+    Karaoke cards come from row 1 (not replaced); ability cards from row 3,
+    replaced from the top of the ability deck. Orders can't be claimed: they
+    are served by selling the drink.
 
     cup_index: required for cup_doubler cards (0 or 1).
     spirit_type: required for cup_doubler cards (declares which spirit type was used to pay).
@@ -924,41 +1167,15 @@ def claim_card(
         raise GameException("Card not found in any row", status_code=404)
 
     card_type = target_card.card_type
+    if card_type == "order":
+        raise GameException(
+            "Orders aren't claimed: sell the drink to serve one", status_code=400
+        )
+    if CLAIM_CARD in gs.free_actions_used_this_turn:
+        raise GameException("You've already claimed a card this turn", status_code=409)
 
-    # Per-type cost validation
-    if card_type == "karaoke":
-        if target_card.spirit_type is None:
-            raise GameException("Karaoke card has no spirit type", status_code=500)
-        available = _available_spirits(ps, target_card.spirit_type)
-        if available < 3:
-            raise GameException(
-                f"Need 3 {target_card.spirit_type} spirits available; have {available}",
-                status_code=400,
-            )
-
-    elif card_type == "store":
-        if target_card.spirit_type is None:
-            raise GameException("Store card has no spirit type", status_code=500)
-        spirit_ing = _spirit_ingredient(target_card.spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 1:
-            raise GameException(
-                f"Need at least 1 {target_card.spirit_type} spirit in bladder; have {bladder_count}",
-                status_code=400,
-            )
-
-    elif card_type == "refresher":
-        if target_card.mixer_type is None:
-            raise GameException("Refresher card has no mixer type", status_code=500)
-        mixer_ing = _mixer_ingredient(target_card.mixer_type)
-        bladder_mixer_count = sum(1 for i in ps.bladder if i == mixer_ing)
-        if bladder_mixer_count < 2:
-            raise GameException(
-                f"Need 2 {target_card.mixer_type} mixers in bladder; have {bladder_mixer_count}",
-                status_code=400,
-            )
-
-    elif card_type == "cup_doubler":
+    # Per-type checks, then the cost: it comes out of the bladder into the bag
+    if card_type == "cup_doubler":
         if spirit_type is None:
             raise GameException(
                 "Must declare spirit_type when claiming a cup doubler card",
@@ -969,50 +1186,43 @@ def claim_card(
                 "Must declare cup_index (0 or 1) when claiming a cup doubler card",
                 status_code=400,
             )
-        # Spec: bladder only (cannot spend from store cards)
-        spirit_ing = _spirit_ingredient(spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 3:
-            raise GameException(
-                f"Need 3 {spirit_type} spirits in bladder; have {bladder_count}",
-                status_code=400,
-            )
-
-    elif card_type == "specialist":
-        if target_card.spirit_type is None:
-            raise GameException("Specialist card has no spirit type", status_code=500)
-        # Spec: bladder only, threshold check, requires 2 matching spirits
-        spirit_ing = _spirit_ingredient(target_card.spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 2:
-            raise GameException(
-                f"Need 2 {target_card.spirit_type} spirits in bladder; have {bladder_count}",
-                status_code=400,
-            )
-
-    elif card_type == "free_action":
-        if target_card.spirit_type is None:
-            raise GameException("Free action card has no spirit type", status_code=500)
-        # Spec: 3 bladder spirits of the matching type (threshold check only)
-        spirit_ing = _spirit_ingredient(target_card.spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 3:
-            raise GameException(
-                f"Need 3 {target_card.spirit_type} spirits in bladder; have {bladder_count}",
-                status_code=400,
-            )
+    if card_type not in (
+        "karaoke",
+        "store",
+        "refresher",
+        "cup_doubler",
+        "specialist",
+        "free_action",
+    ):
+        raise GameException(f"Unknown card type: {card_type}", status_code=500)
+    needs_spirit = ("karaoke", "store", "specialist", "free_action")
+    if card_type in needs_spirit and target_card.spirit_type is None:
+        raise GameException("Card has no spirit type", status_code=500)
+    if card_type == "karaoke" and ps.drunk_level < MIN_DRUNK_TO_SING:
+        raise GameException(
+            f"You need to be drunk level {MIN_DRUNK_TO_SING}+ to sing karaoke; "
+            f"you are at {ps.drunk_level}",
+            status_code=400,
+        )
+    paid = card_payment(ps, target_card, spirit_type)
+    if paid is None:
+        raise GameException(
+            f"Your bladder doesn't hold what {target_card.name} costs",
+            status_code=400,
+        )
+    _pay_for_card(gs, ps, paid)
 
     # Remove card from row
     target_row.cards.remove(target_card)
 
-    # Per-type effects — cost is a threshold check only, no bladder consumption
+    # Per-type effects (the cost has been paid into the bag)
     if card_type == "karaoke":
         ps.points += 5
         ps.karaoke_cards_claimed += 1
         ps.cards.append(target_card.to_dict())
 
     elif card_type == "store":
-        # Effect: transfer ALL matching spirits from bladder to stored_spirits on the card
+        # Effect: the rest of that spirit in the bladder moves onto the card
         spirit_ing = _spirit_ingredient(target_card.spirit_type)
         transferred = [i for i in ps.bladder if i == spirit_ing]
         ps.bladder = [i for i in ps.bladder if i != spirit_ing]
@@ -1049,6 +1259,7 @@ def claim_card(
         "card_id": card_id,
         "card_name": target_card.name,
         "card_type": card_type,
+        "paid": [i.name for i in paid],
         "is_karaoke": target_card.is_karaoke,
         "row_position": target_row.position,
         "is_free_action": is_free,
@@ -1176,55 +1387,14 @@ def reroll_specials(
     player_id: UUID,
     chosen_specials: list[str],
 ) -> tuple[GameState, dict]:
-    """ReRollSpecials action — re-roll selected specials from the player's mat.
+    """ReRollSpecials — retired.
 
-    Each chosen special is removed and the special die is rolled once per chosen
-    special.  If the roll is not "nothing", a new special of the rolled type is
-    added.  If the roll is "nothing", the special is simply lost (nothing is
-    returned to the bag).  This consumes the player's turn action.
+    Specials are now rolled as their tokens come out of the bag, so there is
+    nothing to re-roll. Kept so old clients get a clear answer.
     """
-    gs = _deep_copy_state(gs)
-    _require_turn(gs, player_id)
-    ps = gs.player_states[player_id]
-    _require_active(ps)
-    _require_no_take_in_progress(gs)
-
-    if len(chosen_specials) < 1:
-        raise GameException(
-            "Must choose at least 1 special to re-roll", status_code=400
-        )
-
-    # Validate all chosen specials are on the player's mat
-    mat = list(ps.special_ingredients)
-    for s in chosen_specials:
-        if s not in mat:
-            raise GameException(
-                f"Special '{s}' is not on your player mat", status_code=400
-            )
-        mat.remove(s)
-
-    # Remove chosen specials from mat
-    for s in chosen_specials:
-        ps.special_ingredients.remove(s)
-
-    # Roll once per chosen special
-    results: list[str | None] = []
-    for _ in chosen_specials:
-        rolled = SpecialType.roll()
-        if rolled != SpecialType.NOTHING:
-            ps.special_ingredients.append(rolled.value)
-            results.append(rolled.value)
-        else:
-            results.append(None)
-
-    is_free = _finish_turn_action(gs, player_id, "reroll_specials")
-
-    payload = {
-        "chosen_specials": chosen_specials,
-        "results": results,
-        "is_free_action": is_free,
-    }
-    return gs, payload
+    raise GameException(
+        "Re-rolling specials is no longer part of the game", status_code=400
+    )
 
 
 def refresh_card_row(
@@ -1232,10 +1402,13 @@ def refresh_card_row(
     player_id: UUID,
     row_position: int,
 ) -> tuple[GameState, dict]:
-    """RefreshCardRow action.
+    """Clear a row of the market and deal a fresh one.
 
-    Row 1 (karaoke row) cannot be refreshed.
-    All cards in the target row are removed to the discard pile and replaced from deck.
+    Row 1 (karaoke) is never cleared.
+    Row 2 (orders): a free action once a turn, at drunk 3+. Nothing like
+    wiping out the order a rival was one ingredient away from.
+    Row 3 (abilities): a free action once a turn, at drunk 2+.
+    Cleared cards go to the bottom of their deck.
     """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)
@@ -1243,42 +1416,42 @@ def refresh_card_row(
     _require_active(ps)
     _require_no_take_in_progress(gs)
 
-    if ps.drunk_level < MIN_DRUNK_TO_REFRESH:
-        raise GameException(
-            f"Must be drunk level {MIN_DRUNK_TO_REFRESH}+ to refresh a row; "
-            f"you are at {ps.drunk_level}",
-            status_code=400,
-        )
-
-    if row_position == 1:
+    if row_position == KARAOKE_ROW:
         raise GameException(
             "Row 1 (karaoke row) cannot be refreshed",
             status_code=400,
         )
 
-    target_row: CardRow | None = None
-    for row in gs.card_rows:
-        if row.position == row_position:
-            target_row = row
-            break
-
+    target_row = _row(gs, row_position)
     if target_row is None:
         raise GameException(f"Row {row_position} does not exist", status_code=404)
 
-    # Remove ALL cards → discard pile (never reshuffled)
-    removed = list(target_row.cards)
-    gs.discard.extend(c.to_dict() for c in removed)
-    target_row.cards = []
+    if row_position == ABILITY_ROW:
+        needed, action_type = MIN_DRUNK_TO_SWIPE, SWIPE_ABILITIES
+        if SWIPE_ABILITIES in gs.free_actions_used_this_turn:
+            raise GameException(
+                "You've already swiped the ability cards this turn", status_code=409
+            )
+    else:
+        needed, action_type = MIN_DRUNK_TO_REFRESH, CLEAR_ORDERS
+        if CLEAR_ORDERS in gs.free_actions_used_this_turn:
+            raise GameException(
+                "You've already cleared the orders this turn", status_code=409
+            )
 
-    # Replace removed slots from deck
-    for _ in removed:
-        _replace_card(gs, target_row)
+    if ps.drunk_level < needed:
+        raise GameException(
+            f"Must be drunk level {needed}+ to clear row {row_position}; "
+            f"you are at {ps.drunk_level}",
+            status_code=400,
+        )
 
-    is_free = _finish_turn_action(gs, player_id, "refresh_card_row")
+    removed = _rotate_row(gs, target_row)
+    is_free = _finish_turn_action(gs, player_id, action_type)
 
     payload = {
         "row_position": row_position,
-        "cards_removed": len(removed),
+        "cards_removed": removed,
         "is_free_action": is_free,
     }
     return gs, payload
@@ -1336,7 +1509,9 @@ def end_turn(
             "You must take an action before ending your turn", status_code=409
         )
 
-    remaining_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
+    remaining_free = _available_free_actions(
+        gs, ps, gs.free_actions_used_this_turn, usable_only=True
+    )
     if len(remaining_free) == 0:
         raise GameException(
             "Your turn is already complete — no free actions to forfeit",

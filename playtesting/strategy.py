@@ -33,11 +33,19 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from uuid import UUID
 
-from app.GameState import GameState
-from app.Ingredient import Ingredient, SpecialType
-from app.PlayerState import MAX_CUP_INGREDIENTS, PlayerState
+from app.GameState import GameState, regular_in_bag
+from app.Ingredient import (
+    BOOZY_SPECIALS,
+    SPECIAL_INGREDIENTS,
+    SPECIALIST_SPECIAL,
+    Ingredient,
+    SpecialType,
+    is_special,
+)
+from app.PlayerState import MAX_CUP_INGREDIENTS, MAX_CUP_SPECIALS, PlayerState
 from app.actions import _MIXERS, _SPIRITS
-from app.cocktails import VALID_PAIRINGS, _RECIPES
+from app.card import ORDERS_ROW
+from app.cocktails import VALID_PAIRINGS, _RECIPES, drink_points, matches_order
 
 from playtesting.valid_actions import Action
 
@@ -60,6 +68,70 @@ BASE_TAKE_COUNT = 3
 
 
 # ---------------------------------------------------------------------------
+#  Cocktail recipes as ingredient counts (specials are ingredients now)
+# ---------------------------------------------------------------------------
+
+
+class Recipe:
+    def __init__(self, name, pts, spirits, mixers, specials):
+        self.name: str = name
+        self.pts: int = pts
+        self.spirits: Counter = spirits
+        self.mixers: Counter = mixers
+        self.specials: Counter = specials  # Counter[Ingredient]
+
+    @property
+    def size(self) -> int:
+        return (
+            sum(self.spirits.values())
+            + sum(self.mixers.values())
+            + sum(self.specials.values())
+        )
+
+    def allows(self, spirits: Counter, mixers: Counter, specials: Counter) -> bool:
+        """Whether a glass holding these could still become this cocktail."""
+        return (
+            all(self.spirits.get(i, 0) >= n for i, n in spirits.items())
+            and all(self.mixers.get(i, 0) >= n for i, n in mixers.items())
+            and all(self.specials.get(i, 0) >= n for i, n in specials.items())
+        )
+
+    def missing(self, spirits: Counter, mixers: Counter, specials: Counter) -> Counter:
+        return (
+            (self.spirits - spirits)
+            + (self.mixers - mixers)
+            + (self.specials - specials)
+        )
+
+
+RECIPES: list[Recipe] = [
+    Recipe(
+        name,
+        pts,
+        Counter(r_spirits),
+        Counter(r_mixers),
+        Counter({Ingredient[st.name]: n for st, n in r_specials.items()}),
+    )
+    for r_spirits, r_mixers, r_specials, pts, name in _RECIPES
+]
+RECIPE_BY_NAME: dict[str, Recipe] = {r.name: r for r in RECIPES}
+
+
+def _glass_counts(ingredients: list[Ingredient]) -> tuple[Counter, Counter, Counter]:
+    return (
+        Counter(i for i in ingredients if i in _SPIRITS),
+        Counter(i for i in ingredients if i in _MIXERS),
+        Counter(i for i in ingredients if is_special(i)),
+    )
+
+
+def recipes_for_glass(ingredients: list[Ingredient]) -> list[Recipe]:
+    """Cocktails this glass could still become."""
+    sp, mx, sc = _glass_counts(ingredients)
+    return [r for r in RECIPES if r.allows(sp, mx, sc)]
+
+
+# ---------------------------------------------------------------------------
 #  Shared helpers
 # ---------------------------------------------------------------------------
 
@@ -74,7 +146,15 @@ class CupTracker:
     """
 
     def __init__(self, ps: PlayerState):
-        self.fill = [len(ps.cups[0].ingredients), len(ps.cups[1].ingredients)]
+        self.fill = [ps.cups[0].base_count, ps.cups[1].base_count]
+        # Every cup as ingredient counts, for cocktail checks
+        self.spirits: list[Counter] = [Counter(), Counter()]
+        self.mixers: list[Counter] = [Counter(), Counter()]
+        self.specials: list[Counter] = [Counter(), Counter()]
+        # A cocktail a bot has decided this cup is for (see aim_at)
+        self.aim: list[Recipe | None] = [None, None]
+        # A cup kept for a plain drink (e.g. an order): no specials in it
+        self.plain: list[bool] = [False, False]
         self.spirit_counts: list[int] = [0, 0]
         self.spirit_type: list[Ingredient | None] = [None, None]
         self.mixer_count: list[int] = [0, 0]
@@ -86,6 +166,8 @@ class CupTracker:
         self.is_spoiled: list[bool] = [False, False]
 
         for ci in (0, 1):
+            sp, mx, sc = _glass_counts(ps.cups[ci].ingredients)
+            self.spirits[ci], self.mixers[ci], self.specials[ci] = sp, mx, sc
             for ing in ps.cups[ci].ingredients:
                 if ing in _SPIRITS:
                     self.spirit_counts[ci] += 1
@@ -105,6 +187,96 @@ class CupTracker:
                 valid = VALID_PAIRINGS.get(self.spirit_type[ci], set())
                 if any(m not in valid for m in self.mixer_types[ci]):
                     self.is_spoiled[ci] = True
+            # A glass with specials can only be sold as a cocktail
+            if self.specials[ci]:
+                self.is_spoiled[ci] = not self.recipes(ci)
+
+    # --- Cocktail mode: a cup with specials, or one aimed at a recipe ---
+
+    def is_cocktail_cup(self, cup_idx: int) -> bool:
+        return bool(self.specials[cup_idx]) or self.aim[cup_idx] is not None
+
+    def recipes(self, cup_idx: int, add: Ingredient | None = None) -> list[Recipe]:
+        """Cocktails this cup could still become (after adding ``add``)."""
+        sp = Counter(self.spirits[cup_idx])
+        mx = Counter(self.mixers[cup_idx])
+        sc = Counter(self.specials[cup_idx])
+        if add is not None:
+            (sp if add in _SPIRITS else mx if add in _MIXERS else sc)[add] += 1
+        pool = [self.aim[cup_idx]] if self.aim[cup_idx] is not None else RECIPES
+        return [r for r in pool if r.allows(sp, mx, sc)]
+
+    def aim_at(self, cup_idx: int, recipe: Recipe) -> bool:
+        """Commit a cup to a cocktail, if what's in it allows that."""
+        if not recipe.allows(
+            self.spirits[cup_idx], self.mixers[cup_idx], self.specials[cup_idx]
+        ):
+            return False
+        self.aim[cup_idx] = recipe
+        self.is_spoiled[cup_idx] = False
+        return True
+
+    def still_needs(self, cup_idx: int) -> Counter:
+        """Ingredients the cup's closest cocktail still needs (empty if none)."""
+        options = self.recipes(cup_idx)
+        if not options:
+            return Counter()
+        sp, mx, sc = self.spirits[cup_idx], self.mixers[cup_idx], self.specials[cup_idx]
+        best = min(options, key=lambda r: (sum(r.missing(sp, mx, sc).values()), -r.pts))
+        return best.missing(sp, mx, sc)
+
+    def can_add_special(self, cup_idx: int, special: Ingredient) -> bool:
+        if self.plain[cup_idx]:
+            return False
+        if sum(self.specials[cup_idx].values()) >= MAX_CUP_SPECIALS:
+            return False
+        return bool(self.recipes(cup_idx, add=special))
+
+    def best_cup_for_special(
+        self,
+        special: Ingredient,
+        allow_empty: bool = False,
+        available: Counter | None = None,
+    ) -> int | None:
+        """The cup a special would help most toward a cocktail.
+
+        An empty cup counts only with ``allow_empty``. With ``available``
+        (specials that can be had now), a cup counts only if the cocktail's
+        other specials are all among them — so the special doesn't leave the
+        glass waiting on luck.
+        """
+        best, best_key = None, None
+        for ci in (0, 1):
+            empty = self.fill[ci] == 0 and not self.specials[ci]
+            if empty and not allow_empty:
+                continue
+            if not self.can_add_special(ci, special):
+                continue
+            options = self.recipes(ci, add=special)
+            sc = Counter(self.specials[ci])
+            sc[special] += 1
+            if available is not None:
+                options = [
+                    r
+                    for r in options
+                    if all(
+                        available.get(i, 0) >= n for i, n in (r.specials - sc).items()
+                    )
+                ]
+                if not options:
+                    continue
+            progress = max(
+                r.size - sum(r.missing(self.spirits[ci], self.mixers[ci], sc).values())
+                for r in options
+            )
+            key = (progress, max(r.pts for r in options))
+            if best_key is None or key > best_key:
+                best, best_key = ci, key
+        return best
+
+    def add_special(self, cup_idx: int, special: Ingredient):
+        self.specials[cup_idx][special] += 1
+        self.is_spoiled[cup_idx] = not self.recipes(cup_idx)
 
     def can_add(self, cup_idx: int) -> bool:
         if self.is_spoiled[cup_idx]:
@@ -115,6 +287,8 @@ class CupTracker:
         """Can this spirit be added without ruining the cup's sellability?"""
         if not self.can_add(cup_idx):
             return False
+        if self.is_cocktail_cup(cup_idx):
+            return bool(self.recipes(cup_idx, add=spirit))
         if self.spirit_counts[cup_idx] >= 2:
             return False  # max 2 spirits
         if (
@@ -128,6 +302,8 @@ class CupTracker:
         """Can this mixer be added without ruining the cup's sellability?"""
         if not self.can_add(cup_idx):
             return False
+        if self.is_cocktail_cup(cup_idx):
+            return bool(self.recipes(cup_idx, add=mixer))
         # Non-cocktail drinks may only contain a single mixer type
         existing = self.mixer_types[cup_idx]
         if existing and mixer not in existing:
@@ -142,11 +318,13 @@ class CupTracker:
         self.fill[cup_idx] += 1
         self.spirit_counts[cup_idx] += 1
         self.spirit_type[cup_idx] = spirit
+        self.spirits[cup_idx][spirit] += 1
 
     def add_mixer(self, cup_idx: int, mixer: Ingredient):
         self.fill[cup_idx] += 1
         self.mixer_count[cup_idx] += 1
         self.mixer_types[cup_idx].add(mixer)
+        self.mixers[cup_idx][mixer] += 1
 
     def can_spoil_with(self, cup_idx: int, spirit: Ingredient) -> bool:
         """Can this spirit be dumped into the cup, accepting it becomes
@@ -164,6 +342,8 @@ class CupTracker:
             return False  # empty cup → not a spoil, would be a clean add
         if self.spirit_type[cup_idx] == spirit:
             return False  # matches existing spirit → clean add, not a spoil
+        if self.is_cocktail_cup(cup_idx) and self.recipes(cup_idx):
+            return False  # still on its way to a cocktail
 
         # Don't spoil a cup that's still on a viable sellable path: it has a
         # spirit + a paired mixer (or tequila slammer in progress).
@@ -188,6 +368,8 @@ class CupTracker:
         self.fill[cup_idx] += 1
         self.spirit_counts[cup_idx] += 1
         self.spirit_type[cup_idx] = spirit
+        self.spirits[cup_idx][spirit] += 1
+        self.aim[cup_idx] = None
         self.is_spoiled[cup_idx] = True
 
     def best_spoil_cup(self, spirit: Ingredient) -> int | None:
@@ -211,6 +393,11 @@ class CupTracker:
 
     def best_cup_for_spirit(self, spirit: Ingredient) -> int | None:
         """Find the best cup for this spirit, respecting sellability rules."""
+        # A cocktail cup that still needs this spirit comes first
+        for i in (0, 1):
+            if self.is_cocktail_cup(i) and self.still_needs(i).get(spirit, 0) > 0:
+                if self._can_add_spirit(i, spirit):
+                    return i
         # Prefer cup that already has this same spirit type (and room for more)
         for i in (0, 1):
             if self._can_add_spirit(i, spirit) and self.spirit_type[i] == spirit:
@@ -227,6 +414,10 @@ class CupTracker:
 
     def best_cup_for_mixer(self, mixer: Ingredient) -> int | None:
         """Find a cup where this mixer is a valid pairing."""
+        for i in (0, 1):
+            if self.is_cocktail_cup(i) and self.still_needs(i).get(mixer, 0) > 0:
+                if self._can_add_mixer(i, mixer):
+                    return i
         # Prefer cup that has a spirit this mixer pairs with
         for i in (0, 1):
             if self._can_add_mixer(i, mixer) and self.spirit_type[i] is not None:
@@ -277,6 +468,135 @@ def _should_wee(ps: PlayerState, extra_headroom: int = 0) -> bool:
 def _is_in_danger(ps: PlayerState) -> bool:
     """Player is at risk of elimination (drunk >= 4 or bladder nearly full)."""
     return ps.drunk_level >= 4 or len(ps.bladder) >= ps.bladder_capacity - 1
+
+
+# ---------------------------------------------------------------------------
+#  Drink orders
+# ---------------------------------------------------------------------------
+
+_ALL_INGREDIENTS: list[Ingredient] = [*_SPIRITS, *_MIXERS, *SPECIAL_INGREDIENTS]
+
+
+def _order_cards(gs: GameState) -> list:
+    return [
+        card
+        for row in gs.card_rows
+        if row.position == ORDERS_ROW
+        for card in row.cards
+        if card.card_type == "order"
+    ]
+
+
+def _serves(order: dict, ingredients: list[Ingredient]) -> bool:
+    return drink_points(ingredients, []) is not None and matches_order(
+        order, ingredients, []
+    )
+
+
+def _order_finishers(gs: GameState, ingredients: list[Ingredient]) -> set[Ingredient]:
+    """Ingredients that, added to this glass, would serve an order on the table."""
+    if not ingredients:
+        return set()
+    orders = [c.to_dict() for c in _order_cards(gs)]
+    return {
+        ing
+        for ing in _ALL_INGREDIENTS
+        for order in orders
+        if _serves(order, [*ingredients, ing])
+    }
+
+
+def order_needs(order, ingredients: list[Ingredient]) -> Counter | None:
+    """What a glass still needs to serve this order, or None if it can't.
+
+    A simple order needs its spirit and mixer (a second spirit makes it a
+    double, worth more); a slammer two tequilas; a cocktail its recipe.
+    """
+    sp, mx, sc = _glass_counts(ingredients)
+    if order.drink == "cocktail":
+        recipe = RECIPE_BY_NAME.get(order.cocktail or "")
+        if recipe is None or not recipe.allows(sp, mx, sc):
+            return None
+        return recipe.missing(sp, mx, sc)
+    if sc:
+        return None  # a special makes it a cocktail
+    if order.drink == "slammer":
+        if set(sp) - {Ingredient.TEQUILA} or mx or sp[Ingredient.TEQUILA] > 2:
+            return None
+        return Counter({Ingredient.TEQUILA: 2 - sp[Ingredient.TEQUILA]})
+    spirit = _SPIRIT_MAP.get((order.spirit_type or "").upper())
+    mixer = _MIXER_MAP.get((order.mixer_type or "").upper())
+    if spirit is None or mixer is None:
+        return None
+    if set(sp) - {spirit} or set(mx) - {mixer} or sp[spirit] > 2:
+        return None
+    needs = Counter()
+    if not sp:
+        needs[spirit] = 1
+    if not mx:
+        needs[mixer] = 1
+    return needs
+
+
+def order_plans(gs: GameState, ps: PlayerState) -> dict[int, tuple]:
+    """For each cup, the order it's best placed to serve: {cup: (order, needs)}.
+
+    A glass already on its way is matched to the order it's closest to; an
+    empty one to the order whose ingredients are most within reach now.
+    Each order is planned for at most one cup.
+    """
+    orders = _order_cards(gs)
+    if not orders:
+        return {}
+    in_reach = Counter(gs.open_display) + Counter(gs.specials_display)
+    options = []
+    for ci, cup in enumerate(ps.cups):
+        if cup.is_full:
+            continue
+        for order in orders:
+            needs = order_needs(order, cup.ingredients)
+            if needs is None:
+                continue
+            short = sum(needs.values())
+            reachable = sum(min(n, in_reach.get(i, 0)) for i, n in needs.items())
+            score = order.bonus * 2 - short * 3 + reachable * 2
+            if cup.is_empty:
+                score -= 2
+            options.append((score, ci, order, needs))
+    plans: dict[int, tuple] = {}
+    used: set[str] = set()
+    for score, ci, order, needs in sorted(options, key=lambda o: -o[0]):
+        if ci in plans or order.id in used:
+            continue
+        plans[ci] = (order, needs)
+        used.add(order.id)
+    return plans
+
+
+def _worth_clearing_orders(gs: GameState, ps: PlayerState) -> bool:
+    """A rival could serve an order with one more ingredient, and none of
+    our glasses is that close to one."""
+    ours = order_plans(gs, ps)
+    if any(sum(needs.values()) <= 1 for _order, needs in ours.values()):
+        return False
+    return any(
+        _order_finishers(gs, cup.ingredients)
+        for pid, opp in gs.player_states.items()
+        if pid != ps.player_id and not opp.is_eliminated
+        for cup in opp.cups
+    )
+
+
+def _clear_orders_action(free_actions: list[Action]) -> Action | None:
+    return next(
+        (
+            a
+            for a in free_actions
+            if a.action_type == "refresh_card_row"
+            and a.params.get("row_position") == ORDERS_ROW
+        ),
+        None,
+    )
 
 
 def _opponent_threats(gs: GameState, ps: PlayerState) -> dict[Ingredient, float]:
@@ -352,15 +672,34 @@ def _opponent_threats(gs: GameState, ps: PlayerState) -> dict[Ingredient, float]
                     for ing, n in r_mixers.items():
                         bump(ing, 0.4 * n)
 
+        # 2b. Glasses on their way to a cocktail: a glass holding specials,
+        # or two or more of a cocktail's ingredients → what it still needs
+        for cup in opp.cups:
+            if not cup.ingredients:
+                continue
+            sp, mx, sc = _glass_counts(cup.ingredients)
+            if not sc and len(cup.ingredients) < 2:
+                continue
+            for recipe in RECIPES:
+                if not recipe.allows(sp, mx, sc):
+                    continue
+                for ing, n in recipe.missing(sp, mx, sc).items():
+                    bump(ing, (0.7 if is_special(ing) else 0.4) * n)
+
+        # 2c. Orders they could serve with one more ingredient
+        for cup in opp.cups:
+            for ing in _order_finishers(gs, cup.ingredients):
+                bump(ing, 0.8)
+
         # 3. Karaoke progress — opponent close to claiming
         for spirit_name in karaoke_spirits:
             spirit = _SPIRIT_MAP.get(spirit_name)
             if spirit is None:
                 continue
             in_bladder = sum(1 for i in opp.bladder if i == spirit)
-            if 1 <= in_bladder <= 2:
-                # Closer to 3 → stronger threat
-                bump(spirit, 0.4 * in_bladder)
+            if in_bladder == 1:
+                # One more of it sings the song; more so once they're drunk
+                bump(spirit, 0.4 if opp.drunk_level < 2 else 0.8)
 
         # 4. Partial drinks in opponent's cups
         for cup in opp.cups:
@@ -393,6 +732,9 @@ def _smart_take_assignments(
     prioritize_specials: bool = False,
     drunk_aware: bool = True,
     drunk_cap: int = 3,
+    special_mode: str = "fit",
+    prefix: list[dict] | None = None,
+    drink_first: set[Ingredient] | None = None,
 ) -> list[dict]:
     """Shared smart assignment builder — returns display-only assignments.
 
@@ -409,11 +751,31 @@ def _smart_take_assignments(
     taken before anything else — they always roll to the mat regardless of
     disposition and are required for 10–15 pt cocktail recipes.
 
+    Specials on the specials display (source "specials") go into a cup
+    whose cocktail they help: ``special_mode`` "fit" only when the cocktail's
+    other specials can be had now, "eager" also into an empty cup (the
+    cocktail bot), "off" never. A special an opponent needs may be drunk to
+    deny them (it sobers like a mixer).
+
+    ``prefix`` holds assignments a strategy already chose; they count toward
+    ``count`` and their ingredients are no longer available.
+
+    ``drink_first`` names spirits to drink from the display before anything
+    else (a karaoke singer's song spirits), while the drunk cap allows.
+
     Within each priority class, ingredients opponents need are picked
     first as a denial play (see `_opponent_threats`).
     """
-    assignments: list[dict] = []
+    assignments: list[dict] = list(prefix or [])
     display_available = list(gs.open_display)
+    specials_available = list(gs.specials_display)
+    for a in assignments:
+        pool = (
+            specials_available if a.get("source") == "specials" else display_available
+        )
+        ing = Ingredient[a["ingredient"]]
+        if ing in pool:
+            pool.remove(ing)
     hot = _hot_mixer_types(ps)
     threats = _opponent_threats(gs, ps)
     # Track spirit drinks committed this batch so the safety gate can decide
@@ -438,9 +800,37 @@ def _smart_take_assignments(
         return (base, -threats.get(ing, 0.0))
 
     display_available.sort(key=_display_priority)
+    specials_available.sort(key=lambda i: -threats.get(i, 0.0))
 
-    for _ in range(count):
+    def _take_special(ing: Ingredient, disposition: str, cup_idx: int | None = None):
+        specials_available.remove(ing)
+        entry = {
+            "ingredient": ing.name,
+            "source": "specials",
+            "disposition": disposition,
+        }
+        if cup_idx is not None:
+            entry["cup_index"] = cup_idx
+            cups.add_special(cup_idx, ing)
+        assignments.append(entry)
+
+    for _ in range(max(0, count - len(assignments))):
         placed = False
+
+        # Pass 0: spirits we want in the bladder (e.g. for a karaoke song)
+        if drink_first and spirits_drunk_so_far < spirit_drink_budget:
+            ing = next((i for i in display_available if i in drink_first), None)
+            if ing is not None:
+                display_available.remove(ing)
+                assignments.append(
+                    {
+                        "ingredient": ing.name,
+                        "source": "display",
+                        "disposition": "drink",
+                    }
+                )
+                spirits_drunk_so_far += 1
+                placed = True
 
         # Pass 1: preferred spirit → cup (specialist bot: keep focus spirit
         # ahead of specials so the +2 specialist bonus path stays primary)
@@ -475,6 +865,21 @@ def _smart_take_assignments(
                             "disposition": "drink",
                         }
                     )
+                    placed = True
+                    break
+
+        # Pass 1.6: a special into a cup whose cocktail it helps
+        if not placed and special_mode != "off":
+            for ing in list(specials_available):
+                others = Counter(specials_available)
+                others[ing] -= 1
+                cup_idx = cups.best_cup_for_special(
+                    ing,
+                    allow_empty=special_mode == "eager",
+                    available=None if special_mode == "eager" else others,
+                )
+                if cup_idx is not None:
+                    _take_special(ing, "cup", cup_idx)
                     placed = True
                     break
 
@@ -516,20 +921,33 @@ def _smart_take_assignments(
                         placed = True
                         break
 
-        # Pass 4: drink mixers from display (sobering)
+        # Pass 4: drink mixers from display (sobering). A special an
+        # opponent needs sobers just the same, and denies them.
         if not placed:
-            for ing in list(display_available):
-                if ing in _MIXERS:
-                    display_available.remove(ing)
-                    assignments.append(
-                        {
-                            "ingredient": ing.name,
-                            "source": "display",
-                            "disposition": "drink",
-                        }
-                    )
-                    placed = True
-                    break
+            mixer = next((i for i in display_available if i in _MIXERS), None)
+            wanted = next(
+                (
+                    i
+                    for i in specials_available
+                    if threats.get(i, 0.0) > 0 and i not in BOOZY_SPECIALS
+                ),
+                None,
+            )
+            if wanted is not None and (
+                mixer is None or threats[wanted] > threats.get(mixer, 0.0)
+            ):
+                _take_special(wanted, "drink")
+                placed = True
+            elif mixer is not None:
+                display_available.remove(mixer)
+                assignments.append(
+                    {
+                        "ingredient": mixer.name,
+                        "source": "display",
+                        "disposition": "drink",
+                    }
+                )
+                placed = True
 
         # Pass 5: handle spirits that can't be cupped. When drunk_aware, try
         # to (a) spoil a stuck cup with the spirit, or (b) bail to the bag —
@@ -558,7 +976,7 @@ def _smart_take_assignments(
                             }
                         )
                         placed = True
-                    elif len(gs.bag_contents) >= count - len(assignments):
+                    elif regular_in_bag(gs) >= count - len(assignments):
                         # Bail: leave display alone, let the bag fill the rest
                         # of the take (random — may give mixers or specials
                         # instead of certain drunk). Only safe when bag has
@@ -597,6 +1015,17 @@ def _smart_take_assignments(
                     "source": "display",
                     "disposition": "drink",
                 }
+            )
+            placed = True
+
+        # Pass 7: drink a special when the bag can't cover the rest
+        if (
+            not placed
+            and specials_available
+            and regular_in_bag(gs) < count - len(assignments)
+        ):
+            _take_special(
+                min(specials_available, key=lambda i: i in BOOZY_SPECIALS), "drink"
             )
             placed = True
 
@@ -688,23 +1117,82 @@ def _smart_pending_assignments(
     for _ in others:
         assignments.append({"source": "pending", "disposition": "drink"})
 
-    return assignments
+    return _in_drawn_order(drawn, spirits + mixers + others, assignments)
+
+
+def _in_drawn_order(
+    drawn: list[Ingredient], decided: list[Ingredient], assignments: list[dict]
+) -> list[dict]:
+    """Line assignments up with the draw.
+
+    The engine applies pending assignments to the drawn ingredients in the
+    order they came out of the bag; ``assignments[i]`` was decided for
+    ``decided[i]`` (the same ingredients, grouped by kind).
+    """
+    pool = list(zip(decided, assignments))
+    ordered = []
+    for ing in drawn:
+        k = next(i for i, (d, _) in enumerate(pool) if d == ing)
+        ordered.append(pool.pop(k)[1])
+    return ordered
+
+
+def _specialist_unlock(gs: GameState, ps: PlayerState) -> Ingredient | None:
+    """A special on the tray that, drunk, would pay for a specialist card on
+    the table we don't hold yet (bitters → whisky specialist, and so on)."""
+    held = {
+        cd.get("spirit_type") for cd in ps.cards if cd.get("card_type") == "specialist"
+    }
+    in_bladder = set(ps.bladder)
+    for row in gs.card_rows:
+        for card in row.cards:
+            if card.card_type != "specialist" or card.spirit_type in held:
+                continue
+            special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
+            if special and special in gs.specials_display and special not in in_bladder:
+                if special in BOOZY_SPECIALS and ps.drunk_level >= 3:
+                    continue  # not worth the drink this late
+                return special
+    return None
 
 
 def _safe_specials_take(
-    gs: GameState, ps: PlayerState, valid_actions: list[Action]
+    gs: GameState, ps: PlayerState, valid_actions: list[Action], eager: bool = False
 ) -> Action | None:
-    """Return the take_ingredients action when SPECIAL tokens are on the
-    display and taking them is safe (drunk stays ≤ 3). Otherwise None.
+    """Return the take_ingredients action when taking is safe (drunk stays
+    ≤ 3) and there's a special worth having: an old die token on the
+    display, or a special that helps one of our cups toward a cocktail
+    (``eager``: an empty cup counts). Otherwise None.
 
-    Used by every strategy to prefer banking specials on the mat over
+    Used by every strategy to prefer banking specials over
     selling for points — specials enable 10–15 pt cocktails next turn.
     """
-    if not any(ing == Ingredient.SPECIAL for ing in gs.open_display):
+    if not (
+        any(ing == Ingredient.SPECIAL for ing in gs.open_display)
+        or _useful_special(gs, ps, eager)
+    ):
         return None
     if not _safe_to_take(gs, ps):
         return None
     return _find_action(valid_actions, "take_ingredients")
+
+
+def _useful_special(gs: GameState, ps: PlayerState, eager: bool = False) -> bool:
+    """A special on the specials display that would help one of our cups
+    toward a cocktail (see CupTracker.best_cup_for_special)."""
+    cups = CupTracker(ps)
+    showing = Counter(gs.specials_display)
+    for ing in showing:
+        others = showing.copy()
+        others[ing] -= 1
+        if (
+            cups.best_cup_for_special(
+                ing, allow_empty=eager, available=None if eager else others
+            )
+            is not None
+        ):
+            return True
+    return False
 
 
 def _safe_to_take(gs: GameState, ps: PlayerState, drunk_cap: int = 3) -> bool:
@@ -715,8 +1203,11 @@ def _safe_to_take(gs: GameState, ps: PlayerState, drunk_cap: int = 3) -> bool:
     as a forced spirit drink. Mixers are counted as drinks too even though
     they often sober — the bias is toward not taking when uncertain.
     """
-    cup_slots = sum(MAX_CUP_INGREDIENTS - len(c.ingredients) for c in ps.cups)
-    specials_avail = sum(1 for ing in gs.open_display if ing == Ingredient.SPECIAL)
+    cup_slots = sum(MAX_CUP_INGREDIENTS - c.base_count for c in ps.cups)
+    # Old die tokens go to the mat; specials go in a glass or sober you up
+    specials_avail = sum(
+        1 for ing in gs.open_display if ing == Ingredient.SPECIAL
+    ) + len(gs.specials_display)
 
     if ps.drunk_level >= drunk_cap:
         # At cap: only safe if every take can be absorbed with no drinks
@@ -761,7 +1252,7 @@ def _card_claims_by_type(actions: list[Action], card_type: str) -> list[Action]:
 def _free_claim_action(
     free_actions: list[Action], prefer_card_types: list[str] | None = None
 ) -> Action | None:
-    """Pick a free claim_card action (only present under claim_card_free_action mode).
+    """Pick a free claim_card action (claiming is always a free action).
 
     When several are available, prefer claim types in ``prefer_card_types``
     (in order). Falls back to the first claim_card found, with karaoke
@@ -785,28 +1276,6 @@ def _free_claim_action(
     return claims[0]
 
 
-def _free_reroll_action(
-    free_actions: list[Action], ps: PlayerState | None = None
-) -> Action | None:
-    """Pick a free reroll_specials action when worthwhile.
-
-    Only present when reroll_specials_free_action mode is on. A reroll is not
-    free of risk: a special that rolls "nothing" is lost outright, so churning
-    the mat every turn (bots used to reroll on 17 of ~20 turns) just gambles away
-    option value. Reroll only while the mat is thin — fewer than 2 specials —
-    when there's upside in fishing for a useful pair and little to lose. Once two
-    specials are banked, keep them (the evaluator already values the option).
-    """
-    if ps is not None and len(ps.special_ingredients) >= 2:
-        return None
-    if ps is not None and not ps.special_ingredients:
-        return None
-    for a in free_actions:
-        if a.action_type == "reroll_specials":
-            return a
-    return None
-
-
 # ---------------------------------------------------------------------------
 #  Strategy ABC
 # ---------------------------------------------------------------------------
@@ -823,8 +1292,8 @@ class Strategy(ABC):
     def choose_free_action(
         self, gs: GameState, player_id: UUID, free_actions: list[Action]
     ) -> Action | None:
-        # Default: when claim_card_free_action mode surfaces a free claim,
-        # take any affordable card — free points are always better than nothing.
+        # Claiming is a free action: take any affordable card — free points
+        # are always better than nothing.
         claim = _free_claim_action(free_actions)
         if claim is not None:
             return claim
@@ -881,8 +1350,9 @@ class RandomStrategy(Strategy):
 class KaraokeRusher(Strategy):
     """Rushes karaoke cards for the 3-karaoke win.
 
-    Needs spirits in bladder for threshold checks, so drinks spirits
-    when close to claiming. Otherwise plays safe with spirits→cups.
+    A song needs drunk 3+ and 2 of its spirit in the bladder, so it drinks
+    the songs' spirits (which also gets it drunk enough) up to drunk 4,
+    then sings. Otherwise plays safe with spirits→cups.
     """
 
     name = "KaraokeRusher"
@@ -904,6 +1374,12 @@ class KaraokeRusher(Strategy):
         karaoke = _card_claims_by_type(valid_actions, "karaoke")
         if karaoke:
             return karaoke[0]
+
+        # Singing means living at drunk 3+: step back from the edge first
+        if ps.drunk_level >= 4 or _is_in_danger(ps):
+            wee = _find_action(valid_actions, "go_for_a_wee")
+            if wee:
+                return wee
 
         # Safe specials take — bank them on the mat for future cocktails
         take = _safe_specials_take(gs, ps, valid_actions)
@@ -951,8 +1427,8 @@ class KaraokeRusher(Strategy):
     def choose_free_action(
         self, gs: GameState, player_id: UUID, free_actions: list[Action]
     ) -> Action | None:
-        # Free karaoke claim under claim_card_free_action mode is the dream
-        # — explicitly prefer it over any other claim type or stored-spirit move.
+        # A free karaoke claim is the dream — prefer it over any other claim
+        # type or stored-spirit move.
         claim = _free_claim_action(free_actions, prefer_card_types=["karaoke"])
         if claim is not None:
             return claim
@@ -966,59 +1442,81 @@ class KaraokeRusher(Strategy):
     ) -> list[dict]:
         ps = gs.player_states[player_id]
         cups = CupTracker(ps)
-        targets = self._target_spirits(gs)
 
-        # Only drink spirits when safe (drunk ≤ 1) and close to claiming
-        # (have 1-2 already, need 1-2 more). Otherwise play safe.
-        if ps.drunk_level <= 1:
-            for t in targets:
-                ing = _SPIRIT_MAP.get(t)
-                if ing:
-                    have = sum(1 for i in ps.bladder if i == ing)
-                    if 1 <= have < 3:
-                        return _smart_take_assignments(
-                            gs,
-                            ps,
-                            count,
-                            cups,
-                            prefer_spirit=ing,
-                            spirit_to_cup=False,
-                            drunk_aware=False,
-                            mixer_to_cup_if_paired=False,
-                        )
+        # Drink a song's spirit while it still needs one and drunk stays ≤ 4:
+        # the drinking is what gets it to drunk 3 to sing.
+        ing = self._song_to_drink(gs, ps)
+        if ing is not None:
+            return _smart_take_assignments(
+                gs,
+                ps,
+                count,
+                cups,
+                drunk_cap=4,
+                drink_first=self._song_spirits_needed(gs, ps),
+            )
 
         return _smart_take_assignments(gs, ps, count, cups)
+
+    def _song_spirits_needed(self, gs: GameState, ps: PlayerState) -> set[Ingredient]:
+        """Song spirits still short of the 2 a song needs."""
+        needed = set()
+        for t in self._target_spirits(gs):
+            ing = _SPIRIT_MAP.get(t)
+            if ing is not None and sum(1 for i in ps.bladder if i == ing) < 2:
+                needed.add(ing)
+        return needed
+
+    def _song_to_drink(self, gs: GameState, ps: PlayerState) -> Ingredient | None:
+        """The karaoke spirit worth drinking now, if any: the song closest to
+        its 2 spirits, while drunk is below 4."""
+        if ps.drunk_level >= 4:
+            return None
+        best, best_have = None, -1
+        for t in self._target_spirits(gs):
+            ing = _SPIRIT_MAP.get(t)
+            if ing is None:
+                continue
+            have = sum(1 for i in ps.bladder if i == ing)
+            if have < 2 and have > best_have:
+                best, best_have = ing, have
+        return best
 
     def choose_pending_assignments(
         self, gs: GameState, player_id: UUID, drawn: list[Ingredient]
     ) -> list[dict]:
         ps = gs.player_states[player_id]
         cups = CupTracker(ps)
-        targets = self._target_spirits(gs)
 
-        # If safe and close to karaoke claim, drink drawn spirits to bladder
-        if ps.drunk_level <= 1:
-            for t in targets:
-                ing = _SPIRIT_MAP.get(t)
-                if ing:
-                    have = sum(1 for i in ps.bladder if i == ing)
-                    if 1 <= have < 3:
-                        return _smart_pending_assignments(
-                            ps,
-                            drawn,
-                            cups,
-                            spirit_to_cup=False,
-                            drunk_aware=False,
-                        )
+        # Drink drawn song spirits it still needs (up to drunk 4); the rest
+        # are handled as usual.
+        if self._song_to_drink(gs, ps) is not None:
+            needed = self._song_spirits_needed(gs, ps)
+            already = sum(1 for i in gs.drunk_ingredients_this_turn if i in _SPIRITS)
+            budget = max(0, 4 - ps.drunk_level - already)
+            song, rest = [], []
+            for ing in drawn:
+                if ing in needed and len(song) < budget:
+                    song.append(ing)
+                    needed.discard(ing)  # one of each per batch is plenty
+                else:
+                    rest.append(ing)
+            if song:
+                rest_asg = _smart_pending_assignments(
+                    ps, rest, cups, spirits_already_drunk=already + len(song)
+                )
+                drink = [{"source": "pending", "disposition": "drink"}] * len(song)
+                return _in_drawn_order(drawn, song + rest, drink + rest_asg)
 
         return _smart_pending_assignments(ps, drawn, cups)
 
 
 class CocktailHunter(Strategy):
-    """Builds spirits + valid mixers in cups for sellable drinks.
+    """Chases 10–15 pt cocktails.
 
-    Prioritises grabbing SPECIAL tokens from the display to enable 10–15 pt
-    cocktails over greedy 1-pt non-cocktail sells.
+    Takes specials off the specials display into a glass (an empty one
+    will do) and then fills that glass with what the recipe still needs;
+    sells ordinary drinks from the other glass meanwhile.
     """
 
     name = "CocktailHunter"
@@ -1028,10 +1526,14 @@ class CocktailHunter(Strategy):
     ) -> Action:
         ps = gs.player_states[player_id]
 
-        # If SPECIAL tokens are on the display AND taking them is safe
-        # (won't push drunk above 3), prefer taking over any sell — banking
-        # specials on the mat sets up future 10–15 pt cocktails.
-        take = _safe_specials_take(gs, ps, valid_actions)
+        # A finished cocktail sells first
+        sell = _best_sell(valid_actions, min_pts=10)
+        if sell:
+            return sell
+
+        # If a special would start or advance a cocktail AND taking is safe
+        # (won't push drunk above 3), take — cocktails are worth 10–15 pts.
+        take = _safe_specials_take(gs, ps, valid_actions, eager=True)
         if take:
             return take
 
@@ -1071,14 +1573,6 @@ class CocktailHunter(Strategy):
     def choose_free_action(
         self, gs: GameState, player_id: UUID, free_actions: list[Action]
     ) -> Action | None:
-        ps = gs.player_states[player_id]
-        # Cocktail bot benefits enormously from re-rolling specials — bonus
-        # specials that fit existing cocktail recipes can multiply sell value.
-        # Only re-roll when there is at least one special on the mat, so we
-        # actually have something to re-roll.
-        reroll = _free_reroll_action(free_actions, ps)
-        if reroll is not None:
-            return reroll
         claim = _free_claim_action(free_actions)
         if claim is not None:
             return claim
@@ -1096,6 +1590,7 @@ class CocktailHunter(Strategy):
             cups,
             mixer_to_cup_if_paired=True,
             prioritize_specials=True,
+            special_mode="eager",
         )
 
 
@@ -1389,6 +1884,25 @@ class SpecialistBuilder(Strategy):
         focus = self._best_spirit_type(gs, ps)
         focus_ing = _SPIRIT_MAP.get(focus) if focus else None
 
+        # One special pays for a specialist card: drink it off the tray
+        unlock = _specialist_unlock(gs, ps)
+        if unlock is not None:
+            return _smart_take_assignments(
+                gs,
+                ps,
+                count,
+                cups,
+                prefer_spirit=focus_ing,
+                prioritize_specials=True,
+                prefix=[
+                    {
+                        "ingredient": unlock.name,
+                        "source": "specials",
+                        "disposition": "drink",
+                    }
+                ],
+            )
+
         if held and focus_ing:
             return _smart_take_assignments(
                 gs,
@@ -1493,6 +2007,12 @@ class Mastermind(Strategy):
                         score += 20
                     if card.card_type == "store" and card.spirit_type == name:
                         score += 5
+            # Orders on the table that want this spirit
+            for order in _order_cards(gs):
+                if order.drink == "simple" and order.spirit_type == name:
+                    score += 4 + order.bonus
+                elif order.drink == "slammer" and name == "TEQUILA":
+                    score += 4 + order.bonus
             if score > best_score:
                 best, best_score = name, score
         return best
@@ -1532,9 +2052,10 @@ class Mastermind(Strategy):
     # ------------------------------------------------------------------
 
     def _bag_spirit_frac(self, gs: GameState) -> float:
-        if not gs.bag_contents:
+        drawable = regular_in_bag(gs)
+        if not drawable:
             return 0.0
-        return sum(1 for i in gs.bag_contents if i in _SPIRITS) / len(gs.bag_contents)
+        return sum(1 for i in gs.bag_contents if i in _SPIRITS) / drawable
 
     # ------------------------------------------------------------------
     #  Spirit accumulation value (for card claims via bladder)
@@ -1557,7 +2078,8 @@ class Mastermind(Strategy):
                     if current < 3 <= after and not self._has_doubler(ps):
                         value += 35
                 if card.card_type == "karaoke" and card.spirit_type == name:
-                    if current < 3 <= after:
+                    # A song: 2 of its spirit, and drunk 3+ (this drink helps)
+                    if current < 2 <= after and ps.drunk_level + 1 >= 3:
                         kc = ps.karaoke_cards_claimed
                         value += 100 if kc >= 2 else (25 if kc >= 1 else 10)
                 if card.card_type == "store" and card.spirit_type == name:
@@ -1618,6 +2140,10 @@ class Mastermind(Strategy):
             score += 15.0
         elif pts >= 4:
             score += 8.0
+
+        # Serving an order: take the bonus before a rival does
+        if action.params.get("order"):
+            score += 12.0
 
         # Urgency: score faster when opponent is ahead
         score += self._urgency(gs, pid) * 10
@@ -1698,6 +2224,13 @@ class Mastermind(Strategy):
             else:
                 # SPECIAL → mat: cost-free pickup that enables 10–15 pt cocktails
                 score += special_bonus
+        # Specials on show that would move a glass toward a cocktail
+        showing = Counter(gs.specials_display)
+        for ing in showing:
+            others = showing.copy()
+            others[ing] -= 1
+            if cups.best_cup_for_special(ing, available=others) is not None:
+                score += 3.0
 
         # Bag risk when spirit slots are exhausted
         if spirit_slots == 0:
@@ -1889,7 +2422,7 @@ class Mastermind(Strategy):
         ps = gs.player_states[player_id]
         focus = self._focus_spirit(gs, ps)
         cups = CupTracker(ps)
-        # claim_card_free_action mode: take any free claim — bonus points are
+        # Claiming is a free action: take any free claim — bonus points are
         # always above the use_stored_spirit / drink_stored_spirit ceiling
         # (which top out around ~10-65 internal score). Prefer cards that
         # synergise with focus.
@@ -1898,12 +2431,10 @@ class Mastermind(Strategy):
         )
         if claim is not None:
             return claim
-        # reroll_specials_free_action mode: re-roll when there are specials
-        # and the player isn't holding nothing-bonuses already. Free re-roll
-        # is upside-only outside the rare nothing-result.
-        reroll = _free_reroll_action(free_actions, ps)
-        if reroll is not None:
-            return reroll
+        # Wipe the orders when a rival is one ingredient from serving one
+        clear = _clear_orders_action(free_actions)
+        if clear is not None and _worth_clearing_orders(gs, ps):
+            return clear
         best_score, best_action = -1.0, None
 
         for fa in free_actions:
@@ -1973,7 +2504,7 @@ class Mastermind(Strategy):
                     if before < 3 <= after and not self._has_doubler(ps):
                         value = max(value, 65.0)
                 if card.card_type == "karaoke" and card.spirit_type == spirit_name:
-                    if before < 3 <= after:
+                    if before < 2 <= after and ps.drunk_level + (after - before) >= 3:
                         kc = ps.karaoke_cards_claimed
                         v = 200.0 if kc >= 2 else (50.0 if kc >= 1 else 25.0)
                         value = max(value, v)
@@ -1998,16 +2529,26 @@ class Mastermind(Strategy):
         # Prefer display certainty more as drunk rises — bag variance is deadlier
         display_premium = 1.0 + max(0, ps.drunk_level - 1) * 1.25
 
-        display = list(gs.open_display)
+        # Both displays: spirits and mixers, and the specials set aside
+        items = [(ing, "display") for ing in gs.open_display] + [
+            (ing, "specials") for ing in gs.specials_display
+        ]
         assignments: list[dict] = []
         used: set[int] = set()
+        # What each glass still needs for the order it's best placed to serve
+        order_want = {ci: needs for ci, (_o, needs) in order_plans(gs, ps).items()}
 
         for _ in range(count):
-            # Greedily pick the best remaining display item (re-evaluated
-            # after each pick so cup state stays accurate).
+            # Greedily pick the best remaining item (re-evaluated after each
+            # pick so cup state stays accurate).
             best_val, best_idx = bag_ev - display_premium, -1
             best_disp, best_ci = "drink", None
-            for idx, ing in enumerate(display):
+            specials_left = Counter(
+                ing
+                for idx, (ing, src) in enumerate(items)
+                if src == "specials" and idx not in used
+            )
+            for idx, (ing, _src) in enumerate(items):
                 if idx in used:
                     continue
                 val, disp, ci = self._eval_display_item(
@@ -2019,26 +2560,33 @@ class Mastermind(Strategy):
                     focus,
                     hot,
                     threats,
+                    order_want,
+                    specials_left,
                 )
                 if val > best_val:
                     best_val, best_idx, best_disp, best_ci = val, idx, disp, ci
 
             if best_idx < 0:
-                break  # All remaining display items are worse than bag draws
+                break  # All remaining items are worse than bag draws
 
-            ing = display[best_idx]
+            ing, src = items[best_idx]
             used.add(best_idx)
             entry: dict = {
                 "ingredient": ing.name,
-                "source": "display",
+                "source": src,
                 "disposition": best_disp,
             }
             if best_disp == "cup" and best_ci is not None:
                 entry["cup_index"] = best_ci
                 if ing in _SPIRITS:
                     cups.add_spirit(best_ci, ing)
+                elif is_special(ing):
+                    cups.add_special(best_ci, ing)
                 else:
                     cups.add_mixer(best_ci, ing)
+                want = order_want.get(best_ci)
+                if want and want.get(ing, 0) > 0:
+                    want[ing] -= 1
             assignments.append(entry)
 
         return assignments
@@ -2053,6 +2601,8 @@ class Mastermind(Strategy):
         focus,
         hot,
         threats=None,
+        order_want=None,
+        specials_left=None,
     ):
         """Score a single display ingredient.
 
@@ -2062,14 +2612,55 @@ class Mastermind(Strategy):
         opponents need. The bonus is suppressed when the only disposition
         would be a dangerous drink (e.g. drinking a spirit while drunk_level
         is high), so blocking never causes self-elimination.
+
+        `order_want` ({cup: Counter}) adds a bonus for an ingredient a glass
+        needs to serve an order; `specials_left` is what's still on the
+        specials display, for judging whether a special's cocktail can be
+        finished.
         """
         threat = (threats or {}).get(ing, 0.0)
+
+        def for_order(ci) -> float:
+            want = (order_want or {}).get(ci)
+            return 4.0 if want and want.get(ing, 0) > 0 else 0.0
+
+        if is_special(ing):
+            others = Counter(specials_left or {})
+            others[ing] -= 1
+            ci = cups.best_cup_for_special(ing, available=others)
+            if ci is None:
+                # An order-planned cocktail glass may take it too
+                ci = next(
+                    (
+                        c
+                        for c in (0, 1)
+                        if for_order(c) and cups.can_add_special(c, ing)
+                    ),
+                    None,
+                )
+            if ci is not None:
+                return (9.0 + for_order(ci) + threat, "cup", ci)
+            boozy = ing in BOOZY_SPECIALS
+            # Drunk, one special pays for a specialist card
+            if ing == _specialist_unlock(gs, ps):
+                return (
+                    12.0 - (3.0 + ps.drunk_level * 2.0 if boozy else 0),
+                    "drink",
+                    None,
+                )
+            # Lemon and sugar sober like a mixer, and deny whoever needs them;
+            # the boozy ones cost a drunk level like a spirit.
+            if boozy:
+                return (-(3.0 + ps.drunk_level * 2.0) + threat, "drink", None)
+            if threat > 0:
+                return (1.5 + threat * 2.0, "drink", None)
+            return (-2.0, "drink", None)
 
         if ing in _SPIRITS:
             ci = cups.best_cup_for_spirit(ing)
             if ci is not None:
                 base = 8.0 if ing == focus_ing else 5.0
-                return (base + threat * 1.5, "cup", ci)
+                return (base + threat * 1.5 + for_order(ci), "cup", ci)
             # Can't cup → must drink — weigh accumulation value against drunk cost.
             # Only allow a denial bonus when drinking is safe.
             penalty = 3.0 + ps.drunk_level * 2.0
@@ -2082,7 +2673,7 @@ class Mastermind(Strategy):
         if ing in _MIXERS:
             ci = cups.best_cup_for_mixer(ing)
             if ci is not None and cups.spirit_type[ci] is not None:
-                return (6.0 + threat * 1.5, "cup", ci)
+                return (6.0 + threat * 1.5 + for_order(ci), "cup", ci)
             base = 3.0 if ing.name in hot else 1.5
             return (base + threat * 0.8, "drink", None)
 
@@ -2096,12 +2687,14 @@ class Mastermind(Strategy):
 
     def _bag_draw_ev(self, gs, ps, cups, focus_ing):
         """Expected value of a single random bag draw given current cup state."""
-        if not gs.bag_contents:
+        # A draw never hands you a special: they go to the specials display
+        drawable = [i for i in gs.bag_contents if not is_special(i)]
+        if not drawable:
             return -5.0
-        total = len(gs.bag_contents)
+        total = len(drawable)
         ev = 0.0
-        for ing in set(gs.bag_contents):
-            frac = gs.bag_contents.count(ing) / total
+        for ing in set(drawable):
+            frac = drawable.count(ing) / total
             if ing in _SPIRITS:
                 ci = cups.best_cup_for_spirit(ing)
                 ev += frac * (5.0 if ci is not None else -(2.0 + ps.drunk_level * 1.5))
@@ -2188,7 +2781,161 @@ class Mastermind(Strategy):
         for _ in others:
             assignments.append({"source": "pending", "disposition": "drink"})
 
-        return assignments
+        return _in_drawn_order(drawn, spirits + mixers + others, assignments)
+
+
+class OrderChaser(Strategy):
+    """Fills the drink orders on the table.
+
+    Each glass works toward the order it's best placed to serve (see
+    order_plans): the order's spirit and mixer, a slammer's tequila, or a
+    cocktail's recipe, specials included. Serves an order as soon as a glass
+    matches one, and clears the orders (a free action at drunk 3+) when a
+    rival is one ingredient from serving an order it can't beat them to.
+    """
+
+    name = "OrderChaser"
+
+    def choose_action(
+        self, gs: GameState, player_id: UUID, valid_actions: list[Action]
+    ) -> Action:
+        ps = gs.player_states[player_id]
+
+        # Serve an order — the bonus is the point of the whole strategy
+        serving = [
+            a
+            for a in valid_actions
+            if a.action_type == "sell_cup" and a.params.get("order")
+        ]
+        if serving:
+            return max(serving, key=lambda a: a.params.get("points", 0))
+
+        # A finished cocktail is worth more than waiting for an order
+        sell = _best_sell(valid_actions, min_pts=10)
+        if sell:
+            return sell
+
+        if _should_wee(ps) or _is_in_danger(ps):
+            wee = _find_action(valid_actions, "go_for_a_wee")
+            if wee:
+                return wee
+
+        # Sell a glass that isn't close to an order: it frees the glass up
+        plans = order_plans(gs, ps)
+
+        def close(ci) -> bool:
+            return ci in plans and sum(plans[ci][1].values()) <= 1
+
+        idle = [
+            a
+            for a in valid_actions
+            if a.action_type == "sell_cup"
+            and not a.params.get("additional_cups")
+            and not close(a.params.get("cup_index"))
+            and (
+                a.params.get("cup_index") not in plans or a.params.get("points", 0) >= 3
+            )
+            and a.params.get("points", 0) >= 1
+        ]
+        if idle:
+            return max(idle, key=lambda a: a.params.get("points", 0))
+
+        take = _find_action(valid_actions, "take_ingredients")
+        if take and _safe_to_take(gs, ps):
+            return take
+
+        # Nothing safe to take: bank whatever sells, then wee
+        sell = _best_sell(valid_actions, min_pts=1)
+        if sell:
+            return sell
+        wee = _find_action(valid_actions, "go_for_a_wee")
+        if wee:
+            return wee
+        if take:
+            return take
+        return valid_actions[0]
+
+    def choose_free_action(
+        self, gs: GameState, player_id: UUID, free_actions: list[Action]
+    ) -> Action | None:
+        claim = _free_claim_action(free_actions)
+        if claim is not None:
+            return claim
+        clear = _clear_orders_action(free_actions)
+        if clear is not None and _worth_clearing_orders(
+            gs, gs.player_states[player_id]
+        ):
+            return clear
+        return None
+
+    def _cups_with_plans(self, ps: PlayerState, plans: dict) -> CupTracker:
+        cups = CupTracker(ps)
+        for ci, (order, _needs) in plans.items():
+            if order.drink == "cocktail":
+                recipe = RECIPE_BY_NAME.get(order.cocktail or "")
+                if recipe is not None:
+                    cups.aim_at(ci, recipe)
+            else:
+                cups.plain[ci] = True
+        return cups
+
+    def choose_take_assignments(
+        self, gs: GameState, player_id: UUID, count: int
+    ) -> list[dict]:
+        ps = gs.player_states[player_id]
+        plans = order_plans(gs, ps)
+        cups = self._cups_with_plans(ps, plans)
+        display = list(gs.open_display)
+        specials = list(gs.specials_display)
+        chosen: list[dict] = []
+
+        # Take what each planned glass needs, spirits first
+        for ci, (order, needs) in plans.items():
+            wanted = sorted(needs.elements(), key=lambda i: (i not in _SPIRITS, i.name))
+            # A simple order pays more as a double: take a second spirit too
+            if order.drink == "simple" and ps.cups[ci].base_count + len(wanted) < 4:
+                spirit = _SPIRIT_MAP.get((order.spirit_type or "").upper())
+                if (
+                    spirit is not None
+                    and cups.spirits[ci][spirit] + wanted.count(spirit) < 2
+                ):
+                    wanted.append(spirit)
+            for ing in wanted:
+                if len(chosen) >= count:
+                    break
+                pool = specials if is_special(ing) else display
+                if ing not in pool:
+                    continue
+                if is_special(ing):
+                    if not cups.can_add_special(ci, ing):
+                        continue
+                    cups.add_special(ci, ing)
+                elif ing in _SPIRITS:
+                    if not cups._can_add_spirit(ci, ing):
+                        continue
+                    cups.add_spirit(ci, ing)
+                else:
+                    if not cups._can_add_mixer(ci, ing):
+                        continue
+                    cups.add_mixer(ci, ing)
+                pool.remove(ing)
+                chosen.append(
+                    {
+                        "ingredient": ing.name,
+                        "source": "specials" if is_special(ing) else "display",
+                        "disposition": "cup",
+                        "cup_index": ci,
+                    }
+                )
+
+        return _smart_take_assignments(gs, ps, count, cups, prefix=chosen)
+
+    def choose_pending_assignments(
+        self, gs: GameState, player_id: UUID, drawn: list[Ingredient]
+    ) -> list[dict]:
+        ps = gs.player_states[player_id]
+        cups = self._cups_with_plans(ps, order_plans(gs, ps))
+        return _smart_pending_assignments(ps, drawn, cups)
 
 
 # Registry for CLI lookup
@@ -2200,6 +2947,7 @@ STRATEGY_CLASSES: dict[str, type[Strategy]] = {
     "aggressive": AggressiveDrinker,
     "specialist": SpecialistBuilder,
     "mastermind": Mastermind,
+    "orders": OrderChaser,
 }
 
 

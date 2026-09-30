@@ -9,6 +9,7 @@ import { h, text, el, showError, clearError, showModalError, clearModalError,
          setButtonBusy, formatTime, flash, switchTab, openModal, closeModal } from './dom.js';
 import { detectBestDrink, getCocktailRecipes, getValidPairings, SPECIAL_TYPES, cocktailsForSpecial } from './drinks.js';
 import S from './state.js';
+import { inviteBox } from './invite.js';
 
 // ─────────────────────────────────────────────────────────────
 // Web Push subscription helper (shared with script.js)
@@ -564,6 +565,20 @@ function renderLobby(game) {
     });
 
     renderGameModes(game);
+
+    // Invite link — for anyone seated while there's a free stool
+    const inviteSection = el('gbInviteSection');
+    if (inviteSection) {
+        const isSeated = S.me && (game.players || []).includes(S.me.id);
+        const show = isSeated && (game.players || []).length < 4;
+        inviteSection.classList.toggle('hidden', !show);
+        if (show && !inviteSection.firstChild) {
+            inviteSection.appendChild(inviteBox(S.gameId, {
+                classes: { button: 'gb-action-btn' },
+                onCopied: (ok) => showToast(ok ? 'Invite link copied' : 'Press Ctrl/Cmd+C to copy'),
+            }));
+        }
+    }
 
     // Add Bot + Start Game buttons — host only; Join button for non-members
     const section = el('gbStartGameSection');
@@ -1141,11 +1156,11 @@ function _cardCostDesc(card) {
     const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
     const spirit = card.spirit_type ? ingredientLabel(card.spirit_type) : 'any';
     const mixer = card.mixer_type ? ingredientLabel(card.mixer_type) : 'any';
-    if (cardType === 'karaoke') return `Cost: 3 ${spirit}`;
+    if (cardType === 'karaoke') return `Cost: 2 ${spirit}, and drunk 3+`;
     if (cardType === 'store') return `Cost: 1 ${spirit}`;
     if (cardType === 'refresher') return `Cost: 2 ${mixer}`;
     if (cardType === 'cup_doubler') return 'Cost: 3 of same spirit';
-    if (cardType === 'specialist') return `Cost: 2 ${spirit}`;
+    if (cardType === 'specialist') return `Cost: 2 ${spirit}, or 1 of its special`;
     if (cardType === 'free_action') return `Cost: 3 ${spirit}`;
     return '';
 }
@@ -1153,20 +1168,15 @@ function _cardCostDesc(card) {
 function canAffordCard(card, bladder, gs) {
     const cardType = card.card_type || (card.is_karaoke ? 'karaoke' : 'store');
     const myState = (S.me && gs && gs.player_states) ? gs.player_states[S.me.id] : null;
-    const myCards = myState ? (myState.cards || []) : [];
 
     function bladderCountOf(type) {
         return bladder.filter(i => i.toUpperCase() === type.toUpperCase()).length;
     }
-    function storeCountOf(spiritType) {
-        return myCards
-            .filter(c => c.card_type === 'store' && (c.spirit_type || '').toUpperCase() === spiritType.toUpperCase())
-            .reduce((sum, c) => sum + (c.stored_spirits || []).length, 0);
-    }
 
     if (cardType === 'karaoke') {
-        if (!card.spirit_type) return false;
-        return bladderCountOf(card.spirit_type) + storeCountOf(card.spirit_type) >= 3;
+        // Drunk 3+ and 2 of its spirit in the bladder (stored spirits don't count)
+        if (!card.spirit_type || !myState || myState.drunk_level < 3) return false;
+        return bladderCountOf(card.spirit_type) >= 2;
     }
     if (cardType === 'store') {
         if (!card.spirit_type) return false;
@@ -1184,9 +1194,10 @@ function canAffordCard(card, bladder, gs) {
         return false;
     }
     if (cardType === 'specialist') {
-        // Spec: bladder only, 2 matching spirits
+        // Bladder only: 2 matching spirits, or 1 of its special
         if (!card.spirit_type) return false;
-        return bladderCountOf(card.spirit_type) >= 2;
+        const special = { WHISKEY: 'BITTERS', TEQUILA: 'COINTREAU', VODKA: 'VERMOUTH', RUM: 'SUGAR', GIN: 'LEMON' }[card.spirit_type.toUpperCase()];
+        return bladderCountOf(card.spirit_type) >= 2 || (!!special && bladderCountOf(special) >= 1);
     }
     if (cardType === 'free_action') {
         // Spec: bladder only, 3 matching spirits

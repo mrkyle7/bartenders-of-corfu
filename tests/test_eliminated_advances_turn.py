@@ -30,13 +30,13 @@ def _make_game(num_players=2):
     return gs, pids
 
 
-def _whiskey_free_action_card() -> dict:
-    """Free action card that grants reroll_specials — leaves a free slot unused."""
+def _gin_free_action_card() -> dict:
+    """Free action card that grants go_for_a_wee — leaves a free slot unused."""
     return Card(
         id=str(uuid4()),
         card_type="free_action",
-        name="WHISKEY Free Action",
-        spirit_type="WHISKEY",
+        name="Weak Bladder",
+        spirit_type="GIN",
     ).to_dict()
 
 
@@ -47,7 +47,7 @@ class TestDrinkCupHospitalisedAdvances:
         p1, p2 = pids
 
         # P1 holds a free-action card so the turn would normally wait for it.
-        gs.player_states[p1].cards.append(_whiskey_free_action_card())
+        gs.player_states[p1].cards.append(_gin_free_action_card())
         # Pre-load drunk level just below max so a single cup pushes them over.
         gs.player_states[p1].drunk_level = 5
         gs.player_states[p1].cups[0].ingredients = [
@@ -68,13 +68,13 @@ class TestDrinkCupHospitalisedAdvances:
         gs, pids = _make_game(2)
         p1, p2 = pids
 
-        gs.player_states[p1].cards.append(_whiskey_free_action_card())
+        gs.player_states[p1].cards.append(_gin_free_action_card())
         gs.player_states[p1].cups[0].ingredients = [Ingredient.COLA]
 
         gs, _ = actions.drink_cup(gs, p1, 0)
 
         assert gs.player_states[p1].status == "active"
-        assert gs.player_turn == p1  # waiting on the WHISKEY free action
+        assert gs.player_turn == p1  # waiting on the GIN free action
 
 
 class TestDrinkStoredSpiritHospitalisedAdvances:
