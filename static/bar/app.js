@@ -1573,6 +1573,7 @@ function rulebook() {
         h('p.rulebook-intro', { text: RULES_INTRO }),
         h('div.rulebook-pages', {}, RULES.map((part) => h('section.rule-part', {},
             h('h3', { text: part.title }),
+            part.lead ? h('p.rule-lead', { text: part.lead }) : null,
             h('ul', {}, part.items.map((t) => h('li', { text: t })))))));
 }
 
