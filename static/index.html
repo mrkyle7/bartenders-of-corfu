@@ -9,6 +9,7 @@
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4a2c0e">
     <script src="/static/theme.js"></script>
+    <script src="/static/push.js"></script>
     <script src="/static/script.js"></script>
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/themes.css">
@@ -38,6 +39,8 @@
             <label><input type="radio" name="uiChoice" value="bar" id="uiBar"><span>Bar top</span></label>
         </fieldset>
         <small id="uiChoiceDesc" class="ui-toggle-desc">Bar top lays the game out like the real box: cards, tokens, glasses and mats.</small>
+        <p class="notify-row"><button type="button" id="notifyToggle" class="hidden">Turn on notifications</button>
+            <small id="notifyStatus" class="ui-toggle-desc" role="status" aria-live="polite"></small></p>
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <section class="game-section hidden" id="myGamesSection">
             <h2>Your Games</h2>

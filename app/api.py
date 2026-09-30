@@ -12,6 +12,7 @@ from app.JWTHandler import JWTHandler
 from app.logging_config import setup_logging, CanonicalLogMiddleware
 from app.db import db
 from app import push
+from app import presence
 from app import password_reset
 from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -300,6 +301,11 @@ async def save_push_subscription(body: PushSubscriptionRequest, request: Request
     token_user, err = _require_auth(request)
     if err:
         return err
+    if not push.valid_endpoint(body.endpoint):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "That push endpoint isn't a push service"},
+        )
     db.save_push_subscription(
         user_id=token_user.id,
         endpoint=body.endpoint,
@@ -319,7 +325,11 @@ async def delete_push_subscription(request: Request):
     endpoint = data.get("endpoint")
     if not endpoint:
         return JSONResponse(status_code=400, content={"error": "endpoint required"})
-    db.delete_push_subscription(endpoint)
+    # Only the user the device belongs to can turn it off
+    if any(
+        sub["endpoint"] == endpoint for sub in db.get_push_subscriptions(token_user.id)
+    ):
+        db.delete_push_subscription(endpoint)
     logger.info("Push subscription deleted for user %s", token_user.username)
     return JSONResponse(content={"ok": True})
 
@@ -398,12 +408,25 @@ async def get_game(game_id: str, request: Request):
                 content={"error": "User is not a member of this game"},
             )
         logger.info(f"{token_user.username} get game info for ID {game_id}")
+        if token_user.id in game.players:
+            # Game pages only poll while showing: this player is watching
+            presence.mark_watching(game.id, token_user.id)
         result = game.to_dict()
         result["pending_undo"] = gameManager.get_pending_undo(game.id)
         return JSONResponse(content=result)
     except Exception:
         logger.exception("Failed to validate user on get game")
         return JSONResponse(status_code=500, content={"error": "Failed to get game"})
+
+
+@app.post("/v1/games/{game_id}/away")
+async def game_page_hidden(game_id: str, request: Request):
+    """A game page was hidden: notify this player again from now on."""
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    presence.mark_away(game_id, token_user.id)
+    return JSONResponse(content={"ok": True})
 
 
 @app.post("/v1/games")
@@ -907,62 +930,71 @@ def _game_action_precheck(
     return token_user, game, None
 
 
-def _fire_turn_push(old_turn, new_state, game) -> None:
-    """Send a push notification to the next player if the turn just changed."""
-    if new_state is None or new_state.player_turn is None:
-        return
-    if new_state.player_turn == old_turn:
-        return
-    if new_state.winner is not None:
-        return  # game ended — _fire_game_end_push handles this
-    new_player_id = new_state.player_turn
-    host = userManager.get_user(game.host)
-    host_name = host.username if host else "someone"
-    subs = db.get_push_subscriptions(new_player_id)
-    for sub in subs:
+def _send_to_user(user_id, title: str, body: str, game_id) -> None:
+    """Send one notification to every device the user turned them on for."""
+    for sub in db.get_push_subscriptions(user_id):
         ok = push.send_push(
             subscription_info={
                 "endpoint": sub["endpoint"],
                 "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
             },
-            title="Bartenders of Corfu",
-            body=f"It's your turn in {host_name}'s game!",
-            url=f"/game?id={game.id}",
+            title=title,
+            body=body,
+            url=f"/game?id={game_id}",
+            tag=f"game-{game_id}",
         )
         if not ok:
             db.delete_push_subscription(sub["endpoint"])
 
 
-def _fire_game_end_push(game, new_state, cancelled: bool = False) -> None:
-    """Send push notifications to all human players when a game ends."""
-    has_winner = new_state is not None and new_state.winner is not None
-    if not has_winner and not cancelled:
-        return
-    host = userManager.get_user(game.host)
-    host_name = host.username if host else "someone"
-    if has_winner:
-        winner = userManager.get_user(new_state.winner)
-        winner_name = winner.username if winner else "Someone"
-        body = f"{winner_name} won {host_name}'s game!"
-    else:
-        body = f"{host_name}'s game was cancelled."
-    all_players = userManager.get_users_by_ids(game.players)
-    for player in all_players:
-        if player.is_bot:
-            continue
-        subs = db.get_push_subscriptions(player.id)
-        for sub in subs:
-            ok = push.send_push(
-                subscription_info={
-                    "endpoint": sub["endpoint"],
-                    "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
-                },
-                title="Bartenders of Corfu",
-                body=body,
-                url=f"/game?id={game.id}",
-            )
-            if not ok:
-                db.delete_push_subscription(sub["endpoint"])
+def _notify_after_action(game_id, old_turn, cancelled_game=None) -> None:
+    """Tell players what an action changed: whose turn it is, or that the game
+    ended. Runs after the response has gone (a background task), so a slow
+    push service never holds up a move.
+
+    Reads the game afresh because bots move within the same request: the turn
+    may have passed through several bots to the next human since the action.
+    Players watching the game (app/presence.py) see it on screen instead.
+    """
+    try:
+        game = cancelled_game or gameManager.get_game_by_id(game_id)
+        if game is None:
+            return
+        state = game.game_state
+        host = userManager.get_user(game.host)
+        host_name = host.username if host else "someone"
+        if cancelled_game is not None or (
+            state is not None and state.winner is not None
+        ):
+            if cancelled_game is not None:
+                body = f"{host_name}'s game was cancelled."
+            else:
+                winner = userManager.get_user(state.winner)
+                winner_name = winner.username if winner else "Someone"
+                body = f"{winner_name} won {host_name}'s game!"
+            for player in userManager.get_users_by_ids(game.players):
+                if player.is_bot or presence.is_watching(game.id, player.id):
+                    continue
+                _send_to_user(player.id, "Bartenders of Corfu", body, game.id)
+            return
+        if state is None or state.player_turn is None or state.player_turn == old_turn:
+            return
+        next_player = state.player_turn
+        if presence.is_watching(game.id, next_player):
+            return
+        _send_to_user(
+            next_player,
+            "Bartenders of Corfu",
+            f"It's your turn in {host_name}'s game!",
+            game.id,
+        )
+    except Exception:
+        logger.exception("Failed to send notifications for game %s", game_id)
+
+
+def _after_action(background_tasks: BackgroundTasks, game, old_turn) -> None:
+    """Queue the notifications for an action, sent once the reply has gone."""
+    background_tasks.add_task(_notify_after_action, game.id, old_turn)
 
 
 class DrawFromBagRequest(BaseModel):
@@ -971,13 +1003,18 @@ class DrawFromBagRequest(BaseModel):
 
 @app.post("/v1/games/{game_id}/actions/draw-from-bag")
 async def action_draw_from_bag(
-    game_id: str, body: DrawFromBagRequest, request: Request
+    game_id: str,
+    body: DrawFromBagRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.draw_from_bag(game, token_user.id, body.count)
+        _after_action(background_tasks, game, old_turn)
         logger.info(
             "%s drew %d from bag in game %s", token_user.username, body.count, game_id
         )
@@ -997,15 +1034,20 @@ class TakeIngredientsRequest(BaseModel):
 
 @app.post("/v1/games/{game_id}/actions/take-ingredients")
 async def action_take_ingredients(
-    game_id: str, body: TakeIngredientsRequest, request: Request
+    game_id: str,
+    body: TakeIngredientsRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.take_ingredients(
             game, token_user.id, body.assignments
         )
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s took ingredients in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1026,7 +1068,12 @@ class SellCupRequest(BaseModel):
 
 
 @app.post("/v1/games/{game_id}/actions/sell-cup")
-async def action_sell_cup(game_id: str, body: SellCupRequest, request: Request):
+async def action_sell_cup(
+    game_id: str,
+    body: SellCupRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
@@ -1039,8 +1086,7 @@ async def action_sell_cup(game_id: str, body: SellCupRequest, request: Request):
             body.declared_specials,
             additional_cups=body.additional_cups,
         )
-        _fire_turn_push(old_turn, new_state, game)
-        _fire_game_end_push(game, new_state)
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s sold cup in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1057,15 +1103,19 @@ class DrinkCupRequest(BaseModel):
 
 
 @app.post("/v1/games/{game_id}/actions/drink-cup")
-async def action_drink_cup(game_id: str, body: DrinkCupRequest, request: Request):
+async def action_drink_cup(
+    game_id: str,
+    body: DrinkCupRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
         old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.drink_cup(game, token_user.id, body.cup_index)
-        _fire_turn_push(old_turn, new_state, game)
-        _fire_game_end_push(game, new_state)
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s drank cup in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1078,15 +1128,16 @@ async def action_drink_cup(game_id: str, body: DrinkCupRequest, request: Request
 
 
 @app.post("/v1/games/{game_id}/actions/go-for-a-wee")
-async def action_go_for_a_wee(game_id: str, request: Request):
+async def action_go_for_a_wee(
+    game_id: str, request: Request, background_tasks: BackgroundTasks
+):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
         old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.go_for_a_wee(game, token_user.id)
-        _fire_turn_push(old_turn, new_state, game)
-        _fire_game_end_push(game, new_state)
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s went for a wee in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1105,11 +1156,17 @@ class ClaimCardRequest(BaseModel):
 
 
 @app.post("/v1/games/{game_id}/actions/claim-card")
-async def action_claim_card(game_id: str, body: ClaimCardRequest, request: Request):
+async def action_claim_card(
+    game_id: str,
+    body: ClaimCardRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.claim_card(
             game,
             token_user.id,
@@ -1117,6 +1174,7 @@ async def action_claim_card(game_id: str, body: ClaimCardRequest, request: Reque
             cup_index=body.cup_index,
             spirit_type=body.spirit_type,
         )
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s claimed card in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1135,15 +1193,20 @@ class DrinkStoredSpiritRequest(BaseModel):
 
 @app.post("/v1/games/{game_id}/actions/drink-stored-spirit")
 async def action_drink_stored_spirit(
-    game_id: str, body: DrinkStoredSpiritRequest, request: Request
+    game_id: str,
+    body: DrinkStoredSpiritRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.drink_stored_spirit(
             game, token_user.id, body.store_card_index, body.count
         )
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s drank stored spirit in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1162,15 +1225,20 @@ class UseStoredSpiritRequest(BaseModel):
 
 @app.post("/v1/games/{game_id}/actions/use-stored-spirit")
 async def action_use_stored_spirit(
-    game_id: str, body: UseStoredSpiritRequest, request: Request
+    game_id: str,
+    body: UseStoredSpiritRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.use_stored_spirit(
             game, token_user.id, body.store_card_index, body.cup_index
         )
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s used stored spirit in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1192,15 +1260,20 @@ class RerollSpecialsRequest(BaseModel):
 
 @app.post("/v1/games/{game_id}/actions/reroll-specials")
 async def action_reroll_specials(
-    game_id: str, body: RerollSpecialsRequest, request: Request
+    game_id: str,
+    body: RerollSpecialsRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.reroll_specials(
             game, token_user.id, body.chosen_specials
         )
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s rerolled specials in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1214,15 +1287,20 @@ async def action_reroll_specials(
 
 @app.post("/v1/games/{game_id}/actions/refresh-card-row")
 async def action_refresh_card_row(
-    game_id: str, body: RefreshRowRequest, request: Request
+    game_id: str,
+    body: RefreshRowRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
+        old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.refresh_card_row(
             game, token_user.id, body.row_position
         )
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s refreshed card row in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1235,15 +1313,16 @@ async def action_refresh_card_row(
 
 
 @app.post("/v1/games/{game_id}/actions/end-turn")
-async def action_end_turn(game_id: str, request: Request):
+async def action_end_turn(
+    game_id: str, request: Request, background_tasks: BackgroundTasks
+):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
         old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.end_turn(game, token_user.id)
-        _fire_turn_push(old_turn, new_state, game)
-        _fire_game_end_push(game, new_state)
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s ended turn in game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1256,15 +1335,16 @@ async def action_end_turn(game_id: str, request: Request):
 
 
 @app.post("/v1/games/{game_id}/actions/quit")
-async def action_quit_game(game_id: str, request: Request):
+async def action_quit_game(
+    game_id: str, request: Request, background_tasks: BackgroundTasks
+):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
         old_turn = game.game_state.player_turn if game.game_state else None
         new_state, payload = gameManager.quit_game(game, token_user.id)
-        _fire_turn_push(old_turn, new_state, game)
-        _fire_game_end_push(game, new_state)
+        _after_action(background_tasks, game, old_turn)
         logger.info("%s quit game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}
@@ -1277,13 +1357,15 @@ async def action_quit_game(game_id: str, request: Request):
 
 
 @app.post("/v1/games/{game_id}/cancel")
-async def action_cancel_game(game_id: str, request: Request):
+async def action_cancel_game(
+    game_id: str, request: Request, background_tasks: BackgroundTasks
+):
     token_user, game, err = _game_action_precheck(game_id, request)
     if err:
         return err
     try:
         new_state, payload = gameManager.cancel_game(game, token_user.id)
-        _fire_game_end_push(game, new_state, cancelled=True)
+        background_tasks.add_task(_notify_after_action, game.id, None, game)
         logger.info("%s cancelled game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}

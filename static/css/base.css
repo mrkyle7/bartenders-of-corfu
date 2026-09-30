@@ -500,6 +500,33 @@ input {
     font-style: normal;
 }
 
+/* Turn notifications on/off (home page): quieter than the main button */
+.notify-row {
+    margin: 8px 0 0;
+    text-align: center;
+}
+
+.notify-row button {
+    margin: 0 auto 4px;
+    padding: 6px 14px;
+    font-size: 0.9em;
+    background: transparent;
+    color: var(--theme-text-primary);
+    border: 2px solid var(--theme-btn-bg);
+    box-shadow: none;
+}
+
+.notify-row button:hover {
+    background: var(--theme-btn-bg);
+    color: var(--theme-btn-text);
+    transform: none;
+}
+
+.notify-row button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 /* Notification bell */
 .notif-bell {
     position: relative;
