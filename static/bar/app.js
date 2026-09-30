@@ -5,9 +5,9 @@
 
 import { api } from '/static/play/api.js';
 import {
-    CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, ING, MIXERS, MODES, PAIRINGS, RULES,
-    SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, orderRecipe,
-    servesOrder,
+    CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ING, MIXERS, MODES, PAIRINGS,
+    RULES, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
+    orderRecipe, servesOrder, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
 
@@ -31,6 +31,8 @@ let endingShown = false;
 const ui = {
     picks: [], // open-display slot indexes, in the order picked up
     pickedFrom: '', // the display the picks refer to
+    specialPicks: [], // specials-tray indexes, in the order picked up
+    specialsFrom: '', // the specials tray the picks refer to
     // hand key -> { to: 'cup', cup } | { to: 'mouth' } |
     //             { to: 'mat', choice?, swap?, leave? } for a special token
     staged: {},
@@ -38,6 +40,7 @@ const ui = {
     selected: null, // hand key being placed
     prompt: null, // { text, choices: [{ label, onclick, kind }] }
     historyOpen: false, // show every move, not just the latest
+    sheet: null, // 'menu' | 'rules': the panel opened from the turn bar
 };
 
 const SPECIAL_TYPES = ['bitters', 'cointreau', 'lemon', 'sugar', 'vermouth'];
@@ -126,8 +129,8 @@ const TOKEN_NAMES = {
 // `print` is only for the small pictures printed on a card.
 // `name` is an ingredient key, 'ANY_SPIRIT', or a rolled special ('lemon'…).
 function token(name, { onclick, label, state, selected, key, print, printed: printedName } = {}) {
-    const special = SPECIALS[name];
     const meta = ING[name];
+    const special = SPECIALS[name] ?? SPECIALS[meta?.special];
     const kind = special ? 'rolled' : meta?.kind ?? 'spirit';
     const text = special?.label ?? meta?.label ?? 'Any one spirit';
     const printed = printedName ?? special?.label ?? TOKEN_NAMES[name] ?? meta?.label ?? '';
@@ -142,7 +145,7 @@ function token(name, { onclick, label, state, selected, key, print, printed: pri
         'data-k': key,
         role: onclick ? undefined : 'img',
     });
-    node.append(h('span.tok-icon', { svg: special ? SPECIAL_ICONS[name] : ING_ICONS[name] ?? '', 'aria-hidden': 'true' }));
+    node.append(h('span.tok-icon', { svg: special ? SPECIAL_ICONS[meta?.special ?? name] : ING_ICONS[name] ?? '', 'aria-hidden': 'true' }));
     if (!print) node.append(h('span.tok-name', { text: printed, 'aria-hidden': 'true' }));
     return node;
 }
@@ -182,6 +185,9 @@ async function boot() {
     setInterval(() => {
         if (!busy && document.visibilityState === 'visible') refresh().catch(() => {});
     }, POLL_MS);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && ui.sheet) closeSheet();
+    });
 }
 
 async function ensureNames(g) {
@@ -285,10 +291,21 @@ function handItems() {
         slotIndex,
         face: displayFace(slotIndex),
     }));
-    return [...pending, ...picks];
+    const specials = ui.specialPicks.map((i) => ({
+        key: `s${i}`, name: specialsTray()[i], source: 'specials', face: null,
+    }));
+    return [...pending, ...picks, ...specials];
 }
 
 // ─── Specials ───────────────────────────────────────────────────────────────
+
+// Specials drawn from the bag, waiting for anyone to take them.
+const specialsTray = () => gs().specials_display ?? [];
+
+// Games started before specials were ingredients use special dice tokens
+// and put specials on the mat; show that part of the mat only for them.
+const oldSpecials = () => Object.values(gs().player_states).some((ps) => ps.special_ingredients.length)
+    || gs().open_display.includes('SPECIAL') || gs().bag_draw_pending.includes('SPECIAL');
 
 // What a special token on the display shows: a special, or 'any'.
 function displayFace(slotIndex) {
@@ -346,6 +363,9 @@ function reconcile() {
     if (!myTurn() || ui.pickedFrom !== gs().open_display.join()) {
         ui.picks = [];
     }
+    if (!myTurn() || ui.specialsFrom !== specialsTray().join()) {
+        ui.specialPicks = [];
+    }
     const keys = new Set(handItems().map((it) => it.key));
     for (const key of Object.keys(ui.staged)) if (!keys.has(key)) delete ui.staged[key];
     for (const key of Object.keys(ui.specialDraft)) if (!keys.has(key)) delete ui.specialDraft[key];
@@ -368,7 +388,8 @@ function drunkAfter(extra) {
     const drunk = [...gs().drunk_ingredients_this_turn, ...extra];
     const spirits = drunk.filter((i) => ING[i]?.kind === 'spirit').length;
     const hot = drunk.filter((i) => ING[i]?.kind === 'mixer' && refreshers.has(i)).length;
-    const plain = drunk.filter((i) => ING[i]?.kind === 'mixer' && !refreshers.has(i)).length;
+    // Specials sober you like a plain mixer
+    const plain = drunk.filter((i) => (ING[i]?.kind === 'mixer' && !refreshers.has(i)) || isSpecial(i)).length;
     let delta = spirits - hot;
     if (!spirits) delta -= plain;
     return Math.max(0, ps.drunk_level + delta);
@@ -396,6 +417,23 @@ function pickFromDisplay(slotIndex) {
     ui.pickedFrom = gs().open_display.join();
     ui.picks.push(slotIndex);
     ui.selected = `d${slotIndex}`;
+    render({ force: true });
+}
+
+function pickFromSpecials(index) {
+    if (ui.specialPicks.includes(index)) {
+        ui.specialPicks = ui.specialPicks.filter((s) => s !== index);
+        delete ui.staged[`s${index}`];
+        render({ force: true });
+        return;
+    }
+    if (takeLeft() < 1) {
+        toast(`Your hand is full: you take ${mine().take_count} this turn. Place what you're holding first.`, 'error');
+        return;
+    }
+    ui.specialsFrom = specialsTray().join();
+    ui.specialPicks.push(index);
+    ui.selected = `s${index}`;
     render({ force: true });
 }
 
@@ -435,15 +473,26 @@ function placeSelected(to, cup) {
     const item = heldIngredient();
     if (!item) return;
     if (to === 'cup') {
-        const inCup = mine().cups[cup].ingredients.length + stagedTo('cup', cup).length;
-        if (inCup >= CUP_SIZE) {
-            toast(`Glass ${cup + 1} is full: five ingredients is the limit.`, 'error');
+        const room = glassRoom(cup);
+        if (isSpecial(item.name) && room.specials < 1) {
+            toast(`Glass ${cup + 1} has two specials already: that's the limit.`, 'error');
+            return;
+        }
+        if (!isSpecial(item.name) && room.base < 1) {
+            toast(`Glass ${cup + 1} is full: five spirits and mixers is the limit.`, 'error');
             return;
         }
     }
     ui.staged[item.key] = { to, cup };
     ui.selected = handItems().find((it) => !ui.staged[it.key])?.key ?? null;
     render({ force: true });
+}
+
+// Room left in one of your glasses, counting what you've placed but not sent.
+function glassRoom(cup) {
+    const all = [...mine().cups[cup].ingredients, ...stagedTo('cup', cup).map((it) => it.name)];
+    const specials = all.filter(isSpecial).length;
+    return { base: CUP_SIZE - (all.length - specials), specials: GLASS_SPECIALS - specials };
 }
 
 function finishPlacing() {
@@ -472,6 +521,7 @@ function finishPlacing() {
     const run = () => act(() => api.takeIngredients(gameId, assignments), {
         after: (result) => {
             ui.picks = [];
+            ui.specialPicks = [];
             ui.staged = {};
             ui.selected = null;
             for (const record of result?.move?.taken ?? []) {
@@ -569,7 +619,7 @@ function claim(card) {
 function clearRow(position) {
     const orders = position === 2;
     ask(orders
-        ? 'Clear the orders? All three go to the bottom of the order deck and three new ones are dealt. This is your main action.'
+        ? 'Clear the orders? All three go to the bottom of the order deck and three new ones are dealt. This is free, once a turn.'
         : 'Swipe the ability cards? All three go to the bottom of the deck and three new ones are dealt. This is free, once a turn.', [
         { label: orders ? 'Clear the orders' : 'Swipe them', onclick: () => act(() => api.refreshCardRow(gameId, position)), kind: 'go' },
         { label: 'Leave them', onclick: () => { ui.prompt = null; render({ force: true }); } },
@@ -648,11 +698,11 @@ function turnbar() {
                 : held && isSpecialToken(held) ? 'Decide what to do with the special in your hand.'
                     : `Tap a glass or your mouth to put down the ${held ? ING[held.name].label : 'token'} you're holding.`;
         } else if (takeUnderway()) {
-            detail = `Take ${plural(left, 'more ingredient')}: tap tokens on the display or draw from the bag.`;
+            detail = `Take ${plural(left, 'more ingredient')}: tap tokens on the display or the specials tray, or draw from the bag.`;
         } else if (state.main_action_taken_this_turn) {
             detail = 'Your main action is done. Use a free action, or end your turn.';
         } else {
-            detail = `Main action: take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass, go for a wee or clear the orders.`;
+            detail = `Main action: take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass or go for a wee.`;
         }
     } else {
         headline = `${seatName(state.player_turn)} is playing`;
@@ -669,6 +719,16 @@ function turnbar() {
     const buttons = [];
     if (myTurn() && valid.can_end_turn && !handItems().length) {
         buttons.push(h('button.btn.go', { type: 'button', onclick: endTurn, text: 'End turn', 'data-k': 'end-turn' }));
+    }
+    if (game.status !== 'NEW') {
+        for (const [sheet, label] of [['menu', 'Drinks menu'], ['rules', 'Rules']]) {
+            buttons.push(h('button.btn.sheet-btn', {
+                type: 'button', text: label, 'data-k': `open-${sheet}`,
+                cls: ui.sheet === sheet ? 'is-open' : '',
+                'aria-expanded': String(ui.sheet === sheet), 'aria-controls': 'sheet',
+                onclick: () => toggleSheet(sheet),
+            }));
+        }
     }
     if (buttons.length) kids.push(h('div.turn-buttons', {}, buttons));
 
@@ -705,21 +765,24 @@ function actionStrip() {
         h('span.act-kind', { text: 'Main action' }),
         h('span.act-state', { text: mainDone ? 'Done' : takeUnderway() ? 'Taking now' : 'Still to do' }))];
     const cardFree = new Set(ps.cards.filter((c) => c.card_type === 'free_action').map((c) => c.free_action_type));
+    const clearRowOf = { refresh_orders_row: 2, refresh_ability_row: 3 };
     for (const [type, label] of Object.entries(FREE_ACTIONS)) {
-        const always = type === 'claim_card' || type === 'refresh_ability_row';
+        const always = type === 'claim_card' || type in clearRowOf;
         if (!always && !cardFree.has(type)) continue;
+        const row = clearRowOf[type];
         let status;
         let cls;
         if (used.has(type)) {
             status = 'Used';
             cls = 'is-used';
-        } else if (open.has(type) || (!mainDone && can(type === 'refresh_ability_row' ? 'refresh_card_row' : type)
-            && (type !== 'refresh_ability_row' || actionsOf('refresh_card_row').some((a) => a.params.row_position === 3)))) {
+        } else if (row ? actionsOf('refresh_card_row').some((a) => a.params.row_position === row)
+            : open.has(type) || (!mainDone && can(type))) {
             status = 'Free now';
             cls = 'is-open';
         } else {
+            const needs = { refresh_orders_row: 3, refresh_ability_row: 2 }[type];
             status = type === 'claim_card' ? 'Nothing you can afford'
-                : type === 'refresh_ability_row' ? (ps.drunk_level < 2 ? 'Needs drunk 2' : 'Not now') : 'Not now';
+                : needs && ps.drunk_level < needs ? `Needs drunk ${needs}` : 'Not now';
             cls = 'is-off';
         }
         tiles.push(h('li.act', { cls }, h('span.act-kind', { text: `${label} (free)` }), h('span.act-state', { text: status })));
@@ -849,7 +912,7 @@ function renderMarket() {
             tag('Karaoke stage', 'Three songs wins. Never cleared.'),
             h('div.row-cards', {}, cells(1, 5))),
         h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
-            tag('Orders', 'Sell what they want for the bonus. Clear at drunk 3+ (main action).', 2, 'Clear the orders'),
+            tag('Orders', 'Sell what they want for the bonus. Clear at drunk 3+ (free).', 2, 'Clear (free)'),
             h('div.row-cards', {}, cells(2, 3)),
             cardBack(state.order_deck_size ?? 0, `Order deck, ${plural(state.order_deck_size ?? 0, 'order')}`, 'Orders')),
         h('div.card-row', { 'aria-label': 'Ability cards', role: 'group' },
@@ -865,7 +928,10 @@ function renderSupply() {
     const taking = can('take_ingredients');
     const pendingDraw = state.bag_draw_pending.length > 0;
     const left = taking ? takeLeft() : 0;
-    const maxDraw = taking && !pendingDraw ? Math.min(left, state.bag_contents.length) : 0;
+    // Specials that come out of the bag go to the tray, so only spirits and
+    // mixers can be drawn.
+    const drawable = state.bag_contents.filter((n) => !isSpecial(n)).length;
+    const maxDraw = taking && !pendingDraw ? Math.min(left, drawable) : 0;
 
     const display = h('div.display', { role: 'group', 'aria-label': 'Open display' },
         Array.from({ length: 5 }, (_, i) => {
@@ -903,7 +969,27 @@ function renderSupply() {
                 })))
             : taking && pendingDraw ? h('p.bag-note', { text: 'Place what you drew before drawing again.' }) : null);
 
-    return h('section.supply', { 'aria-label': 'Ingredients' }, bag, display);
+    const tray = specialsTray();
+    const canPick = taking && left > 0;
+    const specials = h('div.specials-tray', { role: 'group', 'aria-label': 'Specials tray' },
+        h('div.zone-head', {},
+            h('span.zone-name', { text: 'Specials tray' }),
+            h('span.zone-count', { text: tray.length ? 'Into a glass, or drink it' : '' })),
+        h('div.specials-tray-row', {},
+            tray.length
+                ? tray.map((name, i) => {
+                    const what = ING[name]?.label ?? name;
+                    const picked = ui.specialPicks.includes(i);
+                    return slot(token(name, {
+                        key: `spec-${i}`,
+                        state: picked ? 'lifted' : canPick ? 'takeable' : undefined,
+                        label: picked ? `${what} is in your hand. Tap to put it back.` : canPick ? `Take the ${what}` : what,
+                        onclick: picked || canPick ? () => pickFromSpecials(i) : undefined,
+                    }), picked ? 'is-lifted' : '');
+                })
+                : h('span.zone-empty', { text: 'Specials that come out of the bag wait here.' })));
+
+    return h('section.supply', { 'aria-label': 'Ingredients' }, bag, display, specials);
 }
 
 // ─── Score track ────────────────────────────────────────────────────────────
@@ -931,25 +1017,39 @@ function glass(pid, cupIndex, { interactive }) {
     const ps = gs().player_states[pid];
     const cup = ps.cups[cupIndex];
     const incoming = interactive ? stagedTo('cup', cupIndex) : [];
-    const placing = interactive && !!heldIngredient();
-    const room = cup.ingredients.length + incoming.length < CUP_SIZE;
+    const held = interactive ? heldIngredient() : null;
+    const placing = !!held;
+    const space = interactive ? glassRoom(cupIndex) : null;
+    const room = placing && (isSpecial(held.name) ? space.specials > 0 : space.base > 0);
+    const staged = (it) => token(it.name, {
+        state: 'placed', key: `staged-${it.key}`,
+        label: `${ING[it.name].label} going into glass ${cupIndex + 1}. Tap to pick it back up.`,
+        onclick: () => selectInHand(it.key),
+    });
+    // Spirits and mixers fill the glass; specials sit on the rim.
     const contents = [
-        ...cup.ingredients.map((name) => token(name)),
-        ...incoming.map((it) => token(it.name, {
-            state: 'placed', key: `staged-${it.key}`,
-            label: `${ING[it.name].label} going into glass ${cupIndex + 1}. Tap to pick it back up.`,
-            onclick: () => selectInHand(it.key),
-        })),
+        ...cup.ingredients.filter((n) => !isSpecial(n)).map((name) => token(name)),
+        ...incoming.filter((it) => !isSpecial(it.name)).map(staged),
+    ];
+    const garnish = [
+        ...cup.ingredients.filter(isSpecial).map((name) => token(name)),
+        ...incoming.filter((it) => isSpecial(it.name)).map(staged),
     ];
     const layers = Array.from({ length: CUP_SIZE }, (_, i) => slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'));
+    const showRim = garnish.length || (placing && isSpecial(held.name));
+    const rim = showRim
+        ? h('span.glass-rim', { 'aria-hidden': 'true' },
+            Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty')))
+        : null;
 
-    const vessel = h(placing && room ? 'button.glass' : 'div.glass', {
-        cls: `${placing && room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''}`,
-        type: placing && room ? 'button' : undefined,
-        onclick: placing && room ? () => placeSelected('cup', cupIndex) : undefined,
-        'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? ', scores double' : ''}${placing && room ? '. Tap to put the token here.' : ''}`,
-        'data-k': placing && room ? `glass-${cupIndex}` : undefined,
+    const vessel = h(room ? 'button.glass' : 'div.glass', {
+        cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''}`,
+        type: room ? 'button' : undefined,
+        onclick: room ? () => placeSelected('cup', cupIndex) : undefined,
+        'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? ', scores double' : ''}${room ? '. Tap to put the token here.' : ''}`,
+        'data-k': room ? `glass-${cupIndex}` : undefined,
     },
+    rim,
     cup.has_cup_doubler ? h('span.straw', { 'aria-hidden': 'true' }) : null,
     h('span.glass-body', {}, layers),
     h('span.glass-foot', { 'aria-hidden': 'true' }));
@@ -1074,7 +1174,8 @@ function drunkTrack(pid) {
         h('ol.drunk-steps', {}, steps));
 }
 
-function specialsTray(pid, { interactive }) {
+// Specials on a player's mat: only in games started with the special dice.
+function matSpecials(pid, { interactive }) {
     const ps = gs().player_states[pid];
     const incoming = interactive ? handItems().filter((it) => isSpecialToken(it) && ui.staged[it.key]) : [];
     const leaving = new Set(incoming.map((it) => ui.staged[it.key].swap).filter(Boolean));
@@ -1144,7 +1245,7 @@ function hand() {
             return held && isSpecialToken(held) && !ui.staged[held.key] ? specialChoices(held) : null;
         })(),
         items.some((it) => it.source === 'pending')
-            ? h('p.hand-note', { text: 'Bag draws can’t go back. Ingredients go in a glass or your mouth; specials go on your mat.' }) : null,
+            ? h('p.hand-note', { text: 'Bag draws can’t go back. Everything goes in a glass or your mouth.' }) : null,
         items.length
             ? h('button.btn.go', { type: 'button', disabled: !allPlaced, onclick: finishPlacing, text: 'Done placing', 'data-k': 'done-placing' })
             : null);
@@ -1181,7 +1282,7 @@ function mat(pid) {
         h('div.body-area', {},
             bladder(pid, { interactive }),
             drunkTrack(pid),
-            specialsTray(pid, { interactive }))),
+            oldSpecials() ? matSpecials(pid, { interactive }) : null)),
     h('div.mat-cards', { role: 'group', 'aria-label': isMe ? 'Your cards' : `${seatName(pid)}'s cards` },
         ps.cards.length
             ? ps.cards.map((c, i) => cardFace(c, { owner: pid, index: i, compact: !isMe }))
@@ -1190,12 +1291,17 @@ function mat(pid) {
 
 // ─── Menu and log ───────────────────────────────────────────────────────────
 
-// Who has a special, or where it's showing, for the menu.
+// Where a special is, for the menu: in your glass, on the specials tray, or
+// still in the bag (games with special dice: on someone's mat).
 function specialWhere(sp) {
+    const name = sp.toUpperCase();
+    if (mine()?.cups.some((c) => c.ingredients.includes(name))) return 'in your glass';
+    const onTray = specialsTray().filter((n) => n === name).length;
+    if (onTray) return onTray > 1 ? `${onTray} on the tray` : 'on the tray';
     for (const [pid, ps] of Object.entries(gs().player_states)) {
         if (ps.special_ingredients.includes(sp)) return pid === me.id ? 'yours' : `${seatName(pid)} has it`;
     }
-    if ((gs().display_specials ?? []).includes(sp)) return 'on the tray';
+    if ((gs().display_specials ?? []).includes(sp)) return 'on the display';
     return 'in the bag';
 }
 
@@ -1222,17 +1328,24 @@ const listTokens = (names) => {
 // have or where they are.
 function menu() {
     const started = game.status === 'STARTED' && isMember() && mine();
-    const cups = started ? mine().cups.map((c) => c.ingredients) : [];
+    // Your glasses, with what you've just placed in them this turn
+    const cups = started
+        ? mine().cups.map((c, i) => [...c.ingredients, ...(myTurn() ? stagedTo('cup', i).map((it) => it.name) : [])])
+        : [];
     const orders = (gs().card_rows.find((r) => r.position === 2)?.cards ?? []).filter((c) => c.card_type === 'order');
     const wanted = (fn) => orders.find(fn);
 
-    // A glass is only "ready" when you also hold every special the recipe needs.
+    // What each glass still needs for a recipe, specials included (in older
+    // games a special can also come from your mat).
     const glassNotes = (recipe, specials = []) => cups.map((cup, i) => {
-        const need = glassProgress(cup, recipe);
-        if (need === null || (!cup.length && need.length === recipe.length)) return null;
-        const missing = specials.filter((sp) => !mine().special_ingredients.includes(sp)).map((sp) => SPECIALS[sp].label);
-        if (need.length) return h('span.menu-glass', { text: `Glass ${i + 1}: add ${listTokens(need)}` });
-        if (missing.length) return h('span.menu-glass', { text: `Glass ${i + 1}: glass done, you need ${missing.join(' and ')}` });
+        if (!cup.length) return null;
+        const parts = splitGlass(cup);
+        const need = glassProgress(parts.base, recipe);
+        const needSpecials = glassProgress(parts.specials, specials);
+        if (need === null || needSpecials === null) return null;
+        const missing = needSpecials.filter((sp) => !mine().special_ingredients.includes(sp)).map((sp) => SPECIALS[sp].label);
+        const add = [listTokens(need), ...missing].filter(Boolean).join(', ');
+        if (add) return h('span.menu-glass', { text: `Glass ${i + 1}: add ${add}` });
         return h('span.menu-glass.is-ready', { text: `Glass ${i + 1}: ready to sell` });
     }).filter(Boolean);
 
@@ -1240,7 +1353,7 @@ function menu() {
         const order = wanted((o) => o.drink === 'cocktail' && o.cocktail === c.name);
         const specialBits = c.specials.map((sp) => {
             const where = started ? specialWhere(sp) : null;
-            return h('span.menu-special', { cls: where === 'yours' ? 'is-yours' : '' },
+            return h('span.menu-special', { cls: where === 'yours' || where === 'in your glass' ? 'is-yours' : '' },
                 token(sp, { print: true }), `${SPECIALS[sp].label}${where ? ` (${where})` : ''}`);
         });
         return h('li.menu-item', { cls: order ? 'is-wanted' : '' },
@@ -1276,7 +1389,7 @@ function menu() {
             h('h2.menu-title', { text: 'Drinks' }),
             h('p.menu-sub', { text: 'Prices in points. Orders on the table add their bonus.' })),
         h('h3.menu-section', { text: 'Cocktails' }),
-        h('p.menu-note', { text: 'The glass must match exactly, and you need the specials on your mat.' }),
+        h('p.menu-note', { text: 'The glass must match exactly, specials included: take them off the specials tray into the glass.' }),
         h('ul.menu-list', {}, cocktails),
         h('h3.menu-section', { text: 'Long drinks' }),
         h('p.menu-note', { text: 'One spirit and one kind of mixer: 1 point. Two of the same spirit: 3.' }),
@@ -1286,6 +1399,67 @@ function menu() {
             h('span.menu-toks', {}, token('TEQUILA', { print: true }), token('TEQUILA', { print: true })),
             h('span.menu-name', { text: 'Tequila Slammer, 3 points' }),
             slammerOrder ? h('span.menu-wanted', { text: `Wanted +${slammerOrder.bonus}` }) : null)));
+}
+
+// ─── The drinks menu and rules panel ────────────────────────────────────────
+
+function toggleSheet(which) {
+    const opening = ui.sheet !== which;
+    ui.sheet = opening ? which : null;
+    render({ force: true });
+    if (opening) $('sheet').querySelector('.sheet-close')?.focus();
+    else document.querySelector(`[data-k="open-${which}"]`)?.focus();
+}
+
+function closeSheet() {
+    const was = ui.sheet;
+    if (!was) return;
+    ui.sheet = null;
+    render({ force: true });
+    document.querySelector(`[data-k="open-${was}"]`)?.focus();
+}
+
+// Your glasses, kept in view at the top of the drinks menu.
+function sheetGlasses() {
+    if (!(game.status === 'STARTED' && isMember() && mine())) return null;
+    return h('div.sheet-glasses', { role: 'group', 'aria-label': 'Your glasses' },
+        mine().cups.map((cup, i) => {
+            const staged = myTurn() ? stagedTo('cup', i) : [];
+            const all = [...cup.ingredients, ...staged.map((it) => it.name)];
+            return h('div.sheet-glass', {},
+                h('span.sheet-glass-name', { text: `Glass ${i + 1}` }),
+                h('span.sheet-glass-toks', { 'aria-label': all.length ? all.map((n) => ING[n]?.label ?? n).join(', ') : 'Empty' },
+                    all.length
+                        ? [...cup.ingredients.map((n) => token(n, { print: true })),
+                            ...staged.map((it) => token(it.name, { print: true, state: 'placed' }))]
+                        : h('span.sheet-glass-empty', { text: 'Empty' })));
+        }));
+}
+
+function renderSheet() {
+    const box = $('sheet');
+    const open = !!ui.sheet && game.status !== 'NEW';
+    document.body.classList.toggle('has-sheet', open);
+    if (!open) {
+        box.hidden = true;
+        box.replaceChildren();
+        return;
+    }
+    const isMenu = ui.sheet === 'menu';
+    const scroll = box.querySelector('.sheet-body')?.scrollTop ?? 0;
+    box.hidden = false;
+    box.setAttribute('aria-label', isMenu ? 'Drinks menu' : 'Rules');
+    box.replaceChildren(...[
+        h('div.sheet-head', {},
+            h('h2.sheet-title', { text: isMenu ? 'Drinks menu' : 'How to play' }),
+            h('button.btn.tiny.sheet-close', {
+                type: 'button', text: 'Close', onclick: closeSheet, 'data-k': 'sheet-close',
+                'aria-label': `Close the ${isMenu ? 'drinks menu' : 'rules'}`,
+            })),
+        isMenu ? sheetGlasses() : null,
+        h('div.sheet-body', {}, isMenu ? menu() : rulebook()),
+    ].filter(Boolean));
+    box.querySelector('.sheet-body').scrollTop = scroll;
 }
 
 const RECENT_MOVES = 8;
@@ -1311,7 +1485,6 @@ function chalkboard() {
 
 function rulebook() {
     return h('section.rulebook', { 'aria-label': 'Rules' },
-        h('h2.rulebook-title', { text: 'How to play' }),
         h('div.rulebook-pages', {}, RULES.map((part) => h('section.rule-part', {},
             h('h3', { text: part.title }),
             h('ul', {}, part.items.map((t) => h('li', { text: t })))))));
@@ -1460,13 +1633,14 @@ async function renderLobby() {
 function render({ force = false } = {}) {
     if (!game) return;
     const signature = JSON.stringify([game.status, game.game_state, game.pending_undo, valid, moves.length,
-        ui.picks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt]);
+        ui.picks, ui.specialPicks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt, ui.sheet]);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
     const focusKey = document.activeElement?.getAttribute?.('data-k');
 
     if (game.status === 'NEW') {
         turnbar();
+        renderSheet();
         renderLobby().then(() => restoreFocus(focusKey));
         return;
     }
@@ -1478,13 +1652,14 @@ function render({ force = false } = {}) {
     const start = Math.max(0, seats.indexOf(me.id));
     const around = [...seats.slice(start + 1), ...seats.slice(0, start)].filter((pid) => pid !== me.id);
 
-    $('table').replaceChildren(
+    $('table').replaceChildren(...[
         around.length ? h('div.across', { 'aria-label': 'Other players' }, around.map(mat)) : null,
         h('div.middle', {}, renderMarket(), h('div.middle-side', {}, renderSupply(), renderScoreTrack())),
         isMember() && gs().player_states[me.id] ? mat(me.id) : null,
-        h('div.extras', {}, menu(), h('div.extras-side', {}, chalkboard(), rulebook())),
+        h('div.extras', {}, chalkboard()),
         housekeeping(),
-    );
+    ].filter(Boolean));
+    renderSheet();
     ending();
     restoreFocus(focusKey);
 }

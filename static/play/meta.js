@@ -15,6 +15,12 @@ export const ING = {
     TONIC: { label: 'Tonic', short: 'To', kind: 'mixer', color: '#a9c3e8', text: '#16283f' },
     CRANBERRY: { label: 'Cranberry', short: 'Cr', kind: 'mixer', color: '#d9536a', text: '#3a0710' },
     SPECIAL: { label: 'Special die', short: '?', kind: 'special', color: '#b48be0', text: '#2a0d47' },
+    // Specials are bag ingredients now; they can sit in glasses and bladders.
+    BITTERS: { label: 'Bitters', short: 'Bi', kind: 'special', color: '#b48be0', text: '#2a0d47' },
+    COINTREAU: { label: 'Cointreau', short: 'Ct', kind: 'special', color: '#b48be0', text: '#2a0d47' },
+    LEMON: { label: 'Lemon', short: 'Le', kind: 'special', color: '#b48be0', text: '#2a0d47' },
+    SUGAR: { label: 'Sugar', short: 'Su', kind: 'special', color: '#b48be0', text: '#2a0d47' },
+    VERMOUTH: { label: 'Vermouth', short: 'Ve', kind: 'special', color: '#b48be0', text: '#2a0d47' },
 };
 
 export const SPECIAL_TYPES = {

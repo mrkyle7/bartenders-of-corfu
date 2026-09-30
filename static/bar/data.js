@@ -17,7 +17,26 @@ export const ING = {
     TONIC: { label: 'Tonic water', kind: 'mixer' },
     CRANBERRY: { label: 'Cranberry', kind: 'mixer' },
     SPECIAL: { label: 'Special die', kind: 'special' },
+    // Specials: tokens in the bag like any other; `special` is their recipe name.
+    BITTERS: { label: 'Bitters', kind: 'special', special: 'bitters' },
+    COINTREAU: { label: 'Cointreau', kind: 'special', special: 'cointreau' },
+    LEMON: { label: 'Lemon', kind: 'special', special: 'lemon' },
+    SUGAR: { label: 'Sugar', kind: 'special', special: 'sugar' },
+    VERMOUTH: { label: 'Vermouth', kind: 'special', special: 'vermouth' },
 };
+
+// A special ingredient token (not the old special die).
+export const isSpecial = (name) => !!ING[name]?.special;
+// Max specials that sit in one glass, on top of its five spirits and mixers.
+export const GLASS_SPECIALS = 2;
+
+// A glass split into its spirits and mixers and the specials in it.
+export function splitGlass(cup) {
+    return {
+        base: cup.filter((i) => !isSpecial(i)),
+        specials: cup.filter(isSpecial).map((i) => ING[i].special),
+    };
+}
 
 export const SPECIALS = {
     bitters: { label: 'Bitters' },
@@ -50,8 +69,11 @@ export const COCKTAILS = [
 
 const sameBag = (a, b) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
-// What a sold cup would be called, for sell buttons and the log.
-export function drinkName(cup, specials = []) {
+// What a sold cup would be called, for sell buttons and the log. Specials
+// can be in the glass, or declared from the mat in older games.
+export function drinkName(glass, declared = []) {
+    const { base: cup, specials: inGlass } = splitGlass(glass);
+    const specials = [...declared, ...inGlass];
     const cocktail = COCKTAILS.find((c) => sameBag(c.cup, cup) && sameBag(c.specials, specials));
     if (cocktail) return cocktail.name;
     const spirits = cup.filter((i) => ING[i]?.kind === 'spirit');
@@ -88,6 +110,7 @@ export function servesOrder(card, cup, specials = []) {
     const spirits = [...new Set(cup.filter((i) => ING[i]?.kind === 'spirit'))];
     const mixers = [...new Set(cup.filter((i) => ING[i]?.kind === 'mixer'))];
     if (COCKTAILS.some((c) => c.name === name)) return false;
+    if (cup.some(isSpecial) || specials.length) return false; // not a cocktail, so not sellable
     if (card.drink === 'slammer') return name === 'Tequila Slammer';
     return spirits.length === 1 && spirits[0] === card.spirit_type
         && mixers.length === 1 && mixers[0] === card.mixer_type
@@ -142,6 +165,7 @@ export const DRUNK_LABELS = ['Sober', 'Merry', 'Tipsy', 'Squiffy', 'Sozzled', 'L
 // Free actions by the name the server uses for them.
 export const FREE_ACTIONS = {
     claim_card: 'Claim a card',
+    refresh_orders_row: 'Clear the orders',
     refresh_ability_row: 'Swipe the abilities',
     take_ingredients: 'Take again',
     sell_cup: 'Sell again',
@@ -161,25 +185,25 @@ export const RULES = [
     {
         title: 'Your turn',
         items: [
-            'One main action: take ingredients, sell your glasses (one or both), drink a glass, go for a wee, or clear the orders (drunk 3 or more).',
-            'Free actions, each once a turn, before or after: claim a card, swipe the ability cards (drunk 2 or more), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
+            'One main action: take ingredients, sell your glasses (one or both), drink a glass, or go for a wee.',
+            'Free actions, each once a turn, before or after: claim a card, clear the orders (drunk 3 or more), swipe the ability cards (drunk 2 or more), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
             'Your turn ends when your main action is done and there is nothing free left you could use. You can end it early after your main action.',
         ],
     },
     {
         title: 'Taking ingredients',
         items: [
-            'Take exactly 3 plus your drunk level, from the display, blind from the bag, or both.',
-            'Put each one in a glass (five at most) or drink it before you take more. Nothing goes back.',
-            'Your drunk level changes once, after the whole take: +1 per spirit drunk, or −1 per mixer if you drank only mixers.',
+            'Take exactly 3 plus your drunk level, from the display, the specials tray, blind from the bag, or any mix.',
+            'Put each one in a glass (five spirits and mixers at most) or drink it before you take more. Nothing goes back.',
+            'Your drunk level changes once, after the whole take: +1 per spirit drunk, or −1 per mixer or special if you drank no spirits.',
         ],
     },
     {
         title: 'Specials',
         items: [
-            'A special token is rolled as it comes out of the bag, so the display shows which special it offers. The blank face is "choose any".',
-            'Take one and that special goes on your mat; the token goes back in the bag. There is one of each special, and you can hold two at most: swap one back or leave the new one.',
-            'Specials are used for cocktails and go back to the supply when you sell.',
+            'There are two each of bitters, cointreau, lemon, sugar and vermouth in the bag. Whenever one comes out, it goes to the specials tray and the drawing carries on, so the display always shows five spirits and mixers and a blind draw never hands you a special.',
+            'Anyone can take specials from the tray as part of their take. A special goes straight into a glass, up to two per glass on top of its five spirits and mixers, or you drink it.',
+            'A glass with a special in it only sells as the cocktail it makes. Drinking a special sobers you like a mixer but it never counts toward a card: people drink them to stop others getting them.',
         ],
     },
     {
@@ -200,9 +224,9 @@ export const RULES = [
     {
         title: 'Cards',
         items: [
-            'Costs are checked against your bladder, not paid. Stored spirits don’t count.',
+            'Costs are checked against your bladder, not paid. Stored spirits and specials don’t count.',
             'Karaoke cards are all out from the start and aren’t replaced. A claimed ability card is replaced from the deck.',
-            'Clearing the orders or swiping the abilities sends all three cards to the bottom of their deck and deals three new ones. The karaoke row is never cleared.',
+            'Clearing the orders (drunk 3 or more) or swiping the abilities (drunk 2 or more) is free, once a turn each. All three cards go to the bottom of their deck and three new ones are dealt. The karaoke row is never cleared.',
         ],
     },
 ];

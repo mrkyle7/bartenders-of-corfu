@@ -151,15 +151,36 @@ def test_home_choice_sends_game_page_to_bar(page, base_url, new_user, new_game):
 def test_bar_rules_and_actions_are_on_show(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
-    """The rule book is on the table, and on your turn the action strip shows
-    your main action and the free ones."""
+    """The rule book opens from the turn bar, and on your turn the action
+    strip shows your main action and the free ones."""
     game = _started_game(base_url, new_user, new_game, other_user_and_jwt)
     page.goto(f"{base_url}/bar?id={new_game}")
-    page.locator(".rulebook").wait_for(state="visible", timeout=10000)
-    assert page.locator(".rulebook .rule-part").count() >= 6
-    assert "40" in page.locator(".rulebook").inner_text()
+    page.locator('[data-k="open-rules"]').click(timeout=10000)
+    page.locator("#sheet .rulebook").wait_for(state="visible", timeout=10000)
+    assert page.locator("#sheet .rulebook .rule-part").count() >= 6
+    assert "40" in page.locator("#sheet .rulebook").inner_text()
+    page.keyboard.press("Escape")
+    page.locator("#sheet").wait_for(state="hidden", timeout=5000)
     if game["game_state"]["player_turn"] == new_user["user"]["id"]:
         strip = page.locator(".action-strip")
         strip.wait_for(state="visible", timeout=10000)
         assert "Main action" in strip.inner_text()
         assert "Claim a card" in strip.inner_text()
+
+
+def test_bar_drinks_menu_shows_your_glasses(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """The drinks menu opens from the turn bar with your glasses kept in view
+    at its top, and the specials tray is on the table."""
+    _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".specials-tray").wait_for(state="visible", timeout=10000)
+    assert page.locator(".menu").count() == 0  # not on the table all the time
+    page.locator('[data-k="open-menu"]').click()
+    sheet = page.locator("#sheet")
+    sheet.locator(".menu").wait_for(state="visible", timeout=5000)
+    assert sheet.locator(".sheet-glass").count() == 2
+    assert "Mojito" in sheet.inner_text()
+    page.locator('[data-k="sheet-close"]').click()
+    sheet.wait_for(state="hidden", timeout=5000)
