@@ -177,6 +177,8 @@ export const FREE_ACTIONS = {
 };
 
 // The rule book shown on the table. Keep in step with "Game Rules.md".
+export const RULES_INTRO = 'You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails to sell to the thirsty punters quicker than your rivals to win! Bartending is thirsty work, so you\u2019ll sample your own drinks along the way. Just don\u2019t get too drunk, or you\u2019ll end up on a fast trip to the nearest hospital.';
+
 export const RULES = [
     {
         title: 'Winning',
@@ -221,10 +223,21 @@ export const RULES = [
         ],
     },
     {
-        title: 'Drink, wee and limits',
+        title: 'Getting drunk',
         items: [
-            'Everything you drink goes into your bladder. More than it holds and you’ve wet yourself; above drunk 5 it’s hospital. Either way you’re out.',
-            'A wee empties your bladder into the bag and sobers you up by 1. Each wee seals a bladder space with a toilet token, down to 4 spaces.',
+            'You can drink ingredients as you take them, or drink a whole glass as your main action. Everything you drink goes into your bladder.',
+            'Your drunk level changes once per action: +1 for each spirit, bitters, cointreau or vermouth drunk. If you drank none of those, you sober up 1 for each mixer, lemon or sugar instead (never below sober).',
+            'The drunk track: 0 Sober, 1 Merry, 2 Tipsy, 3 Squiffy, 4 Sozzled, 5 Legless. Above 5 you go to hospital and you\u2019re out of the game.',
+            'Being drunk has its uses. You take 3 ingredients plus your drunk level each turn, you can swipe the ability cards at drunk 2 or more, and clear the orders or sing karaoke at drunk 3 or more.',
+            'A wee sobers you up by 1.',
+        ],
+    },
+    {
+        title: 'Bladder and wees',
+        items: [
+            'Your bladder starts with 8 spaces. More in it than it has spaces and you\u2019ve wet yourself: you\u2019re out of the game.',
+            'A wee (a main action, only with something in your bladder) empties it back into the bag and sobers you up by 1. Each wee seals a bladder space with one of your 4 toilet tokens, down to 4 spaces.',
+            'When you\u2019re out, everything you held (bladder, glasses, stored spirits) goes back in the bag.',
         ],
     },
     {

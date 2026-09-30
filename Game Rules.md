@@ -77,6 +77,8 @@ Your turn ends once you've taken your main action and have no free action left t
 - You can drink ingredients as you take them, or drink a whole glass as your main action.
 - **Everything you drink goes into your bladder.**
 - **Drunk level:** each spirit, bitters, cointreau or vermouth drunk in the action raises it by 1. If you drank **none of those**, you sober up by 1 per mixer, lemon or sugar instead (never below 0).
+- **The drunk track:** 0 Sober, 1 Merry, 2 Tipsy, 3 Squiffy, 4 Sozzled, 5 Legless.
+- **Being drunk has its uses:** you take 3 ingredients plus your drunk level each turn, you can swipe the ability cards at drunk 2 or more, and clear the orders or sing karaoke at drunk 3 or more.
 - **Hospital:** above drunk 5 you are out of the game.
 - **Wetting yourself:** more ingredients in your bladder than it has spaces, and you are out of the game.
 - **When you're out:** everything you held (bladder, glasses, stored spirits) goes back in the bag for the others to use.

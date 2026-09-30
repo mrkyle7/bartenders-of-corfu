@@ -965,6 +965,7 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 }
 .rulebook-title { font: 800 24px/1.1 var(--display); color: #9a4f0c; margin-bottom: 8px; }
 .rulebook-pages { display: grid; gap: 14px; }
+.rulebook-intro { margin: 0 0 14px; font: italic 500 15px/1.5 var(--display); max-width: 70ch; }
 .rule-part h3 { font: 800 16px/1.2 var(--display); color: var(--aegean); margin: 0 0 4px; }
 .rule-part ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; max-width: 70ch; }
 
