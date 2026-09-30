@@ -58,7 +58,30 @@ h1, h2, p { margin: 0; }
     gap: 16px;
     padding: 10px 16px 6px;
 }
+.topline { flex-wrap: wrap; }
 .home { color: var(--whitewash-dim); font-weight: 600; text-underline-offset: 3px; }
+
+/* Every player at a glance, in the header (it scrolls away). */
+.overview { flex: 1 1 100%; }
+.overview:empty { display: none; }
+.overview-list { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 4px 0 2px; padding: 0; list-style: none; }
+.overview-player {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px 5px 8px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.28);
+    border-left: 4px solid var(--seat);
+    font-size: 13px;
+}
+.overview-player .pawn { width: 10px; height: 14px; margin-top: 4px; }
+.overview-player .pawn::before { width: 7px; height: 7px; top: -5px; }
+.overview-player.is-turn { box-shadow: 0 0 0 2px var(--kumquat); }
+.overview-player.is-out { opacity: 0.55; }
+.ov-name { font-weight: 800; max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-stats { color: var(--whitewash-dim); white-space: nowrap; }
+.ov-stats b { color: var(--whitewash); }
 .home:hover { color: var(--whitewash); }
 .wordmark {
     font: 800 20px/1.1 var(--display);
@@ -951,14 +974,29 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     --tp: 30px;
     display: grid;
     gap: 6px;
+    flex: none;
+    max-height: 40vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 10px 16px;
     background: var(--aegean);
     border-bottom: 3px solid var(--aegean-deep);
 }
 .sheet-glass { display: flex; align-items: center; gap: 10px; min-height: 34px; }
-.sheet-glass-name { flex: none; width: 60px; font: 700 14px/1 var(--display); }
+.sheet-glass + .sheet-glass { border-top: 1px solid var(--line); padding-top: 6px; }
+.sheet-glass-name { display: flex; align-items: center; gap: 6px; flex: none; width: 92px; min-width: 0; font: 700 14px/1.1 var(--display); overflow-wrap: anywhere; }
+.sheet-glass-name .pawn { width: 10px; height: 14px; }
+.sheet-glass-name .pawn::before { width: 7px; height: 7px; top: -5px; }
+.sheet-glass-cups { display: flex; flex-wrap: wrap; gap: 6px 14px; min-width: 0; }
+.sheet-glass-cups .sheet-glass-toks { padding: 2px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.18); min-height: 34px; align-items: center; }
 .sheet-glass-toks { display: flex; flex-wrap: wrap; gap: 3px; }
 .sheet-glass-toks .tok { margin-bottom: 0; }
+@media (max-width: 600px) {
+    .sheet-glasses { --tp: 26px; max-height: 34vh; }
+    .sheet-glass { flex-wrap: wrap; gap: 4px 10px; }
+    .sheet-glass-name { width: 100%; }
+    .sheet-glass-cups .sheet-glass-toks { min-height: 30px; }
+}
 .sheet-glass-empty { font-size: 13px; color: var(--whitewash-dim); }
 .sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px; }
 @media (min-width: 1200px) {

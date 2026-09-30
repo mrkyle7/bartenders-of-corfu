@@ -1426,21 +1426,69 @@ function closeSheet() {
     document.querySelector(`[data-k="open-${was}"]`)?.focus();
 }
 
-// Your glasses, kept in view at the top of the drinks menu.
+// Everyone's glasses, kept in view at the top of the drinks menu: yours
+// first (with what you've just placed), then the others in turn order.
 function sheetGlasses() {
-    if (!(game.status === 'STARTED' && isMember() && mine())) return null;
-    return h('div.sheet-glasses', { role: 'group', 'aria-label': 'Your glasses' },
-        mine().cups.map((cup, i) => {
-            const staged = myTurn() ? stagedTo('cup', i) : [];
-            const all = [...cup.ingredients, ...staged.map((it) => it.name)];
-            return h('div.sheet-glass', {},
-                h('span.sheet-glass-name', { text: `Glass ${i + 1}` }),
-                h('span.sheet-glass-toks', { 'aria-label': all.length ? all.map((n) => ING[n]?.label ?? n).join(', ') : 'Empty' },
-                    all.length
-                        ? [...cup.ingredients.map((n) => token(n, { print: true })),
-                            ...staged.map((it) => token(it.name, { print: true, state: 'placed' }))]
-                        : h('span.sheet-glass-empty', { text: 'Empty' })));
+    if (game.status !== 'STARTED') return null;
+    const seats = seatOrder();
+    const start = Math.max(0, seats.indexOf(me.id));
+    const order = [...seats.slice(start), ...seats.slice(0, start)];
+    const glassToks = (pid, cup, i) => {
+        const staged = pid === me.id && myTurn() ? stagedTo('cup', i) : [];
+        const all = [...cup.ingredients, ...staged.map((it) => it.name)];
+        return h('span.sheet-glass-toks', {
+            role: 'img',
+            'aria-label': `Glass ${i + 1}: ${all.length ? all.map((n) => ING[n]?.label ?? n).join(', ') : 'empty'}`,
+        },
+        all.length
+            ? [...cup.ingredients.map((n) => token(n, { print: true })),
+                ...staged.map((it) => token(it.name, { print: true, state: 'placed' }))]
+            : h('span.sheet-glass-empty', { text: 'Empty' }));
+    };
+    return h('div.sheet-glasses', { role: 'group', 'aria-label': 'Everyone\'s glasses' },
+        order.map((pid) => {
+            const ps = gs().player_states[pid];
+            return h('div.sheet-glass', { cls: pid === me.id ? 'is-mine' : '', style: { '--seat': seatColour(pid) } },
+                h('span.sheet-glass-name', {},
+                    h('span.pawn', { 'aria-hidden': 'true' }),
+                    h('span', { text: pid === me.id ? 'You' : seatName(pid) })),
+                h('span.sheet-glass-cups', {}, ps.cups.map((cup, i) => glassToks(pid, cup, i))));
         }));
+}
+
+// A strip of every player at a glance, in the header that scrolls away:
+// points, drunk level, bladder, songs, and whose turn it is.
+function renderOverview() {
+    const box = $('overview');
+    if (!box) return;
+    if (!game || game.status === 'NEW' || !gs()?.player_states) {
+        box.replaceChildren();
+        return;
+    }
+    const target = gs().score_to_win ?? 40;
+    box.replaceChildren(h('ol.overview-list', { 'aria-label': 'Players at a glance' },
+        seatOrder().map((pid) => {
+            const ps = gs().player_states[pid];
+            const turn = gs().player_turn === pid && !gs().winner;
+            const out = ps.status === 'hospitalised' ? 'Hospital' : ps.status === 'wet' ? 'Wet' : ps.status === 'quit' ? 'Left' : null;
+            const songs = ps.cards.filter((c) => c.card_type === 'karaoke').length;
+            return h('li.overview-player', {
+                cls: `${turn ? 'is-turn' : ''}${out ? ' is-out' : ''}${pid === me.id ? ' is-mine' : ''}`,
+                style: { '--seat': seatColour(pid) },
+                'aria-label': `${pid === me.id ? 'You' : seatName(pid)}: ${plural(ps.points, 'point')} of ${target}, `
+                    + `${out ?? `drunk ${ps.drunk_level}`}, bladder ${ps.bladder.length} of ${ps.bladder_capacity}`
+                    + `${songs ? `, ${plural(songs, 'song')}` : ''}${turn ? ', playing now' : ''}`,
+            },
+            h('span.pawn', { 'aria-hidden': 'true' }),
+            h('span.ov-name', { text: pid === me.id ? 'You' : seatName(pid), 'aria-hidden': 'true' }),
+            h('span.ov-stats', { 'aria-hidden': 'true' },
+                h('b', { text: `${ps.points}` }), ' pts',
+                h('span.ov-sep', { text: ' · ' }),
+                out ?? `drunk ${ps.drunk_level}`,
+                h('span.ov-sep', { text: ' · ' }),
+                `bladder ${ps.bladder.length}/${ps.bladder_capacity}`,
+                songs ? h('span', { text: ` · 🎤${songs}` }) : null));
+        })));
 }
 
 function renderSheet() {
@@ -1648,6 +1696,7 @@ function render({ force = false } = {}) {
     if (game.status === 'NEW') {
         turnbar();
         renderSheet();
+        renderOverview();
         renderLobby().then(() => restoreFocus(focusKey));
         return;
     }
@@ -1667,6 +1716,7 @@ function render({ force = false } = {}) {
         housekeeping(),
     ].filter(Boolean));
     renderSheet();
+    renderOverview();
     ending();
     restoreFocus(focusKey);
 }

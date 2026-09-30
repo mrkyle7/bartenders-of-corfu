@@ -173,19 +173,27 @@ def test_bar_rules_and_actions_are_on_show(
         assert "Needs drunk" not in bar.inner_text()
 
 
-def test_bar_drinks_menu_shows_your_glasses(
+def test_bar_drinks_menu_shows_everyones_glasses(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
-    """The drinks menu opens from the turn bar with your glasses kept in view
-    at its top, and the specials tray is on the table."""
+    """The drinks menu opens from the turn bar with every player's glasses
+    kept in view at its top, yours first, and the specials tray is on the
+    table. The header gives an overview of every player."""
     _started_game(base_url, new_user, new_game, other_user_and_jwt)
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".specials-tray").wait_for(state="visible", timeout=10000)
+    overview = page.locator(".topline .overview-player")
+    assert overview.count() == 2
+    assert other_user_and_jwt["username"] in page.locator(".topline").inner_text()
     assert page.locator(".menu").count() == 0  # not on the table all the time
     page.locator('[data-k="open-menu"]').click()
     sheet = page.locator("#sheet")
     sheet.locator(".menu").wait_for(state="visible", timeout=5000)
-    assert sheet.locator(".sheet-glass").count() == 2
+    rows = sheet.locator(".sheet-glass")
+    assert rows.count() == 2
+    assert rows.first.locator(".sheet-glass-name").inner_text() == "You"
+    assert other_user_and_jwt["username"] in rows.nth(1).inner_text()
+    assert sheet.locator(".sheet-glass-toks").count() == 4
     assert "Mojito" in sheet.inner_text()
     page.locator('[data-k="sheet-close"]').click()
     sheet.wait_for(state="hidden", timeout=5000)
