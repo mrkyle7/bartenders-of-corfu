@@ -17,6 +17,7 @@ from app.actions import (
     MIN_DRUNK_TO_SWIPE,
     SWIPE_ABILITIES,
     _SPIRITS,
+    _card_free_action_open,
     card_payment,
 )
 from app.card import ABILITY_ROW, FREE_ACTION_TYPES, KARAOKE_ROW, ORDERS_ROW
@@ -179,7 +180,7 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
 
     # FreeActionCards held by the player turn matching turn actions into free
     # actions (RUM→take_ingredients, VODKA→sell_cup, GIN→go_for_a_wee), once
-    # per turn. Mark them so callers — UI and bots —
+    # per turn; the free sell only after a different main action. Mark them so callers — UI and bots —
     # can route them through the free-action slot before the main action.
     card_free_types: set[str] = set()
     for cd in ps.cards:
@@ -187,7 +188,11 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
             continue
         spirit = cd.get("spirit_type")
         action_type = _CARD_FREE_ACTION_MAP.get(spirit) if spirit else None
-        if action_type and action_type not in used_free:
+        if (
+            action_type
+            and action_type not in used_free
+            and _card_free_action_open(gs, action_type)
+        ):
             card_free_types.add(action_type)
     if card_free_types:
         for a in result:

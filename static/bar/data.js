@@ -124,7 +124,7 @@ export function servesOrder(card, cup, specials = []) {
 const FREE_ACTION_TEXT = {
     take_ingredients: 'Take ingredients a second time every turn.',
     reroll_specials: 'Re-roll your specials for free every turn.',
-    sell_cup: 'Sell a second cup every turn.',
+    sell_cup: 'Sell for free after another main action, every turn.',
     go_for_a_wee: 'Go for a free wee every turn.',
 };
 
@@ -172,7 +172,7 @@ export const FREE_ACTIONS = {
     refresh_orders_row: 'Clear the orders',
     refresh_ability_row: 'Swipe the abilities',
     take_ingredients: 'Take again',
-    sell_cup: 'Sell again',
+    sell_cup: 'Sell (free)',
     go_for_a_wee: 'A free wee',
 };
 

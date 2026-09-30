@@ -148,7 +148,7 @@ Which mixers go with which spirit:
 | Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |
 | Specialist (one per spirit) | 2 of that spirit, or 1 of its special (whisky: bitters, tequila: cointreau, vodka: vermouth, rum: sugar, gin: lemon) | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
 | Greedy Bartender | 3 rum | 2 | Take ingredients a second time each turn (free). |
-| Entrepreneur | 3 vodka | 2 | Sell a second time each turn (free). |
+| Entrepreneur | 3 vodka | 2 | Sell after another main action (free), once a turn. Selling as your main action doesn't give you a second sale. |
 | Weak Bladder | 3 gin | 2 | A free wee each turn. |
 
 ## Cocktail menu

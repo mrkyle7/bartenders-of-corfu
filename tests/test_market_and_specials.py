@@ -828,3 +828,60 @@ def test_sell_actions_name_the_order_and_its_bonus():
     # One order: only the first glass serves it
     assert both["points"] == 4
     assert both["orders"] == [{"cup_index": 0, "name": "Vodka Tonic", "bonus": 2}]
+
+
+# ─── The Entrepreneur ────────────────────────────────────────────────────────
+
+
+def _entrepreneur(gs: GameState):
+    pid, ps = _me(gs)
+    ps.cards.append(
+        Card(
+            id="c-ent",
+            card_type="free_action",
+            name="Entrepreneur",
+            spirit_type="VODKA",
+        ).to_dict()
+    )
+    ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
+    ps.bladder = [Ingredient.SODA]
+    return pid, ps
+
+
+def _sells(gs: GameState, pid) -> list:
+    from playtesting.valid_actions import get_valid_actions
+
+    return [a for a in get_valid_actions(gs, pid) if a.action_type == "sell_cup"]
+
+
+def test_entrepreneur_sells_for_free_after_another_main_action():
+    gs = _game()
+    pid, _ = _entrepreneur(gs)
+    assert all(not a.is_free for a in _sells(gs, pid))  # a sale now is the main one
+    gs, payload = go_for_a_wee(gs, pid)
+    assert payload["is_free_action"] is False
+    assert gs.player_turn == pid  # the free sale holds the turn open
+    assert _sells(gs, pid) and all(a.is_free for a in _sells(gs, pid))
+    gs, payload = sell_cup(gs, pid, 0, [])
+    assert payload["is_free_action"] is True
+    assert gs.player_turn != pid
+
+
+def test_entrepreneur_selling_as_the_main_action_gives_no_second_sale():
+    gs = _game()
+    pid, ps = _entrepreneur(gs)
+    ps.cups[1] = Cup(ingredients=[Ingredient.GIN, Ingredient.TONIC])
+    gs, payload = sell_cup(gs, pid, 0, [])
+    assert payload["is_free_action"] is False
+    assert gs.player_turn != pid  # no second sale to hold the turn for
+
+
+def test_main_action_is_recorded_and_survives_a_reload():
+    gs = _game()
+    pid, _ = _entrepreneur(gs)
+    gs, _ = go_for_a_wee(gs, pid)
+    assert gs.main_action_this_turn == "go_for_a_wee"
+    again = GameState.from_dict(gs.to_dict())
+    assert again.main_action_this_turn == "go_for_a_wee"
+    gs, _ = sell_cup(gs, pid, 0, [])
+    assert gs.main_action_this_turn is None  # reset for the next player
