@@ -21,10 +21,7 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 
 ## Architecture
 - `/app` — FastAPI routes (`api.py`), business logic (`actions.py`, `gameManager.py`), domain models (`GameState.py`, `PlayerState.py`, `card.py`, `cocktails.py`)
-- `/static` — frontend assets. Three game UIs share the same API; players pick one on the home page (`bocUi` in localStorage) and `/game` redirects to it:
-  - classic: `/game` (`game.html`, `game.js`)
-  - table view: `/play` (`play.html`, `play/`, `css/play.css`)
-  - bar top: `/bar` (`bar.html`, `bar/`, `css/bar.css`) — the physical box on a table: every mat, card and token on show; you act by touching the piece. The drinks menu and rules open in a panel from the turn bar. Legality comes from `/valid-actions`.
+- `/static` — frontend assets. The game page is the bar top, `/bar` (`bar.html`, `bar/`, `css/bar.css`); old `/game` and `/play` links (the classic and table views, now removed) redirect to it. The bar top is the physical box on a table: every mat, card and token on show; you act by touching the piece. The drinks menu and rules open in a panel from the turn bar. Legality comes from `/valid-actions`.
 - `/tests` — BDD tests (`features/*.feature` + `test_game_actions_bdd.py`), UI tests (`ui/`)
 - `/specs` — allium specs (source of truth for game rules, see below)
 

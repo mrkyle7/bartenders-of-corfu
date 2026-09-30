@@ -313,6 +313,21 @@ button.tok { cursor: pointer; }
 }
 
 .housekeeping { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.leave-confirm {
+    flex: 1 1 100%;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    max-width: 460px;
+    margin: 4px auto 0;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1.5px solid var(--danger);
+    text-align: center;
+}
+.leave-confirm p { margin: 0; }
+.lobby .leave-confirm { margin-top: 8px; }
 
 .zone-empty { color: var(--whitewash-dim); font-size: 13px; }
 
@@ -683,6 +698,13 @@ button.card { cursor: pointer; }
     grid-template-columns: auto minmax(0, 1fr);
     gap: 14px;
     align-items: start;
+}
+/* A narrow mat (other players side by side, mid-size screens) stacks its
+   glasses above the bladder and drunk track instead of squeezing them. */
+.mat { container: mat / inline-size; }
+@container mat (max-width: 640px) {
+    .mat-board { grid-template-columns: minmax(0, 1fr); }
+    .bar-area { justify-content: center; flex-wrap: wrap; }
 }
 .hand { grid-column: 1 / -1; }
 

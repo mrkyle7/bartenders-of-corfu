@@ -39,9 +39,13 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers.get("content-type", ""))
 
-    def test_game_page_endpoint(self):
-        """Test the game page endpoint."""
-        response = self.client.get("/game")
+    def test_old_game_pages_redirect_to_the_bar_top(self):
+        """/game and /play (the old views) send links, invites included, to /bar."""
+        for path in ("/game", "/play"):
+            response = self.client.get(f"{path}?id=abc", follow_redirects=False)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.headers["location"], "/bar?id=abc")
+        response = self.client.get("/bar")
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers.get("content-type", ""))
 

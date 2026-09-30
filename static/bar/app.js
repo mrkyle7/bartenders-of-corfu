@@ -3,7 +3,7 @@
 // a glass, your bladder, a card). Legality comes from /valid-actions, so this
 // file only decides how things look and which request a touch sends.
 
-import { api } from '/static/play/api.js';
+import { api } from './api.js';
 import {
     BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ING, MIXERS, MODES, PAIRINGS,
     RULES, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
@@ -41,6 +41,7 @@ const ui = {
     prompt: null, // { text, choices: [{ label, onclick, kind }] }
     historyOpen: false, // show every move, not just the latest
     sheet: null, // 'menu' | 'rules': the panel opened from the turn bar
+    leaving: null, // 'cancel' | 'quit': asking to call the game off or leave it
 };
 
 const SPECIAL_TYPES = ['bitters', 'cointreau', 'lemon', 'sugar', 'vermouth'];
@@ -652,18 +653,35 @@ function endTurn() {
     act(() => api.endTurn(gameId));
 }
 
-function confirmLeave() {
-    const host = game.host === me.id;
-    ask(host ? 'Call off the game for everyone?' : 'Leave the game? You can’t come back to it.', [
-        {
-            label: host ? 'Call it off' : 'Leave the game',
-            kind: 'danger',
-            onclick: () => act(() => (host ? api.cancel(gameId) : api.quit(gameId)), {
-                after: () => refresh().catch(() => {}),
-            }),
-        },
-        { label: 'Stay', onclick: () => { ui.prompt = null; render({ force: true }); } },
-    ]);
+// Calling the game off (host) or leaving it asks first, right by the
+// button: it can happen on anyone's turn.
+function askLeave(kind) {
+    ui.leaving = kind;
+    render({ force: true });
+    document.querySelector('[data-k="leave-yes"]')?.focus();
+}
+
+function leave() {
+    const kind = ui.leaving;
+    ui.leaving = null;
+    act(() => (kind === 'cancel' ? api.cancel(gameId) : api.quit(gameId)), {
+        after: () => refresh().catch(() => {}),
+    });
+}
+
+function leaveConfirm() {
+    if (!ui.leaving) return null;
+    const cancel = ui.leaving === 'cancel';
+    const inLobby = game.status === 'NEW';
+    return h('div.leave-confirm', { role: 'group', 'aria-label': cancel ? 'Call off the game' : 'Leave the game' },
+        h('p', {
+            text: cancel
+                ? (inLobby ? 'Call off this game? Everyone seated goes back to the games list.' : 'Call off the game for everyone? No one wins.')
+                : 'Leave the game? You can’t come back to it; the others play on.',
+        }),
+        h('div.prompt-choices', {},
+            h('button.btn.danger', { type: 'button', onclick: leave, text: cancel ? 'Call it off' : 'Leave the game', 'data-k': 'leave-yes' }),
+            h('button.btn', { type: 'button', onclick: () => { ui.leaving = null; render({ force: true }); }, text: 'Stay', 'data-k': 'leave-no' })));
 }
 
 function proposeUndo() {
@@ -1473,7 +1491,7 @@ function sheetGlasses() {
 function renderOverview() {
     const box = $('overview');
     if (!box) return;
-    if (!game || game.status === 'NEW' || !gs()?.player_states) {
+    if (!game || game.status === 'NEW' || !gs()?.player_states || !gs().turn_order?.length) {
         box.replaceChildren();
         return;
     }
@@ -1566,20 +1584,15 @@ function housekeeping() {
         if (moves.length && !undoOpen && ps?.status === 'active') {
             bits.push(h('button.btn.tiny', { type: 'button', onclick: proposeUndo, text: 'Ask to take back the last turn', 'data-k': 'undo' }));
         }
-        if (game.host === me.id || ps?.status === 'active') {
-            bits.push(h('button.btn.tiny.quiet', { type: 'button', onclick: confirmLeave, text: game.host === me.id ? 'Call off the game' : 'Leave the game', 'data-k': 'leave' }));
+        if (ps?.status === 'active') {
+            bits.push(h('button.btn.tiny.quiet', { type: 'button', onclick: () => askLeave('quit'), text: 'Leave the game', 'data-k': 'leave' }));
+        }
+        if (game.host === me.id) {
+            bits.push(h('button.btn.tiny.quiet', { type: 'button', onclick: () => askLeave('cancel'), text: 'Call off the game', 'data-k': 'call-off' }));
         }
     }
-    bits.push(h('a.btn.tiny.quiet', { href: `/play?id=${encodeURIComponent(gameId)}`, onclick: () => setView('table'), text: 'Switch to table view' }));
-    bits.push(h('a.btn.tiny.quiet', { href: `/game?id=${encodeURIComponent(gameId)}`, onclick: () => setView('classic'), text: 'Switch to classic view' }));
-    return h('nav.housekeeping', { 'aria-label': 'Game options' }, bits);
-}
-
-function setView(view) {
-    try {
-        localStorage.setItem('bocUi', view);
-        localStorage.setItem('bocTableView', view === 'table' ? '1' : '0');
-    } catch { /* storage blocked: the link still works */ }
+    if (!bits.length && !ui.leaving) return null;
+    return h('nav.housekeeping', { 'aria-label': 'Game options' }, bits, leaveConfirm());
 }
 
 // ─── Game over ──────────────────────────────────────────────────────────────
@@ -1689,6 +1702,9 @@ async function renderLobby() {
             text: game.players.length < 2 ? 'Needs a second player' : 'Open the bar',
             onclick: () => act(async () => { await api.start(gameId); await refresh(); return null; }),
         }));
+        parts.push(ui.leaving ? leaveConfirm() : h('button.btn.tiny.quiet', {
+            type: 'button', text: 'Call off this game', 'data-k': 'call-off', onclick: () => askLeave('cancel'),
+        }));
     } else if (isMember()) {
         parts.push(h('p.lobby-sub', { text: `Waiting for ${seatName(game.host)} to open the bar.` }));
     }
@@ -1700,7 +1716,7 @@ async function renderLobby() {
 function render({ force = false } = {}) {
     if (!game) return;
     const signature = JSON.stringify([game.status, game.game_state, game.pending_undo, valid, moves.length,
-        ui.picks, ui.specialPicks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt, ui.sheet]);
+        ui.picks, ui.specialPicks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt, ui.sheet, ui.leaving]);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
     const focusKey = document.activeElement?.getAttribute?.('data-k');
@@ -1710,6 +1726,17 @@ function render({ force = false } = {}) {
         renderSheet();
         renderOverview();
         renderLobby().then(() => restoreFocus(focusKey));
+        return;
+    }
+    if (game.status === 'ENDED' && !gs()?.turn_order?.length) {
+        // Called off in the lobby, before anyone played
+        turnbar();
+        renderSheet();
+        renderOverview();
+        $('table').replaceChildren(h('section.lobby', { id: 'lobby' },
+            h('h2.lobby-title', { text: 'This game was called off' }),
+            h('p.lobby-sub', { text: `${seatName(game.host)} called it off before the bar opened.` }),
+            h('a.btn.go', { href: '/', text: 'Back to the games' })));
         return;
     }
     reconcile();

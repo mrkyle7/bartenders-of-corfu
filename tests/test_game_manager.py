@@ -457,3 +457,40 @@ class TestGetGameAccess(GameManagerTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCancelGame(GameManagerTestCase):
+    def _host_and_player(self):
+        host = _unique("host")
+        host_token = self._token(self._register(host, f"{host}@example.com"))
+        game_id = self._new_game(host_token)
+        player = _unique("player")
+        player_token = self._token(self._register(player, f"{player}@example.com"))
+        self.assertEqual(self._join_game(player_token, game_id).status_code, 200)
+        return host_token, player_token, game_id
+
+    def _cancel(self, token: str, game_id: str):
+        return self.client.post(
+            f"/v1/games/{game_id}/cancel", cookies=self._auth(token)
+        )
+
+    def test_host_can_cancel_a_game_in_its_lobby(self):
+        host_token, _, game_id = self._host_and_player()
+        self.assertEqual(self._cancel(host_token, game_id).status_code, 200)
+        game = self.client.get(f"/v1/games/{game_id}", cookies=self._auth(host_token))
+        self.assertEqual(game.json()["status"], "ENDED")
+        # It can no longer be started or joined
+        self.assertEqual(self._start_game(host_token, game_id).status_code, 409)
+
+    def test_only_the_host_can_cancel_a_game_in_its_lobby(self):
+        host_token, player_token, game_id = self._host_and_player()
+        self.assertEqual(self._cancel(player_token, game_id).status_code, 403)
+        game = self.client.get(f"/v1/games/{game_id}", cookies=self._auth(host_token))
+        self.assertEqual(game.json()["status"], "NEW")
+
+    def test_host_can_call_off_a_started_game(self):
+        host_token, _, game_id = self._host_and_player()
+        self.assertEqual(self._start_game(host_token, game_id).status_code, 200)
+        self.assertEqual(self._cancel(host_token, game_id).status_code, 200)
+        game = self.client.get(f"/v1/games/{game_id}", cookies=self._auth(host_token))
+        self.assertEqual(game.json()["status"], "ENDED")

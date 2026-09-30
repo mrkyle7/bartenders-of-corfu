@@ -206,30 +206,11 @@ async def login_page(request: Request):
 
 
 @app.get("/game")
-async def game_page():
-    login_path = os.path.join("static", "game.html")
-    return FileResponse(
-        login_path,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
-
-
 @app.get("/play")
-async def play_page():
-    """Table view — the alternative game UI. Same game, new table."""
-    play_path = os.path.join("static", "play.html")
-    return FileResponse(
-        play_path,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
+async def old_game_pages(request: Request):
+    """The old classic and table views are gone: send links to the bar top."""
+    query = request.url.query
+    return RedirectResponse(url=f"/bar?{query}" if query else "/bar", status_code=302)
 
 
 @app.get("/bar")

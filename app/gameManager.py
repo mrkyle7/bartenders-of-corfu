@@ -352,10 +352,17 @@ class GameManager:
         return new_state, payload
 
     def cancel_game(self, game: Game, requester_id: UUID) -> tuple[GameState, dict]:
-        """The host cancels the game. No winner is declared."""
-        self._require_started(game)
+        """The host cancels the game. No winner is declared.
+
+        A game still in its lobby (not started) can be cancelled too: it just
+        ends, with no move recorded.
+        """
         if game.host != requester_id:
             raise GameException("Only the host can cancel the game", status_code=403)
+        if game.status == Status.NEW:
+            db.end_game(game.id, game.game_state)
+            return game.game_state, {"cancelled": True}
+        self._require_started(game)
         new_state, payload = actions.cancel_game(game.game_state)
         self._apply_action(game, requester_id, "cancel_game", new_state, payload)
         # Force ENDED status since there's no winner to trigger it automatically

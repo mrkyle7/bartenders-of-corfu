@@ -61,17 +61,11 @@ Use this skill when the user wants a new lobby toggle that changes some game rul
 
 ## 5. UI layer
 
-`static/game.js`
-- Add an entry to `GAME_MODE_INFO` with `label` and `description`. The lobby and the active-modes tab pick it up automatically.
-- If the mode changes which actions are enabled mid-turn, update the action-bar block that builds `myFreeActions` (search for `enabledModes.includes(`). Mirror the once-per-turn gating against `freeUsed`.
-- If the mode introduces a new client-initiated action, add a new `do<Action>` handler and wire its button. Avoid raw API errors — funnel through `showError`.
+`static/bar/data.js`
+- Add an entry to `MODES` with `label` and `desc`. The bar top lobby renders a checkbox per mode from `/v1/game-modes`.
 
-`static/game.html`
-- No changes for typical modes; the lobby checkbox renders from `/v1/game-modes`.
-- Only edit if you need a new action button (then add it to the action bar with an `aria-label`).
-
-`static/css/game.css`
-- No changes for typical modes. Active-modes tab styles already exist (`gb-active-mode-row` etc.).
+`static/bar/app.js`
+- If the mode changes which actions are enabled mid-turn, the bar top follows `/valid-actions`; only add UI if the mode introduces a new client-initiated action. Report errors with `toast()`, never raw API errors.
 
 ## 6. Specs
 

@@ -6,7 +6,6 @@ and table views.
 
 import re
 
-import pytest
 
 from tests.ui.conftest import _api_get, _api_post
 
@@ -34,14 +33,13 @@ def test_bar_lobby_start_disabled_for_lone_host(page, base_url, new_user, new_ga
     assert page.locator("#lobby button", has_text="Needs a second player").is_disabled()
 
 
-@pytest.mark.parametrize("view", ["bar", "play", "game"])
-def test_lobby_invite_link_copies(page, base_url, new_user, new_game, view):
-    """Every view's lobby offers the game's /game link to copy and share."""
+def test_lobby_invite_link_copies(page, base_url, new_user, new_game):
+    """The lobby offers the game's link to copy and share."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"])
-    page.goto(f"{base_url}/{view}?id={new_game}")
+    page.goto(f"{base_url}/bar?id={new_game}")
     link = page.locator("#inviteLink")
     link.wait_for(state="visible", timeout=10000)
-    assert link.input_value().endswith(f"/game?id={new_game}")
+    assert link.input_value().endswith(f"/bar?id={new_game}")
     page.locator(".invite-copy").click()
     page.locator(".invite-copy", has_text="Copied!").wait_for(timeout=5000)
     assert page.evaluate("navigator.clipboard.readText()") == link.input_value()
@@ -141,15 +139,11 @@ def test_bar_everyone_mat_on_show(
     assert theirs.locator(".drunk-step").count() == 7
 
 
-def test_home_choice_sends_game_page_to_bar(page, base_url, new_user, new_game):
-    """Picking bar top on the home page sends /game on to /bar for the same game."""
-    page.goto(f"{base_url}/")
-    choice = page.locator(".ui-choice label", has_text="Bar top")
-    choice.wait_for(state="visible", timeout=10000)
-    choice.click()
-    assert page.is_checked("#uiBar")
+def test_old_game_links_open_the_bar(page, base_url, new_user, new_game):
+    """Old /game links (and invites) open the same game on the bar top."""
     page.goto(f"{base_url}/game?id={new_game}")
     page.wait_for_url(re.compile(r".*/bar\?id=.*"), timeout=10000)
+    page.locator("#lobby").wait_for(state="visible", timeout=10000)
 
 
 def test_bar_rules_and_actions_are_on_show(
@@ -197,3 +191,34 @@ def test_bar_drinks_menu_shows_everyones_glasses(
     assert "Mojito" in sheet.inner_text()
     page.locator('[data-k="sheet-close"]').click()
     sheet.wait_for(state="hidden", timeout=5000)
+
+
+def test_bar_host_can_call_off_a_game_in_its_lobby(page, base_url, new_user, new_game):
+    """The host can call off a game before it starts, after confirming."""
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator('#lobby [data-k="call-off"]').click(timeout=10000)
+    page.locator(".leave-confirm").wait_for(state="visible", timeout=5000)
+    page.locator('[data-k="leave-yes"]').click()
+    page.locator("#lobby", has_text="This game was called off").wait_for(timeout=10000)
+    assert _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])["status"] == (
+        "ENDED"
+    )
+
+
+def test_bar_players_can_leave_a_game_with_people(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """In a game with people, everyone playing (host included) can leave, and
+    the host can also call it off; asking first works on anyone's turn."""
+    _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator('[data-k="leave"]').wait_for(state="visible", timeout=10000)
+    assert page.locator('[data-k="call-off"]').is_visible()
+    page.locator('[data-k="leave"]').click()
+    page.wait_for_timeout(2500)  # a poll must not close the question
+    assert page.locator(".leave-confirm").is_visible()
+    page.locator('[data-k="leave-yes"]').click()
+    page.locator('[data-k="leave"]').wait_for(state="detached", timeout=10000)
+    state = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
+    me = new_user["user"]["id"]
+    assert state["game_state"]["player_states"][me]["status"] == "quit"
