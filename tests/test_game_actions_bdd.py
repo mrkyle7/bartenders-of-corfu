@@ -626,6 +626,22 @@ def bag_and_display_too_few(ctx):
 # ─── When steps ───────────────────────────────────────────────────────────────
 
 
+def _draw_and_assign_pending(token: str, game_id: str, draw_resp, cup_index: int):
+    """Put everything a successful draw left pending into one glass."""
+    drawn = draw_resp.json().get("drawn", [])
+    take_resp = _client.post(
+        f"/v1/games/{game_id}/actions/take-ingredients",
+        json={
+            "assignments": [
+                {"source": "pending", "disposition": "cup", "cup_index": cup_index}
+                for _ in drawn
+            ]
+        },
+        cookies=_auth(token),
+    )
+    return draw_resp, take_resp
+
+
 def _draw_and_assign(
     token: str, game_id: str, count: int, disposition: str = "cup", cup_index: int = 0
 ) -> tuple[dict, dict]:
@@ -848,6 +864,25 @@ def player_drink_cup(ctx, n, cup_index):
         json={"cup_index": cup_index},
         cookies=_auth(token),
     )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(
+    parsers.parse(
+        "player {n:d} tries to take {count:d} ingredients from the bag placing all in cup {cup_index:d}"
+    )
+)
+def player_try_take_n_to_cup(ctx, n, count, cup_index):
+    """Like the take above, but the draw may be refused: record that instead."""
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/draw-from-bag",
+        json={"count": count},
+        cookies=_auth(token),
+    )
+    if resp.status_code == 200:
+        _, resp = _draw_and_assign_pending(token, ctx["game_id"], resp, cup_index)
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
 

@@ -201,9 +201,11 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
     # batch doesn't re-consume the main action).
     if gs.main_action_taken_this_turn and not tip:
         result = [a for a in result if a.is_free]
-    # The Entrepreneur's free sale is the only sale of the turn.
-    if "sell_cup" in used_free:
-        result = [a for a in result if a.action_type != "sell_cup"]
+    # A free-action card's action, once done, isn't offered again this turn
+    # (not even as the main action). Mid-take the take in progress stays.
+    done = used_free & set(_CARD_FREE_ACTION_MAP.values())
+    if done and not tip:
+        result = [a for a in result if a.action_type not in done]
 
     return result
 

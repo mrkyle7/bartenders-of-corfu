@@ -91,14 +91,14 @@ variant FreeActionCard : Card {
     free_action_type: take_ingredients | sell_cup | go_for_a_wee
     -- cost: 3 bladder spirits of this card's spirit_type
     -- worth 2 points when claimed
-    -- ongoing: grants the player one free additional action of free_action_type per turn.
+    -- ongoing: makes free_action_type a free action, once per turn, before or
+    --   after the main action. It is not an extra one: once done, the main
+    --   action can't be free_action_type as well. Done first, it may stand in
+    --   for the main action: the player may take another main action or end
+    --   the turn.
     -- Mapping:
     --   RUM     → take_ingredients  (Greedy Bartender)
-    --   VODKA   → sell_cup          (Entrepreneur): selling is free, before or
-    --                                after the main action, but still once a
-    --                                turn: the main action can't be a sale.
-    --                                A sale made first may stand in for the
-    --                                main action: the player may end the turn.
+    --   VODKA   → sell_cup          (Entrepreneur)
     --   GIN     → go_for_a_wee      (Weak Bladder)
 }
 

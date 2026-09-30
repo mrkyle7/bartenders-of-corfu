@@ -122,10 +122,10 @@ export function servesOrder(card, cup, specials = []) {
 }
 
 const FREE_ACTION_TEXT = {
-    take_ingredients: 'Take ingredients a second time every turn.',
+    take_ingredients: 'Taking ingredients is free: take, then another main action or end your turn.',
     reroll_specials: 'Re-roll your specials for free every turn.',
-    sell_cup: 'Selling is free: sell, then take a main action too or end your turn.',
-    go_for_a_wee: 'Go for a free wee every turn.',
+    sell_cup: 'Selling is free: sell, then another main action or end your turn.',
+    go_for_a_wee: 'Weeing is free: wee, then another main action or end your turn.',
 };
 
 export function cardText(card) {
@@ -171,9 +171,9 @@ export const FREE_ACTIONS = {
     claim_card: 'Claim a card',
     refresh_orders_row: 'Clear the orders',
     refresh_ability_row: 'Swipe the abilities',
-    take_ingredients: 'Take again',
+    take_ingredients: 'Take (free)',
     sell_cup: 'Sell (free)',
-    go_for_a_wee: 'A free wee',
+    go_for_a_wee: 'Wee (free)',
 };
 
 // The rule book shown on the table. Keep in step with "Game Rules.md".

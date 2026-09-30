@@ -220,14 +220,35 @@ def _usable_now(gs: GameState, ps: "PlayerState", action_type: str) -> bool:
     return True
 
 
-def _sold_instead_of_main(gs: GameState) -> bool:
-    """The Entrepreneur's free sale was made and no main action yet.
+# What a free-action card makes free: taking ingredients (Greedy Bartender),
+# selling (Entrepreneur) and a wee (Weak Bladder). With the card that action
+# is free, before or after the main action, but still once a turn: the main
+# action can't be it too.
+CARD_FREE_ACTIONS = frozenset(FREE_ACTION_TYPES.values())
 
-    That sale can stand in for the main action: the player may take one as
+_DONE_ALREADY = {
+    "take_ingredients": "You have already taken ingredients this turn",
+    "sell_cup": "You have already sold this turn",
+    "go_for_a_wee": "You have already been for a wee this turn",
+}
+
+
+def _card_action_used(gs: GameState, action_type: str) -> bool:
+    """A free-action card's action already done (free) this turn."""
+    return (
+        action_type in CARD_FREE_ACTIONS
+        and action_type in gs.free_actions_used_this_turn
+    )
+
+
+def _card_action_instead_of_main(gs: GameState) -> bool:
+    """A free-action card's action was done and no main action yet.
+
+    That action can stand in for the main action: the player may take one as
     well or end the turn there.
     """
-    return "sell_cup" in gs.free_actions_used_this_turn and not (
-        gs.main_action_taken_this_turn
+    return not gs.main_action_taken_this_turn and any(
+        a in CARD_FREE_ACTIONS for a in gs.free_actions_used_this_turn
     )
 
 
@@ -235,10 +256,10 @@ def can_end_turn(gs: GameState, ps: "PlayerState") -> bool:
     """Whether the player whose turn it is may end it now.
 
     After the main action, only while a free action they could use is left
-    (otherwise the turn has already ended); or after the Entrepreneur's free
-    sale, in place of a main action.
+    (otherwise the turn has already ended); or after a free-action card's
+    action, in place of a main action.
     """
-    if _sold_instead_of_main(gs):
+    if _card_action_instead_of_main(gs):
         return True
     if not gs.main_action_taken_this_turn:
         return False
@@ -288,6 +309,8 @@ def _require_action_eligible(gs: GameState, player_id: UUID, action_type: str) -
     available_free = _available_free_actions(gs, ps, gs.free_actions_used_this_turn)
     if action_type in available_free:
         return
+    if _card_action_used(gs, action_type):
+        raise GameException(_DONE_ALREADY[action_type], status_code=409)
     if not gs.main_action_taken_this_turn:
         return
     raise GameException(
@@ -313,10 +336,10 @@ def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> boo
         # Use as free action
         gs.free_actions_used_this_turn.append(action_type)
         is_free = True
-    elif action_type == "sell_cup" and "sell_cup" in gs.free_actions_used_this_turn:
-        # The Entrepreneur's sale is free, not an extra one: after it the main
-        # action can be anything but another sale.
-        raise GameException("You have already sold this turn", status_code=409)
+    elif _card_action_used(gs, action_type):
+        # A free-action card makes its action free, not an extra one: after
+        # it the main action can be anything else.
+        raise GameException(_DONE_ALREADY[action_type], status_code=409)
     elif not gs.main_action_taken_this_turn:
         # Use as main action
         gs.main_action_taken_this_turn = True
@@ -1531,14 +1554,14 @@ def end_turn(
     """EndTurn — player explicitly ends their turn, forfeiting unused free actions.
 
     Available after the main action has been taken while free actions remain,
-    or after the Entrepreneur's free sale in place of a main action.
+    or after a free-action card's action in place of a main action.
     """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
 
-    skipped_main = _sold_instead_of_main(gs)
+    skipped_main = _card_action_instead_of_main(gs)
     if not gs.main_action_taken_this_turn and not skipped_main:
         raise GameException(
             "You must take an action before ending your turn", status_code=409
