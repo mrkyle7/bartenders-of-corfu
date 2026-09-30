@@ -50,8 +50,8 @@ case "$BASENAME" in
   test_*.py)
     TESTS+=("$FILE_PATH")
     ;;
-  game.js|*.html)
-    TESTS+=("tests/ui/test_game_page.py" "tests/ui/test_history_detail.py")
+  app.js|data.js|api.js|bar.html|bar.css)
+    TESTS+=("tests/ui/test_bar_page.py")
     ;;
   *)
     exit 0
@@ -68,10 +68,12 @@ UNIQUE_TESTS=($(printf '%s\n' "${TESTS[@]}" | sort -u))
 echo "Running targeted tests for: $BASENAME (${UNIQUE_TESTS[*]})" >&2
 
 # JS syntax gate — fast check before running any tests
-if ! node --check static/game.js 2>&1; then
-  echo "JS syntax error in static/game.js — fix before tests can run"
-  exit 2
-fi
+for js in static/bar/app.js static/bar/data.js static/bar/api.js; do
+  if ! node --check "$js" 2>&1; then
+    echo "JS syntax error in $js — fix before tests can run"
+    exit 2
+  fi
+done
 
 OUTPUT=$(uv run pytest "${UNIQUE_TESTS[@]}" -v 2>&1)
 EXIT_CODE=$?

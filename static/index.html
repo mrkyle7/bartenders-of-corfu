@@ -31,13 +31,6 @@
         <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender, before you get too drunk!
         </p>
         <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
-        <fieldset class="ui-choice" aria-describedby="uiChoiceDesc">
-            <legend>How the game looks</legend>
-            <label><input type="radio" name="uiChoice" value="classic" id="uiClassic"><span>Classic</span></label>
-            <label><input type="radio" name="uiChoice" value="table" id="tableViewToggle"><span>Table view</span></label>
-            <label><input type="radio" name="uiChoice" value="bar" id="uiBar"><span>Bar top</span></label>
-        </fieldset>
-        <small id="uiChoiceDesc" class="ui-toggle-desc">Bar top lays the game out like the real box: cards, tokens, glasses and mats.</small>
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <section class="game-section hidden" id="myGamesSection">
             <h2>Your Games</h2>
@@ -82,80 +75,7 @@
         setLogOutLink();
         init();
 
-        // Which game UI to use. Game links keep pointing at /game; the classic
-        // page sends players on to /play or /bar when they picked one.
-        let uiChoice = 'classic';
-        try {
-            uiChoice = localStorage.getItem('bocUi')
-                || (localStorage.getItem('bocTableView') === '1' ? 'table' : 'classic');
-        } catch (e) { /* storage blocked: classic */ }
-        document.querySelectorAll('input[name="uiChoice"]').forEach((input) => {
-            input.checked = input.value === uiChoice;
-            input.addEventListener('change', () => {
-                if (!input.checked) return;
-                try {
-                    localStorage.setItem('bocUi', input.value);
-                    localStorage.setItem('bocTableView', input.value === 'table' ? '1' : '0');
-                } catch (e) { /* storage blocked */ }
-            });
-        });
     </script>
-    <style>
-        /* Game UI choice: three printed tiles, the picked one filled. */
-        .ui-choice {
-            display: inline-flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 6px;
-            margin: 10px auto 0;
-            padding: 0;
-            border: 0;
-        }
-
-        .ui-choice legend {
-            width: 100%;
-            margin-bottom: 6px;
-            text-align: center;
-            font-weight: 600;
-            color: var(--theme-text-primary);
-        }
-
-        .ui-choice label { position: relative; cursor: pointer; }
-
-        .ui-choice input {
-            position: absolute;
-            opacity: 0;
-            width: 1px;
-            height: 1px;
-            margin: 0;
-        }
-
-        .ui-choice span {
-            display: inline-block;
-            min-height: 44px;
-            padding: 11px 16px;
-            border: 2px solid var(--theme-btn-bg);
-            border-radius: 6px;
-            color: var(--theme-text-primary);
-            font-weight: 600;
-        }
-
-        .ui-choice input:checked + span {
-            background: var(--theme-btn-bg);
-            color: var(--theme-btn-text);
-        }
-
-        .ui-choice input:focus-visible + span {
-            outline: 2px solid var(--theme-btn-bg);
-            outline-offset: 2px;
-        }
-
-        .ui-toggle-desc {
-            display: block;
-            margin: 2px auto 12px;
-            opacity: 0.75;
-        }
-    </style>
 </body>
 
 </html>

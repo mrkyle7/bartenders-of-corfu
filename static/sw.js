@@ -37,7 +37,7 @@ self.addEventListener('notificationclick', (e) => {
             }
             // Otherwise try any game tab, then open new
             for (const tab of tabs) {
-                if (new URL(tab.url).pathname.startsWith('/game')) {
+                if (/^\/(bar|game)/.test(new URL(tab.url).pathname)) {
                     tab.navigate(url);
                     return tab.focus();
                 }
@@ -111,7 +111,7 @@ async function checkAllGames() {
                     body: `It's your turn in ${hostName}'s game!`,
                     icon: '/static/favicon.ico',
                     tag: `turn-${gameId}`,
-                    data: { url: `/game?id=${gameId}` },
+                    data: { url: `/bar?id=${gameId}` },
                 });
             }
             knownTurns[gameId] = newTurn;

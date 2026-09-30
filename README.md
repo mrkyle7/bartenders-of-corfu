@@ -73,7 +73,7 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
 | Subscription storage | `supabase/migrations/20260509000001_push_subscriptions.sql` |
 | API endpoints | `POST /v1/push-subscriptions`, `DELETE /v1/push-subscriptions`, `GET /vapid-public-key` |
 | Service worker handler | `static/sw.js` — `push` event |
-| Browser subscription | `static/script.js` + `static/game.js` — `subscribeToPush()` |
+| Browser subscription | `static/script.js` — `subscribeToPush()` |
 | Infrastructure | `terraform/bartenders.tf` in [mrkyle7/cheetahmoongames](https://github.com/mrkyle7/cheetahmoongames) — `vapid-private-key` and `vapid-public-key` secrets |
 
 ## References

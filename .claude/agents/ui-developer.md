@@ -86,7 +86,7 @@ theme and components.
 ## Stack
 
 Vanilla JS, HTML, CSS. Files live in `static/`. No build step, no frameworks.
-Read the existing files (`game.js`, `gameElements.js`, `styles.css`, `game.html`)
+Read the existing files (`bar.html`, `bar/app.js`, `bar/data.js`, `css/bar.css`)
 before making changes — understand what already exists.
 
 ## Board game interaction model

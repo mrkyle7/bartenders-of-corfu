@@ -283,6 +283,14 @@ li {
     margin: 0;
 }
 
+.game-action { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.game-action button.cancel-game { background: #b3261e; color: #fff; }
+.game-action button.cancel-game:hover { background: #d64534; }
+.cancel-confirm { font-weight: 600; }
+.game-action button.cancel-game, .game-action:has(.cancel-confirm) button { padding: 8px 14px; font-size: 0.95em; }
+li:has(.cancel-confirm) { flex-wrap: wrap; }
+.game-action:has(.cancel-confirm) { flex: 1 1 100%; justify-content: flex-start; margin-top: 8px; }
+
 button {
     display: block;
     margin: 20px auto;
