@@ -21,7 +21,12 @@ from app.card import (
 from app.cocktails import drink_points, is_cocktail, matches_order
 from app.game import GameException
 from app.GameState import OPEN_DISPLAY_SIZE, GameState, draw_token, regular_in_bag
-from app.Ingredient import Ingredient, is_special
+from app.Ingredient import (
+    BOOZY_SPECIALS,
+    SPECIALIST_SPECIAL,
+    Ingredient,
+    is_special,
+)
 from app.PlayerState import (
     MAX_CUP_INGREDIENTS,
     MAX_CUP_SPECIALS,
@@ -442,10 +447,11 @@ def _apply_drunk_modifier(
 
     Refresher cards make their mixer type always contribute -1 (hot mixers),
     even when spirits are consumed. Plain mixers only sober when no spirits.
-    Specials sober like plain mixers.
+    Bitters, cointreau and vermouth count as spirits; lemon and sugar as
+    plain mixers.
     """
     ps = gs.player_states[player_id]
-    spirits = [i for i in ingredients if i in _SPIRITS]
+    spirits = [i for i in ingredients if i in _SPIRITS or i in BOOZY_SPECIALS]
 
     # Collect mixer types covered by player's refresher cards
     refresher_mixer_types: set[str] = set()
@@ -461,7 +467,9 @@ def _apply_drunk_modifier(
     plain_mixers = [
         i for i in ingredients if i in _MIXERS and i.name not in refresher_mixer_types
     ]
-    plain_mixers += [i for i in ingredients if is_special(i)]
+    plain_mixers += [
+        i for i in ingredients if is_special(i) and i not in BOOZY_SPECIALS
+    ]
 
     # delta = spirits - hot_mixers; plain_mixers only subtract when no spirits
     delta = len(spirits) - len(hot_mixers)
@@ -521,29 +529,63 @@ def _rotate_row(gs: GameState, row: CardRow) -> int:
     return len(removed)
 
 
-def _can_afford(ps: PlayerState, card: Card, spirit_type: str | None = None) -> bool:
-    """Whether the player's bladder meets the card's cost (a threshold, not spent).
+def card_payment(
+    ps: PlayerState, card: Card, pay_with: str | None = None
+) -> list[Ingredient] | None:
+    """The bladder ingredients that pay for a card, or None if it can't be paid.
 
-    For a cup doubler, ``spirit_type`` names the spirit paid with; without it,
-    any spirit with three in the bladder will do.
+    Claiming a karaoke or ability card takes its cost out of the bladder and
+    back into the bag. ``pay_with`` picks how to pay where there's a choice:
+    the spirit for a cup doubler (any spirit with three will do without it),
+    and for a specialist either its spirit (two) or its special (one; the
+    special is used by default when held).
     """
     counts: dict[str, int] = {}
     for i in ps.bladder:
         counts[i.name] = counts.get(i.name, 0) + 1
+
+    def take(name: str | None, n: int) -> list[Ingredient] | None:
+        if not name or counts.get(name, 0) < n:
+            return None
+        return [Ingredient[name]] * n
+
     ct = card.card_type
     if ct in ("karaoke", "free_action"):
-        return counts.get(card.spirit_type or "", 0) >= 3
+        return take(card.spirit_type, 3)
     if ct == "store":
-        return counts.get(card.spirit_type or "", 0) >= 1
-    if ct == "specialist":
-        return counts.get(card.spirit_type or "", 0) >= 2
+        return take(card.spirit_type, 1)
     if ct == "refresher":
-        return counts.get(card.mixer_type or "", 0) >= 2
+        return take(card.mixer_type, 2)
+    if ct == "specialist":
+        special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
+        with_special = take(special.name, 1) if special else None
+        with_spirit = take(card.spirit_type, 2)
+        if pay_with and pay_with.upper() == (card.spirit_type or ""):
+            return with_spirit
+        if pay_with and special and pay_with.upper() == special.name:
+            return with_special
+        return with_special or with_spirit
     if ct == "cup_doubler":
-        if spirit_type:
-            return counts.get(spirit_type.upper(), 0) >= 3
-        return any(counts.get(s.name, 0) >= 3 for s in _SPIRITS)
-    return False
+        if pay_with:
+            return take(pay_with.upper(), 3)
+        for s in _SPIRITS:
+            paid = take(s.name, 3)
+            if paid:
+                return paid
+        return None
+    return None
+
+
+def _can_afford(ps: PlayerState, card: Card, spirit_type: str | None = None) -> bool:
+    """Whether the player's bladder can pay for the card (see card_payment)."""
+    return card_payment(ps, card, spirit_type) is not None
+
+
+def _pay_for_card(gs: GameState, ps: PlayerState, paid: list[Ingredient]) -> None:
+    """Move a card's cost out of the bladder and into the bag."""
+    for ing in paid:
+        ps.bladder.remove(ing)
+        gs.bag_contents.append(ing)
 
 
 # ─── Turn actions ─────────────────────────────────────────────────────────────
@@ -1124,40 +1166,8 @@ def claim_card(
     if CLAIM_CARD in gs.free_actions_used_this_turn:
         raise GameException("You've already claimed a card this turn", status_code=409)
 
-    # Per-type cost validation
-    if card_type == "karaoke":
-        if target_card.spirit_type is None:
-            raise GameException("Karaoke card has no spirit type", status_code=500)
-        available = _available_spirits(ps, target_card.spirit_type)
-        if available < 3:
-            raise GameException(
-                f"Need 3 {target_card.spirit_type} spirits available; have {available}",
-                status_code=400,
-            )
-
-    elif card_type == "store":
-        if target_card.spirit_type is None:
-            raise GameException("Store card has no spirit type", status_code=500)
-        spirit_ing = _spirit_ingredient(target_card.spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 1:
-            raise GameException(
-                f"Need at least 1 {target_card.spirit_type} spirit in bladder; have {bladder_count}",
-                status_code=400,
-            )
-
-    elif card_type == "refresher":
-        if target_card.mixer_type is None:
-            raise GameException("Refresher card has no mixer type", status_code=500)
-        mixer_ing = _mixer_ingredient(target_card.mixer_type)
-        bladder_mixer_count = sum(1 for i in ps.bladder if i == mixer_ing)
-        if bladder_mixer_count < 2:
-            raise GameException(
-                f"Need 2 {target_card.mixer_type} mixers in bladder; have {bladder_mixer_count}",
-                status_code=400,
-            )
-
-    elif card_type == "cup_doubler":
+    # Per-type checks, then the cost: it comes out of the bladder into the bag
+    if card_type == "cup_doubler":
         if spirit_type is None:
             raise GameException(
                 "Must declare spirit_type when claiming a cup doubler card",
@@ -1168,50 +1178,37 @@ def claim_card(
                 "Must declare cup_index (0 or 1) when claiming a cup doubler card",
                 status_code=400,
             )
-        # Spec: bladder only (cannot spend from store cards)
-        spirit_ing = _spirit_ingredient(spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 3:
-            raise GameException(
-                f"Need 3 {spirit_type} spirits in bladder; have {bladder_count}",
-                status_code=400,
-            )
-
-    elif card_type == "specialist":
-        if target_card.spirit_type is None:
-            raise GameException("Specialist card has no spirit type", status_code=500)
-        # Spec: bladder only, threshold check, requires 2 matching spirits
-        spirit_ing = _spirit_ingredient(target_card.spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 2:
-            raise GameException(
-                f"Need 2 {target_card.spirit_type} spirits in bladder; have {bladder_count}",
-                status_code=400,
-            )
-
-    elif card_type == "free_action":
-        if target_card.spirit_type is None:
-            raise GameException("Free action card has no spirit type", status_code=500)
-        # Spec: 3 bladder spirits of the matching type (threshold check only)
-        spirit_ing = _spirit_ingredient(target_card.spirit_type)
-        bladder_count = sum(1 for i in ps.bladder if i == spirit_ing)
-        if bladder_count < 3:
-            raise GameException(
-                f"Need 3 {target_card.spirit_type} spirits in bladder; have {bladder_count}",
-                status_code=400,
-            )
+    if card_type not in (
+        "karaoke",
+        "store",
+        "refresher",
+        "cup_doubler",
+        "specialist",
+        "free_action",
+    ):
+        raise GameException(f"Unknown card type: {card_type}", status_code=500)
+    needs_spirit = ("karaoke", "store", "specialist", "free_action")
+    if card_type in needs_spirit and target_card.spirit_type is None:
+        raise GameException("Card has no spirit type", status_code=500)
+    paid = card_payment(ps, target_card, spirit_type)
+    if paid is None:
+        raise GameException(
+            f"Your bladder doesn't hold what {target_card.name} costs",
+            status_code=400,
+        )
+    _pay_for_card(gs, ps, paid)
 
     # Remove card from row
     target_row.cards.remove(target_card)
 
-    # Per-type effects — cost is a threshold check only, no bladder consumption
+    # Per-type effects (the cost has been paid into the bag)
     if card_type == "karaoke":
         ps.points += 5
         ps.karaoke_cards_claimed += 1
         ps.cards.append(target_card.to_dict())
 
     elif card_type == "store":
-        # Effect: transfer ALL matching spirits from bladder to stored_spirits on the card
+        # Effect: the rest of that spirit in the bladder moves onto the card
         spirit_ing = _spirit_ingredient(target_card.spirit_type)
         transferred = [i for i in ps.bladder if i == spirit_ing]
         ps.bladder = [i for i in ps.bladder if i != spirit_ing]
@@ -1248,6 +1245,7 @@ def claim_card(
         "card_id": card_id,
         "card_name": target_card.name,
         "card_type": card_type,
+        "paid": [i.name for i in paid],
         "is_karaoke": target_card.is_karaoke,
         "row_position": target_row.position,
         "is_free_action": is_free,

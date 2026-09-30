@@ -36,6 +36,14 @@ Feature: Game turn actions
     Then cup 0 should contain exactly 1 SUGAR and 2 COLA
     And it should be player 2's turn
 
+  Scenario: Bitters and vermouth get you drunk, lemon doesn't
+    Given it is player 1's turn
+    And player 1 has a drunk level of 0
+    And the specials display contains 1 BITTERS, 1 VERMOUTH and 1 LEMON
+    When player 1 drinks 1 BITTERS, 1 VERMOUTH and 1 LEMON from the specials display
+    Then player 1's drunk level should be 2
+    And player 1's bladder should contain 3 ingredients
+
   Scenario: Player cannot take a special that is not on the specials display
     Given it is player 1's turn
     And player 1 has an empty cup 0
@@ -362,10 +370,12 @@ Feature: Game turn actions
     Given it is player 1's turn
     And a store card is available in row 3
     And player 1 has 3 spirits in their bladder
+    And the current bag size is recorded
     When player 1 claims that card
     Then player 1 should have 1 card
-    And player 1's store card should have 3 stored spirits
+    And player 1's store card should have 2 stored spirits
     And player 1's bladder should be empty
+    And the bag should contain 1 more ingredient than before
 
   Scenario: Store card cost cannot be paid using same-type stored spirits
     Given it is player 1's turn
@@ -659,12 +669,29 @@ Feature: Game turn actions
     And player 1 should have 1 card
     And a move record should be created for the game
 
-  Scenario: Claiming a specialist card does not consume bladder spirits
+  Scenario: Claiming a specialist card pays its spirits into the bag
     Given it is player 1's turn
     And a specialist card for VODKA is available in row 3
     And player 1's bladder has 2 VODKA spirits
+    And the current bag size is recorded
     When player 1 claims that card
-    Then player 1's bladder should contain 2 ingredients
+    Then player 1's bladder should be empty
+    And the bag should contain 2 more ingredients than before
+
+  Scenario: A specialist card can be claimed with its special instead
+    Given it is player 1's turn
+    And a specialist card for VODKA is available in row 3
+    And player 1's bladder has 1 VERMOUTH spirit
+    When player 1 claims that card
+    Then player 1 should have 2 points
+    And player 1's bladder should be empty
+
+  Scenario: The wrong special does not pay for a specialist card
+    Given it is player 1's turn
+    And a specialist card for VODKA is available in row 3
+    And player 1's bladder has 1 BITTERS spirit
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
 
   Scenario: Cannot claim specialist card with fewer than 2 matching bladder spirits
     Given it is player 1's turn
@@ -773,12 +800,14 @@ Feature: Game turn actions
     And player 1 should have 1 card
     And a move record should be created for the game
 
-  Scenario: Claiming a free action card does not consume bladder spirits
+  Scenario: Claiming a free action card pays its spirits into the bag
     Given it is player 1's turn
     And a free action card for VODKA is available in row 3
     And player 1's bladder has 3 VODKA spirits
+    And the current bag size is recorded
     When player 1 claims that card
-    Then player 1's bladder should contain 3 ingredients
+    Then player 1's bladder should be empty
+    And the bag should contain 3 more ingredients than before
 
   Scenario: Cannot claim free action card with fewer than 3 matching bladder spirits
     Given it is player 1's turn

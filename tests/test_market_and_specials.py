@@ -301,7 +301,8 @@ def _bag_of(gs: GameState, tokens: list[Ingredient]) -> None:
     gs.bag_contents = list(tokens)
 
 
-def test_specials_drawn_to_fill_the_display_go_to_the_specials_display():
+def test_specials_drawn_to_fill_the_display_go_to_the_specials_display(monkeypatch):
+    monkeypatch.setattr("app.GameState.random.choice", lambda seq: seq[0])
     gs = _game()
     gs.open_display = [Ingredient.GIN] * 3
     gs.display_specials = [None] * 3
@@ -638,3 +639,144 @@ def test_four_players_trigger_the_last_round_at_thirty():
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
     new, _ = sell_cup(gs, pid, 0, [])
     assert new.last_round is True
+
+
+# ─── Boozy specials, paying for cards, specialists paid with a special ──────
+
+
+def test_bitters_vermouth_and_cointreau_get_you_drunk():
+    gs = _game()
+    pid, ps = _me(gs)
+    gs.specials_display = [Ingredient.BITTERS, Ingredient.VERMOUTH, Ingredient.LEMON]
+    _bag_of(gs, [Ingredient.GIN] * 10)
+    new, payload = take_ingredients(
+        gs,
+        pid,
+        [
+            {"ingredient": name, "source": "specials", "disposition": "drink"}
+            for name in ("BITTERS", "VERMOUTH", "LEMON")
+        ],
+    )
+    assert payload["turn_complete"]
+    # Two boozy specials: +2, and the lemon can't sober you after them
+    assert new.player_states[pid].drunk_level == 2
+
+
+def test_cointreau_cancels_a_mixers_sobering():
+    gs = _game()
+    pid, ps = _me(gs)
+    ps.drunk_level = 1  # takes four
+    gs.specials_display = [Ingredient.COINTREAU]
+    gs.open_display = [Ingredient.SODA] * 5
+    gs.display_specials = [None] * 5
+    _bag_of(gs, [Ingredient.GIN] * 10)
+    new, _ = take_ingredients(
+        gs,
+        pid,
+        [{"ingredient": "COINTREAU", "source": "specials", "disposition": "drink"}]
+        + [{"ingredient": "SODA", "source": "display", "disposition": "drink"}] * 3,
+    )
+    assert new.player_states[pid].drunk_level == 2
+
+
+def _ability(gs: GameState, card: Card) -> None:
+    _row(gs, 3).cards = [card]
+
+
+def test_claiming_pays_the_cost_into_the_bag():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 1).cards = []
+    _ability(
+        gs,
+        Card(
+            id="sp-vodka",
+            card_type="specialist",
+            name="Vodka Specialist",
+            spirit_type="VODKA",
+        ),
+    )
+    ps.bladder = [Ingredient.VODKA, Ingredient.VODKA, Ingredient.SODA]
+    bag = len(gs.bag_contents)
+    new, payload = claim_card(gs, pid, "sp-vodka")
+    assert new.player_states[pid].bladder == [Ingredient.SODA]
+    assert len(new.bag_contents) == bag + 2
+    assert payload["paid"] == ["VODKA", "VODKA"]
+
+
+@pytest.mark.parametrize(
+    "spirit,special",
+    [
+        ("WHISKEY", "BITTERS"),
+        ("TEQUILA", "COINTREAU"),
+        ("VODKA", "VERMOUTH"),
+        ("RUM", "SUGAR"),
+        ("GIN", "LEMON"),
+    ],
+)
+def test_a_specialist_can_be_paid_with_its_special(spirit, special):
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 1).cards = []
+    _ability(
+        gs,
+        Card(id="sp", card_type="specialist", name="Specialist", spirit_type=spirit),
+    )
+    ps.bladder = [Ingredient[special]]
+    new, payload = claim_card(gs, pid, "sp")
+    assert new.player_states[pid].points == 2
+    assert new.player_states[pid].bladder == []
+    assert payload["paid"] == [special]
+
+
+def test_a_specialist_paid_with_spirits_when_you_say_so():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 1).cards = []
+    _ability(
+        gs,
+        Card(id="sp", card_type="specialist", name="Rum Specialist", spirit_type="RUM"),
+    )
+    ps.bladder = [Ingredient.SUGAR, Ingredient.RUM, Ingredient.RUM]
+    new, payload = claim_card(gs, pid, "sp", spirit_type="RUM")
+    assert payload["paid"] == ["RUM", "RUM"]
+    assert new.player_states[pid].bladder == [Ingredient.SUGAR]
+
+
+def test_the_wrong_special_does_not_pay_for_a_specialist():
+    gs = _game()
+    pid, ps = _me(gs)
+    _ability(
+        gs,
+        Card(id="sp", card_type="specialist", name="Rum Specialist", spirit_type="RUM"),
+    )
+    ps.bladder = [Ingredient.LEMON]
+    with pytest.raises(GameException):
+        claim_card(gs, pid, "sp")
+
+
+def test_karaoke_takes_its_three_spirits_out_of_the_bladder():
+    gs = _game()
+    pid, ps = _me(gs)
+    card = next(c for c in _row(gs, 1).cards if c.spirit_type == "GIN")
+    ps.bladder = [Ingredient.GIN] * 4
+    new, _ = claim_card(gs, pid, card.id)
+    assert new.player_states[pid].bladder == [Ingredient.GIN]
+    assert new.player_states[pid].karaoke_cards_claimed == 1
+
+
+def test_a_store_card_pays_one_spirit_and_stores_the_rest():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 1).cards = []
+    _ability(
+        gs,
+        Card(id="st", card_type="store", name="Gin Store", spirit_type="GIN"),
+    )
+    ps.bladder = [Ingredient.GIN] * 3
+    bag = len(gs.bag_contents)
+    new, _ = claim_card(gs, pid, "st")
+    me = new.player_states[pid]
+    assert me.bladder == []
+    assert me.cards[-1]["stored_spirits"] == ["GIN", "GIN"]
+    assert len(new.bag_contents) == bag + 1

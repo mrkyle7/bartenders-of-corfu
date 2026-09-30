@@ -75,3 +75,19 @@ def is_special(ingredient: Ingredient) -> bool:
 def special_type_of(ingredient: Ingredient) -> str | None:
     """The special type name ("bitters", ...) of a special ingredient."""
     return ingredient.name.lower() if ingredient in SPECIAL_INGREDIENTS else None
+
+
+# Drinking a special: the boozy ones count like a spirit, the rest like a mixer.
+BOOZY_SPECIALS: frozenset[Ingredient] = frozenset(
+    {Ingredient.BITTERS, Ingredient.COINTREAU, Ingredient.VERMOUTH}
+)
+
+# A specialist card can be claimed with one of its spirit's special instead
+# of two of the spirit.
+SPECIALIST_SPECIAL: dict[str, Ingredient] = {
+    "WHISKEY": Ingredient.BITTERS,
+    "TEQUILA": Ingredient.COINTREAU,
+    "VODKA": Ingredient.VERMOUTH,
+    "RUM": Ingredient.SUGAR,
+    "GIN": Ingredient.LEMON,
+}

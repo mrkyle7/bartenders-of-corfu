@@ -27,6 +27,10 @@ export const ING = {
 
 // A special ingredient token (not the old special die).
 export const isSpecial = (name) => !!ING[name]?.special;
+// Drunk, these specials count like a spirit; lemon and sugar like a mixer.
+export const BOOZY = ['BITTERS', 'COINTREAU', 'VERMOUTH'];
+// One of these pays for the specialist card of that spirit.
+export const SPECIALIST_SPECIAL = { WHISKEY: 'BITTERS', TEQUILA: 'COINTREAU', VODKA: 'VERMOUTH', RUM: 'SUGAR', GIN: 'LEMON' };
 // Max specials that sit in one glass, on top of its five spirits and mixers.
 export const GLASS_SPECIALS = 2;
 
@@ -132,7 +136,7 @@ export function cardText(card) {
         case 'store': return `Keeps your ${spirit} out of your bladder. Pour it or drink it whenever you like.`;
         case 'refresher': return `Every ${mixer} you drink sobers you up by one, even with spirits.`;
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
-        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails).`;
+        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Pay 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'}.`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
         case 'order':
             if (card.drink === 'simple') return `Serve a ${card.name}, single or double, for +${card.bonus} on top.`;
@@ -195,7 +199,7 @@ export const RULES = [
         items: [
             'Take exactly 3 plus your drunk level, from the display, the specials tray, blind from the bag, or any mix.',
             'Put each one in a glass (five spirits and mixers at most) or drink it before you take more. Nothing goes back.',
-            'Your drunk level changes once, after the whole take: +1 per spirit drunk, or −1 per mixer or special if you drank no spirits.',
+            'Your drunk level changes once, after the whole take: +1 per spirit, bitters, cointreau or vermouth drunk; if you drank none of those, −1 per mixer, lemon or sugar.',
         ],
     },
     {
@@ -203,7 +207,8 @@ export const RULES = [
         items: [
             'There are two each of bitters, cointreau, lemon, sugar and vermouth in the bag. Whenever one comes out, it goes to the specials tray and the drawing carries on, so the display always shows five spirits and mixers and a blind draw never hands you a special.',
             'Anyone can take specials from the tray as part of their take. A special goes straight into a glass, up to two per glass on top of its five spirits and mixers, or you drink it.',
-            'A glass with a special in it only sells as the cocktail it makes. Drinking a special sobers you like a mixer but it never counts toward a card: people drink them to stop others getting them.',
+            'A glass with a special in it only sells as the cocktail it makes. Drink one to stop others getting it: lemon and sugar sober you like a mixer, bitters, cointreau and vermouth get you drunk like a spirit.',
+            'Specials never count toward a card, except that one pays for a specialist: bitters for whisky, cointreau for tequila, vermouth for vodka, sugar for rum, lemon for gin.',
         ],
     },
     {
@@ -224,7 +229,7 @@ export const RULES = [
     {
         title: 'Cards',
         items: [
-            'Costs are checked against your bladder, not paid. Stored spirits and specials don’t count.',
+            'Claiming pays the cost: those ingredients leave your bladder and go back in the bag. Stored spirits don’t count. A Store card pays one spirit and the rest of it moves onto the card.',
             'Karaoke cards are all out from the start and aren’t replaced. A claimed ability card is replaced from the deck.',
             'Clearing the orders (drunk 3 or more) or swiping the abilities (drunk 2 or more) is free, once a turn each. All three cards go to the bottom of their deck and three new ones are dealt. The karaoke row is never cleared.',
         ],

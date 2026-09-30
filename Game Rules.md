@@ -68,13 +68,14 @@ Your turn ends once you've taken your main action and have no free action left t
 - **They go to the specials tray.** Whenever a special comes out of the bag, whether refilling the display or drawn blind, put it on the specials tray and keep drawing. The display always shows 5 spirits and mixers, and a blind draw never hands you a special.
 - **Anyone can take them.** Taking a special from the tray is one of the ingredients you take this turn. It goes straight into one of your glasses (up to 2 specials per glass, on top of its 5 spirits and mixers), or you drink it.
 - **Only for cocktails.** A glass with a special in it can only be sold as the cocktail it makes.
-- **Drinking one.** It goes into your bladder and sobers you like a mixer, but it never counts toward a card's cost. Why drink one? So nobody else gets it.
+- **Drinking one.** It goes into your bladder. Lemon and sugar sober you like a mixer; bitters, cointreau and vermouth get you drunk like a spirit. Why drink one? So nobody else gets it, or to pay for a specialist card.
+- **Paying for a specialist.** One special pays for the specialist card of its spirit: bitters for whisky, cointreau for tequila, vermouth for vodka, sugar for rum, lemon for gin. Otherwise specials never count toward a card's cost.
 
 ### Drinking
 
 - You can drink ingredients as you take them, or drink a whole glass as your main action.
 - **Everything you drink goes into your bladder.**
-- **Drunk level:** each spirit drunk in the action raises it by 1. If you drank **no spirits**, you sober up by 1 per mixer or special instead (never below 0).
+- **Drunk level:** each spirit, bitters, cointreau or vermouth drunk in the action raises it by 1. If you drank **none of those**, you sober up by 1 per mixer, lemon or sugar instead (never below 0).
 - **Hospital:** above drunk 5 you are out of the game.
 - **Wetting yourself:** more ingredients in your bladder than it has spaces, and you are out of the game.
 - **When you're out:** everything you held (bladder, glasses, stored spirits) goes back in the bag for the others to use.
@@ -125,8 +126,8 @@ Which mixers go with which spirit:
 
 ### Claim a card (free action)
 
-- Take a karaoke card or an ability card if your bladder meets its cost.
-- Costs are **checked, not paid**: the ingredients stay in your bladder. Stored spirits and specials don't count.
+- Take a karaoke card or an ability card if your bladder holds its cost.
+- **The cost is paid:** those ingredients leave your bladder and go back into the bag. Stored spirits don't count.
 - Karaoke cards aren't replaced. A claimed ability card is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
 - Orders can't be claimed: you serve them by selling the drink.
 
@@ -141,10 +142,10 @@ Which mixers go with which spirit:
 | Card | Cost (in your bladder) | Points | What it does |
 |---|---|---|---|
 | Karaoke (one per spirit) | 3 of that spirit | 5 | Claim three and you win. |
-| Store (one per spirit) | 1 of that spirit | 1 | All of that spirit in your bladder moves onto the card. Pour stored spirits into a glass or drink them whenever you like on your turn (free); a wee doesn't flush them. |
+| Store (one per spirit) | 1 of that spirit | 1 | The rest of that spirit in your bladder moves onto the card. Pour stored spirits into a glass or drink them whenever you like on your turn (free); a wee doesn't flush them. |
 | Refresher (one per mixer) | 2 of that mixer | 1 | That mixer always sobers you up by 1, even when you drink spirits with it. |
 | Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |
-| Specialist (one per spirit) | 2 of that spirit | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
+| Specialist (one per spirit) | 2 of that spirit, or 1 of its special (whisky: bitters, tequila: cointreau, vodka: vermouth, rum: sugar, gin: lemon) | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
 | Greedy Bartender | 3 rum | 2 | Take ingredients a second time each turn (free). |
 | Entrepreneur | 3 vodka | 2 | Sell a second time each turn (free). |
 | Weak Bladder | 3 gin | 2 | A free wee each turn. |

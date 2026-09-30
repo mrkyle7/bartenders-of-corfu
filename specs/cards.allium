@@ -46,7 +46,8 @@ variant StoreCard : Card {
     stored_spirits: List<game/Spirit>
     -- cost: 1 bladder spirit of this card's spirit_type
     -- worth 1 point when claimed
-    -- on claim: every spirit of spirit_type in the bladder moves onto this card
+    -- on claim: the cost spirit goes into the bag; every other spirit of
+    --   spirit_type in the bladder moves onto this card
     -- stored spirits may be poured into a cup or drunk at any time on the
     --   owner's turn (free actions). Drinking raises drunk level as normal
     -- stored spirits are consumed when spent (not reusable)
@@ -73,7 +74,9 @@ variant CupDoublerCard : Card {
 variant SpecialistCard : Card {
     spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
     name: String
-    -- cost: 2 bladder spirits of this card's spirit_type
+    -- cost: 2 bladder spirits of this card's spirit_type, OR 1 of its special
+    --   (WHISKEY: bitters, TEQUILA: cointreau, VODKA: vermouth, RUM: sugar,
+    --   GIN: lemon); the player chooses when they could pay either way
     -- worth 2 points when claimed
     -- ongoing: all non-cocktail drinks containing this spirit_type score +2 bonus points
     -- the specialist bonus is applied after cup doubler doubling:
@@ -252,14 +255,20 @@ rule ClaimCard {
         -- player declares the spirit type and the cup at claim time
     requires card.kind = Specialist:
         player.bladder where spirit_type = card.spirit_type has count >= 2
+        or player.bladder contains specialist_special(card.spirit_type)
     requires card.kind = FreeAction:
         player.bladder where spirit_type = card.spirit_type has count >= 3
-    -- Costs are threshold checks only; no bladder ingredients are consumed.
+    -- The cost is paid: exactly the cost's ingredients leave the bladder and
+    -- go back into the bag.
+    let paid = the cost's ingredients (for a Specialist: 1 special or 2 spirits,
+               the special by default when held)
+    ensures: player.bladder = player.bladder - paid
+    ensures: board.bag_contents = board.bag_contents + paid
     if card.kind = Karaoke:
         ensures: player.points = player.points + config.karaoke_card_points
         ensures: player.karaoke_cards_claimed = player.karaoke_cards_claimed + 1
     if card.kind = Store:
-        let transferred = player.bladder where spirit_type = card.spirit_type
+        let transferred = (player.bladder - paid) where spirit_type = card.spirit_type
         ensures: player.bladder = player.bladder - transferred
         ensures: card.stored_spirits = transferred
         ensures: player.points = player.points + config.store_card_points
@@ -310,13 +319,16 @@ rule RefreshCardRow {
 
 rule ApplyDrunkModifier {
     when: ApplyDrunkModifier(player, consumed: List<Ingredient>)
+    let boozy        = {bitters, cointreau, vermouth}
     let spirits      = consumed where kind = Spirit
+                                   or (kind = Special and special_type in boozy)
     let refresher_mixer_types = { card.mixer_type for card in player.cards where kind = Refresher }
     let hot_mixers   = consumed where kind = Mixer and mixer_type in refresher_mixer_types
     let plain_mixers = consumed where (kind = Mixer and mixer_type not in refresher_mixer_types)
-                                   or kind = Special
-    -- Spirits raise drunk level; hot_mixers always lower it (-1 each);
-    -- plain mixers and specials lower it only when no spirits were consumed.
+                                   or (kind = Special and special_type not in boozy)
+    -- Spirits (and bitters, cointreau, vermouth) raise drunk level; hot_mixers
+    -- always lower it (-1 each); plain mixers, lemon and sugar lower it only
+    -- when none of those were consumed.
     let delta = spirits.count - hot_mixers.count
     if spirits.count = 0:
         let delta = delta - plain_mixers.count
@@ -382,8 +394,8 @@ guarantee: row 2 holds only order cards; row 3 holds only ability cards
 guarantee: cleared cards go to the bottom of their own deck; nothing is discarded for good
 guarantee: order cards are never claimed; a sale serves at most one order per cup
 guarantee: order bonuses are never doubled and never get the specialist bonus
-guarantee: card costs are threshold checks only — no bladder ingredients are removed on claim
-guarantee: stored spirits and specials never count toward a card cost
+guarantee: claiming a card moves exactly its cost from the bladder into the bag
+guarantee: stored spirits never count toward a card cost; specials only pay for a specialist
 guarantee: the Store card effect (transferring spirits to stored_spirits) is not a cost consumption
 guarantee: ClaimCard for a CupDoubler card requires a cup parameter; invalid without one
 guarantee: cup.has_cup_doubler is set at claim time and never cleared; persists through sell/refill cycles

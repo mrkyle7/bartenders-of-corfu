@@ -34,7 +34,14 @@ from collections import Counter
 from uuid import UUID
 
 from app.GameState import GameState, regular_in_bag
-from app.Ingredient import SPECIAL_INGREDIENTS, Ingredient, SpecialType, is_special
+from app.Ingredient import (
+    BOOZY_SPECIALS,
+    SPECIAL_INGREDIENTS,
+    SPECIALIST_SPECIAL,
+    Ingredient,
+    SpecialType,
+    is_special,
+)
 from app.PlayerState import MAX_CUP_INGREDIENTS, MAX_CUP_SPECIALS, PlayerState
 from app.actions import _MIXERS, _SPIRITS
 from app.card import ORDERS_ROW
@@ -900,7 +907,12 @@ def _smart_take_assignments(
         if not placed:
             mixer = next((i for i in display_available if i in _MIXERS), None)
             wanted = next(
-                (i for i in specials_available if threats.get(i, 0.0) > 0), None
+                (
+                    i
+                    for i in specials_available
+                    if threats.get(i, 0.0) > 0 and i not in BOOZY_SPECIALS
+                ),
+                None,
             )
             if wanted is not None and (
                 mixer is None or threats[wanted] > threats.get(mixer, 0.0)
@@ -993,7 +1005,9 @@ def _smart_take_assignments(
             and specials_available
             and regular_in_bag(gs) < count - len(assignments)
         ):
-            _take_special(specials_available[0], "drink")
+            _take_special(
+                min(specials_available, key=lambda i: i in BOOZY_SPECIALS), "drink"
+            )
             placed = True
 
         # No more display items — stop here, remaining come from bag
@@ -1102,6 +1116,25 @@ def _in_drawn_order(
         k = next(i for i, (d, _) in enumerate(pool) if d == ing)
         ordered.append(pool.pop(k)[1])
     return ordered
+
+
+def _specialist_unlock(gs: GameState, ps: PlayerState) -> Ingredient | None:
+    """A special on the tray that, drunk, would pay for a specialist card on
+    the table we don't hold yet (bitters → whisky specialist, and so on)."""
+    held = {
+        cd.get("spirit_type") for cd in ps.cards if cd.get("card_type") == "specialist"
+    }
+    in_bladder = set(ps.bladder)
+    for row in gs.card_rows:
+        for card in row.cards:
+            if card.card_type != "specialist" or card.spirit_type in held:
+                continue
+            special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
+            if special and special in gs.specials_display and special not in in_bladder:
+                if special in BOOZY_SPECIALS and ps.drunk_level >= 3:
+                    continue  # not worth the drink this late
+                return special
+    return None
 
 
 def _safe_specials_take(
@@ -1803,6 +1836,25 @@ class SpecialistBuilder(Strategy):
         held = self._held_specialist_types(ps)
         focus = self._best_spirit_type(gs, ps)
         focus_ing = _SPIRIT_MAP.get(focus) if focus else None
+
+        # One special pays for a specialist card: drink it off the tray
+        unlock = _specialist_unlock(gs, ps)
+        if unlock is not None:
+            return _smart_take_assignments(
+                gs,
+                ps,
+                count,
+                cups,
+                prefer_spirit=focus_ing,
+                prioritize_specials=True,
+                prefix=[
+                    {
+                        "ingredient": unlock.name,
+                        "source": "specials",
+                        "disposition": "drink",
+                    }
+                ],
+            )
 
         if held and focus_ing:
             return _smart_take_assignments(
@@ -2540,7 +2592,18 @@ class Mastermind(Strategy):
                 )
             if ci is not None:
                 return (9.0 + for_order(ci) + threat, "cup", ci)
-            # Drinking it sobers like a mixer, and denies whoever needs it
+            boozy = ing in BOOZY_SPECIALS
+            # Drunk, one special pays for a specialist card
+            if ing == _specialist_unlock(gs, ps):
+                return (
+                    12.0 - (3.0 + ps.drunk_level * 2.0 if boozy else 0),
+                    "drink",
+                    None,
+                )
+            # Lemon and sugar sober like a mixer, and deny whoever needs them;
+            # the boozy ones cost a drunk level like a spirit.
+            if boozy:
+                return (-(3.0 + ps.drunk_level * 2.0) + threat, "drink", None)
             if threat > 0:
                 return (1.5 + threat * 2.0, "drink", None)
             return (-2.0, "drink", None)

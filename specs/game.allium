@@ -287,12 +287,14 @@ rule DrinkIngredient {
 rule ApplyDrunkModifier {
     -- Called once per action after all ingredients consumed in that action are known.
     -- Applies to both TakeIngredients (drink disposition) and DrinkCup.
-    -- A player only sobers up if no Spirit was consumed this action; then each
-    -- Mixer or Special sobers by one. If any Spirit was consumed, they provide
+    -- Bitters, cointreau and vermouth count as spirits; lemon and sugar as
+    -- mixers. A player only sobers up if no spirit was consumed this action;
+    -- then each mixer sobers by one. If any spirit was consumed, mixers provide
     -- no sobering effect. (Refresher cards: see cards.allium.)
     when: ApplyDrunkModifier(player, consumed: List<Ingredient>)
-    let spirits = consumed where kind = Spirit
-    let mixers  = consumed where kind in {Mixer, Special}
+    let boozy   = {bitters, cointreau, vermouth}
+    let spirits = consumed where kind = Spirit or (kind = Special and special_type in boozy)
+    let mixers  = consumed where kind = Mixer or (kind = Special and special_type not in boozy)
     ensures: player.drunk_level = player.drunk_level + spirits.count
     if spirits.count = 0:
         ensures: player.drunk_level = max(0, player.drunk_level - mixers.count)
@@ -667,7 +669,7 @@ surface PlayerTurn {
     guarantee: a cup never holds more than config.max_cup_ingredients spirits and mixers, or config.max_cup_specials specials
     guarantee: drunk_level never goes below 0
     guarantee: bladder_capacity never goes below config.min_bladder_capacity
-    guarantee: a special never counts toward a card's cost
+    guarantee: a special never counts toward a card's cost, except one pays for its specialist (see cards.allium)
     guarantee: TakeIngredients is unavailable when the bag's spirits and mixers, the display and the specials display together hold fewer than take_count ingredients
     guarantee: a player may not cast a VoteOnUndoTurn vote if they already voted on the same request
     guarantee: the proposer of an UndoRequest is already recorded as agree and cannot vote again

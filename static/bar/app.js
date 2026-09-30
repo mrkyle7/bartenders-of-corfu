@@ -5,9 +5,9 @@
 
 import { api } from '/static/play/api.js';
 import {
-    CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ING, MIXERS, MODES, PAIRINGS,
+    BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ING, MIXERS, MODES, PAIRINGS,
     RULES, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
-    orderRecipe, servesOrder, splitGlass,
+    orderRecipe, servesOrder, SPECIALIST_SPECIAL, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
 
@@ -386,10 +386,10 @@ function drunkAfter(extra) {
     const ps = mine();
     const refreshers = new Set(ps.cards.filter((c) => c.card_type === 'refresher').map((c) => c.mixer_type));
     const drunk = [...gs().drunk_ingredients_this_turn, ...extra];
-    const spirits = drunk.filter((i) => ING[i]?.kind === 'spirit').length;
+    const spirits = drunk.filter((i) => ING[i]?.kind === 'spirit' || BOOZY.includes(i)).length;
     const hot = drunk.filter((i) => ING[i]?.kind === 'mixer' && refreshers.has(i)).length;
-    // Specials sober you like a plain mixer
-    const plain = drunk.filter((i) => (ING[i]?.kind === 'mixer' && !refreshers.has(i)) || isSpecial(i)).length;
+    // Lemon and sugar sober you like a plain mixer; the boozy specials don't
+    const plain = drunk.filter((i) => (ING[i]?.kind === 'mixer' && !refreshers.has(i)) || (isSpecial(i) && !BOOZY.includes(i))).length;
     let delta = spirits - hot;
     if (!spirits) delta -= plain;
     return Math.max(0, ps.drunk_level + delta);
@@ -597,7 +597,7 @@ function claim(card) {
     });
     const back = { label: 'Leave it', onclick: () => { ui.prompt = null; render({ force: true }); } };
     if (card.card_type === 'cup_doubler') {
-        ask(`${card.name}: which glass does it go on, and which three spirits pay for it?`, [
+        ask(`${card.name}: which glass does it go on, and which three spirits pay for it? They go from your bladder into the bag.`, [
             ...options.map((a) => ({
                 label: `Glass ${a.params.cup_index + 1}, paid with ${ING[a.params.spirit_type]?.label ?? a.params.spirit_type}`,
                 onclick: () => send(a.params),
@@ -607,9 +607,23 @@ function claim(card) {
         ]);
         return;
     }
-    const extra = card.card_type === 'store'
-        ? ` All the ${ING[card.spirit_type].label} in your bladder moves onto it.` : '';
     const free = isFree('claim_card') ? ' It doesn’t use your action.' : '';
+    if (card.card_type === 'specialist') {
+        ask(`Claim ${card.name} for ${plural(points, 'point')}? What you pay with goes from your bladder into the bag.${free}`, [
+            ...options.map((a) => {
+                const pay = a.params.spirit_type;
+                const what = pay === card.spirit_type ? `2 ${ING[pay].label}` : `1 ${ING[pay]?.label ?? pay}`;
+                return { label: `Pay ${what}`, onclick: () => send(a.params), kind: 'go' };
+            }),
+            back,
+        ]);
+        return;
+    }
+    const cost = cardCost(card);
+    const paying = `${cost.length} ${ING[cost[0]]?.label ?? ''}`.trim();
+    const extra = card.card_type === 'store'
+        ? ` One ${ING[card.spirit_type].label} goes into the bag and the rest in your bladder moves onto the card.`
+        : ` ${paying} goes from your bladder into the bag.`;
     ask(`Claim ${card.name} for ${plural(points, 'point')}?${extra}${free}`, [
         { label: 'Claim it', onclick: () => send(options[0].params), kind: 'go' },
         back,
@@ -808,6 +822,8 @@ function costHave(card, ps) {
         }
     }
     if (card.card_type === 'cup_doubler') return Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
+    // One of its special pays for a specialist in full
+    if (card.card_type === 'specialist' && have[SPECIALIST_SPECIAL[card.spirit_type]]) return cardCost(card).length;
     return have[cardCost(card)[0]] ?? 0;
 }
 

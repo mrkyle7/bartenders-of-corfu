@@ -8,7 +8,7 @@ from itertools import combinations
 from uuid import UUID
 
 from app.GameState import GameState, regular_in_bag
-from app.Ingredient import Ingredient
+from app.Ingredient import SPECIALIST_SPECIAL, Ingredient
 from app.PlayerState import PlayerState
 from app.actions import (
     CLAIM_CARD,
@@ -17,6 +17,7 @@ from app.actions import (
     MIN_DRUNK_TO_SWIPE,
     SWIPE_ABILITIES,
     _SPIRITS,
+    card_payment,
 )
 from app.card import ABILITY_ROW, FREE_ACTION_TYPES, KARAOKE_ROW, ORDERS_ROW
 from app.cocktails import drink_points, is_cocktail, matches_order
@@ -464,16 +465,18 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
                     )
 
             elif ct == "specialist":
-                # Needs 2 of matching spirit in bladder (not store)
-                if card.spirit_type and _bladder_spirits(ps, card.spirit_type) >= 2:
-                    result.append(
-                        Action(
-                            action_type="claim_card",
-                            params={"card_id": card.id},
-                            is_free=True,
-                            description=f"Claim specialist '{card.name}' ({card.spirit_type})",
+                # Pay with 2 of its spirit, or 1 of its special (not store)
+                special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
+                for pay in (special.name if special else None, card.spirit_type):
+                    if pay and card_payment(ps, card, pay) is not None:
+                        result.append(
+                            Action(
+                                action_type="claim_card",
+                                params={"card_id": card.id, "spirit_type": pay},
+                                is_free=True,
+                                description=f"Claim specialist '{card.name}' paying {pay}",
+                            )
                         )
-                    )
 
             elif ct == "free_action":
                 if card.spirit_type and _bladder_spirits(ps, card.spirit_type) >= 3:
