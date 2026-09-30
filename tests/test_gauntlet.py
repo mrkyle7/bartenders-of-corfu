@@ -83,8 +83,10 @@ def test_resolve_modes_all_and_none():
     assert set(_resolve_modes("all")) == set(VALID_GAME_MODES)
 
 
-def test_resolve_modes_specific():
-    assert _resolve_modes("sell_both_cups") == ["sell_both_cups"]
+def test_resolve_modes_rejects_retired_modes():
+    """sell_both_cups is a standard rule now, not a mode."""
+    with pytest.raises(ValueError):
+        _resolve_modes("sell_both_cups")
 
 
 # ---------------------------------------------------------------------------

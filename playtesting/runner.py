@@ -228,8 +228,6 @@ class GameRunner:
             )
         elif t == "refresh_card_row":
             gs, _ = actions.refresh_card_row(gs, player_id, p["row_position"])
-        elif t == "reroll_specials":
-            gs, _ = actions.reroll_specials(gs, player_id, p["chosen_specials"])
         else:
             raise GameException(f"Unknown action type: {t}", status_code=500)
 
@@ -308,7 +306,7 @@ class GameRunner:
             result.winner = gs.winner
             result.winner_strategy = self.strategies[gs.winner].name
             ws = gs.player_states[gs.winner]
-            if ws.points >= 40:
+            if ws.points >= gs.score_to_win:
                 result.reason = "points"
             elif ws.karaoke_cards_claimed >= 3:
                 result.reason = "karaoke"

@@ -6,6 +6,7 @@ by constructing GameState objects in memory.
 
 from uuid import uuid4
 
+from app.card import Card, CardRow
 from app.GameState import GameState
 from app.Ingredient import Ingredient
 from app.PlayerState import PlayerState
@@ -241,16 +242,15 @@ class TestLastRoundWithElimination:
 
 
 class TestLastRoundWithFreeActionModes:
-    """Last-round must still resolve when free-action modes leave free slots unused.
+    """Last-round must still resolve when a free claim holds the turn open.
 
-    When `claim_card_free_action` (or `reroll_specials_free_action`) is on, every
-    player has at least one free action available every turn. After the main
-    action, the turn does not auto-advance — the player must explicitly use the
-    free action or end_turn. The round still has to resolve once the turn wraps
+    Claiming a card is a free action once a turn. When a player could still
+    claim one after their main action, the turn does not auto-advance — they
+    must claim or end_turn. The round still has to resolve once the turn wraps
     back to the round-start player.
     """
 
-    def _make_with_mode(self, points, mode):
+    def _make_with_mode(self, points, mode=None):
         pids = [uuid4() for _ in range(2)]
         player_states = {}
         for i, pid in enumerate(pids):
@@ -265,21 +265,34 @@ class TestLastRoundWithFreeActionModes:
             open_display=[Ingredient.COLA] * 5,
             turn_order=list(pids),
             turn_number=0,
-            game_modes=[mode],
+            card_rows=[
+                CardRow(
+                    position=1,
+                    cards=[
+                        Card(
+                            id="sea-shanty",
+                            card_type="karaoke",
+                            name="Sea Shanty",
+                            spirit_type="RUM",
+                        )
+                    ],
+                )
+            ],
         )
+        # P2 can afford the karaoke card, so a free claim is open to them
+        player_states[pids[1]].bladder = [Ingredient.RUM] * 3
         return gs, pids
 
     def test_p2_trigger_then_end_turn_ends_game(self):
-        """P2 (last) triggers last_round under claim_card_free_action; end_turn ends game."""
+        """P2 (last) triggers last_round with a claim still open; end_turn ends game."""
         from app import actions as A
 
-        gs, pids = self._make_with_mode([0, 37], "claim_card_free_action")
+        gs, pids = self._make_with_mode([0, 37])
         p1, p2 = pids
 
-        # P1 takes a non-scoring main action, then ends their turn (free claim_card forfeited)
+        # P1 takes a non-scoring main action; with nothing to claim, the turn passes
         gs.player_states[p1].bladder = [Ingredient.COLA]
         gs, _ = A.go_for_a_wee(gs, p1)
-        gs, _ = A.end_turn(gs, p1)
         assert gs.player_turn == p2
 
         # P2 sells LIET → 52 pts → triggers last_round; turn does NOT advance
@@ -304,14 +317,13 @@ class TestLastRoundWithFreeActionModes:
         """
         from app.bot_player import _force_advance_turn
 
-        gs, pids = self._make_with_mode([0, 37], "claim_card_free_action")
+        gs, pids = self._make_with_mode([0, 37])
         p1, p2 = pids
 
         gs.player_states[p1].bladder = [Ingredient.COLA]
         from app import actions as A
 
         gs, _ = A.go_for_a_wee(gs, p1)
-        gs, _ = A.end_turn(gs, p1)
         _setup_cup_for_liet(gs.player_states[p2])
         gs, _ = A.sell_cup(gs, p2, 0, ["sugar", "lemon"])
         assert gs.last_round is True

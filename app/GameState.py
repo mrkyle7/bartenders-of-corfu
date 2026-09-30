@@ -2,7 +2,7 @@ import random
 from typing import Mapping, Optional
 from uuid import UUID
 
-from app.card import CardRow, build_deck, deal_initial_rows
+from app.card import CardRow, build_deck, build_order_deck, deal_market
 from app.Ingredient import Ingredient
 from app.PlayerState import Cup, PlayerState
 from app.user import User
@@ -10,7 +10,19 @@ from app.user import User
 OPEN_DISPLAY_SIZE = 5
 
 
+def score_to_win(num_players: int) -> int:
+    """Points that trigger the last round: 40 for two players, 35 for three, 30 for four."""
+    if num_players <= 2:
+        return 40
+    if num_players == 3:
+        return 35
+    return 30
+
+
 def create_initial_bag(num_players: int) -> list[Ingredient]:
+    """Each spirit and mixer: players + 3 tokens. Special tokens: players + 2."""
+    from app.specials import special_tokens_for
+
     multiplier = num_players + 3
     return (
         [Ingredient.WHISKEY] * multiplier
@@ -22,8 +34,21 @@ def create_initial_bag(num_players: int) -> list[Ingredient]:
         + [Ingredient.SODA] * multiplier
         + [Ingredient.TONIC] * multiplier
         + [Ingredient.CRANBERRY] * multiplier
-        + [Ingredient.SPECIAL] * multiplier
+        + [Ingredient.SPECIAL] * special_tokens_for(num_players)
     )
+
+
+def _faces_for(
+    tokens: list[Ingredient], faces: list[str | None] | None
+) -> list[str | None]:
+    """Special faces lined up with ``tokens``.
+
+    Games saved before specials were rolled on the display have no faces:
+    their special tokens show "choose any".
+    """
+    if faces is not None and len(faces) == len(tokens):
+        return list(faces)
+    return ["any" if t == Ingredient.SPECIAL else None for t in tokens]
 
 
 class GameState:
@@ -47,6 +72,9 @@ class GameState:
         main_action_taken_this_turn: bool = False,
         free_actions_used_this_turn: list[str] | None = None,
         game_modes: list[str] | None = None,
+        order_deck: list[dict] | None = None,
+        display_specials: list[str | None] | None = None,
+        bag_draw_pending_specials: list[str | None] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -98,6 +126,21 @@ class GameState:
         # Optional rule variations selected in the lobby (immutable after start).
         # See app/game_modes.py for valid values.
         self.game_modes: list[str] = list(game_modes) if game_modes else []
+        # Drink orders not on the table, drawn from the front; served or
+        # cleared orders go to the back.
+        self.order_deck: list[dict] = order_deck if order_deck is not None else []
+        # The face each special token shows, lined up with open_display and
+        # bag_draw_pending (None for spirits and mixers). See app/specials.py.
+        self.display_specials: list[str | None] = _faces_for(
+            self.open_display, display_specials
+        )
+        self.bag_draw_pending_specials: list[str | None] = _faces_for(
+            self.bag_draw_pending, bag_draw_pending_specials
+        )
+
+    @property
+    def score_to_win(self) -> int:
+        return score_to_win(len(self.turn_order) or len(self.player_states))
 
     def has_mode(self, mode: str) -> bool:
         """Return True if the given optional rule variation is enabled."""
@@ -129,23 +172,33 @@ class GameState:
         random.shuffle(turn_order)
         first_player = turn_order[0]
 
-        # Build card deck and deal 3 rows of 3 cards
-        deck = build_deck(game_modes)
-        card_rows, remaining_deck = deal_initial_rows(deck)
+        # Lay out the market: every karaoke card, three orders, three abilities
+        card_rows, ability_deck, order_deck = deal_market(
+            build_deck(), build_order_deck()
+        )
 
-        return cls(
+        gs = cls(
             winner=None,
             bag_contents=bag,
             player_states=player_states,
             player_turn=first_player,
             open_display=open_display,
             card_rows=card_rows,
-            deck=[c.to_dict() for c in remaining_deck],
+            deck=[c.to_dict() for c in ability_deck],
             turn_order=turn_order,
             turn_number=0,
             discard=[],
             game_modes=list(game_modes) if game_modes else [],
+            order_deck=[c.to_dict() for c in order_deck],
         )
+        # Special tokens on the display are rolled as they come out
+        from app.specials import roll_face
+
+        gs.display_specials = [None] * len(open_display)
+        for i, token in enumerate(open_display):
+            if token == Ingredient.SPECIAL:
+                gs.display_specials[i] = roll_face(gs)
+        return gs
 
     def to_dict(self) -> dict:
         return {
@@ -173,6 +226,11 @@ class GameState:
             "main_action_taken_this_turn": self.main_action_taken_this_turn,
             "free_actions_used_this_turn": list(self.free_actions_used_this_turn),
             "game_modes": list(self.game_modes),
+            "order_deck": self.order_deck,
+            "order_deck_size": len(self.order_deck),
+            "display_specials": list(self.display_specials),
+            "bag_draw_pending_specials": list(self.bag_draw_pending_specials),
+            "score_to_win": self.score_to_win,
         }
 
     @classmethod
@@ -237,4 +295,7 @@ class GameState:
                 "free_actions_used_this_turn", []
             ),
             game_modes=state_data.get("game_modes", []),
+            order_deck=state_data.get("order_deck", []),
+            display_specials=state_data.get("display_specials"),
+            bag_draw_pending_specials=state_data.get("bag_draw_pending_specials"),
         )

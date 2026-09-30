@@ -217,3 +217,52 @@ def drink_points(
 
     # Single spirit drink
     return 1
+
+
+COCKTAIL_NAMES: list[str] = [name for *_rest, name in _RECIPES]
+
+
+def cocktail_name(
+    cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> str | None:
+    """The named cocktail this cup and these specials make, if any."""
+    cup_spirits = Counter(i for i in cup_ingredients if i in _SPIRITS)
+    cup_mixers = Counter(i for i in cup_ingredients if i in _MIXERS)
+    try:
+        specials = Counter(SpecialType(s) for s in declared_specials)
+    except ValueError:
+        return None
+    for r_spirits, r_mixers, r_specials, _pts, name in _RECIPES:
+        if (
+            cup_spirits == r_spirits
+            and cup_mixers == r_mixers
+            and specials == r_specials
+        ):
+            return name
+    return None
+
+
+def matches_order(
+    order: dict, cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> bool:
+    """Whether selling this cup (a sellable drink) serves this order card.
+
+    A simple order ("Rum and Cola") takes that spirit and mixer, single or
+    double; a slammer order takes a Tequila Slammer; a cocktail order takes
+    that cocktail.
+    """
+    drink = order.get("drink")
+    name = cocktail_name(cup_ingredients, declared_specials)
+    if drink == "cocktail":
+        return name is not None and name == order.get("cocktail")
+    if name is not None:
+        return False
+    spirits = {i.name for i in cup_ingredients if i in _SPIRITS}
+    mixers = {i.name for i in cup_ingredients if i in _MIXERS}
+    if drink == "slammer":
+        return spirits == {"TEQUILA"} and not mixers
+    if drink == "simple":
+        return spirits == {order.get("spirit_type")} and mixers == {
+            order.get("mixer_type")
+        }
+    return False

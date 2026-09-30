@@ -29,7 +29,7 @@ Feature: Game turn actions
     And player 1 has an empty cup 0
     And player 1 has no special tokens on their player mat
     And the open display contains 4 COLA and 1 SPECIAL
-    When player 1 takes 1 special from the open display and rolls BITTERS
+    When player 1 takes the special from the open display choosing BITTERS
     Then player 1's player mat should have 1 BITTERS
     And it should be player 1's turn
     When player 1 takes 2 COLA from the open display placing all in cup 0
@@ -127,19 +127,32 @@ Feature: Game turn actions
 
   Scenario: Player claims a card they can afford
     Given it is player 1's turn
-    And a refresher card is available in row 1
+    And a refresher card is available in row 3
     And player 1 has 2 mixers in their bladder
     When player 1 claims that card
     Then player 1 should have 1 card
     And a move record should be created for the game
 
-  Scenario: Claiming a karaoke card replaces the slot from the deck
+  Scenario: Claiming a karaoke card leaves its place in the karaoke row empty
     Given it is player 1's turn
     And a karaoke card is available in row 1
     And player 1 has 3 spirits in their bladder
     When player 1 claims that card
     Then player 1 should have 1 card
-    And row 1 should have 4 cards
+    And row 1 should have 5 cards
+
+  Scenario: Claiming a card is a free action and keeps the turn
+    Given it is player 1's turn
+    And a karaoke card is available in row 1
+    And player 1 has 3 spirits in their bladder
+    When player 1 claims that card
+    Then it should still be player 1's turn
+
+  Scenario: Orders cannot be claimed
+    Given it is player 1's turn
+    And the orders row holds a "Vodka and Cola" order
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
 
   Scenario: Player cannot claim a card they cannot afford
     Given it is player 1's turn
@@ -148,18 +161,46 @@ Feature: Game turn actions
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
 
-  Scenario: Player refreshes a card row when drunk enough
+  Scenario: Player clears the orders row when drunk enough
     Given it is player 1's turn
     And player 1 has a drunk level of 3
     When player 1 refreshes card row 2
     Then row 2 should be refreshed with new cards
+    And row 2 should have 3 cards
     And a move record should be created for the game
 
-  Scenario: Player cannot refresh a card row when not drunk enough
+  Scenario: Player cannot clear the orders row when not drunk enough
     Given it is player 1's turn
     And player 1 has a drunk level of 2
-    When player 1 tries to refresh card row 1
+    When player 1 tries to refresh card row 2
     Then the action should be rejected with a 400 error
+
+  Scenario: Swiping the ability cards at drunk 2 is a free action
+    Given it is player 1's turn
+    And player 1 has a drunk level of 2
+    When player 1 refreshes card row 3
+    Then row 3 should have 3 cards
+    And it should still be player 1's turn
+
+  Scenario: Player cannot swipe the ability cards when not drunk enough
+    Given it is player 1's turn
+    And player 1 has a drunk level of 1
+    When player 1 tries to refresh card row 3
+    Then the action should be rejected with a 400 error
+
+  Scenario: Serving an order pays its bonus on top of the drink
+    Given it is player 1's turn
+    And the orders row holds a "Vodka and Cola" order
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 3 points
+
+  Scenario: A drink nobody ordered scores as usual
+    Given it is player 1's turn
+    And the orders row holds a "Gin and Tonic" order
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 1 point
 
   Scenario: Only the active player can take actions
     Given it is player 1's turn
@@ -281,7 +322,7 @@ Feature: Game turn actions
   Scenario: ClaimCard is blocked while a take-ingredients batch is in progress
     Given it is player 1's turn
     And the bag contains no special tokens
-    And a refresher card is available in row 1
+    And a refresher card is available in row 3
     And player 1 has 2 mixers in their bladder
     When player 1 takes 1 ingredient from the bag
     And player 1 tries to claim that card
@@ -298,7 +339,7 @@ Feature: Game turn actions
 
   Scenario: Store card transfers all matching bladder spirits to stored_spirits on claim
     Given it is player 1's turn
-    And a store card is available in row 2
+    And a store card is available in row 3
     And player 1 has 3 spirits in their bladder
     When player 1 claims that card
     Then player 1 should have 1 card
@@ -308,7 +349,7 @@ Feature: Game turn actions
   Scenario: Store card cost cannot be paid using same-type stored spirits
     Given it is player 1's turn
     And player 1 holds a VODKA store card with 2 stored spirits
-    And a store card is available in row 2
+    And a store card is available in row 3
     And player 1 has 0 spirits in their bladder
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
@@ -338,7 +379,7 @@ Feature: Game turn actions
 
   Scenario: Claiming a CupDoubler card without a cup_index is rejected
     Given it is player 1's turn
-    And a cup doubler card is available in row 2
+    And a cup doubler card is available in row 3
     And player 1 has 3 spirits in their bladder
     When player 1 tries to claim that cup doubler card without a cup_index
     Then the action should be rejected with a 400 error
@@ -351,29 +392,21 @@ Feature: Game turn actions
     When player 1 tries to refresh card row 1
     Then the action should be rejected with a 400 error
 
-  Scenario: Refreshing row 2 discards a karaoke card rather than returning it to row 1
-    Given it is player 1's turn
-    And player 1 has a drunk level of 3
-    And a karaoke card is available in row 2
-    When player 1 refreshes card row 2
-    Then row 2 should be refreshed with new cards
-    And the refreshed card should not appear in row 1
-
-  Scenario: Claiming a card when the deck is empty leaves the row slot vacant
+  Scenario: Claiming an ability card when the deck is empty leaves the slot vacant
     Given it is player 1's turn
     And the deck is empty
-    And a refresher card is available in row 2
+    And a refresher card is available in row 3
     And player 1 has 2 mixers in their bladder
     When player 1 claims that card
-    Then row 2 should have 2 cards
+    Then row 3 should have 2 cards
 
-  Scenario: At game start row 1 has 3 karaoke cards and rows 2 and 3 have 3 cards each
+  Scenario: At game start all 5 karaoke cards are out, with 3 ability cards and 18 orders
     Given it is player 1's turn
-    Then row 1 should have 3 cards
+    Then row 1 should have 5 cards
     And all cards in row 1 should be karaoke type
-    And row 2 should have 3 cards
     And row 3 should have 3 cards
     And the deck should have 16 cards remaining
+    And the orders row and order deck should hold 18 orders in all
 
   # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────
 
@@ -598,7 +631,7 @@ Feature: Game turn actions
 
   Scenario: Claiming a specialist card awards 2 points
     Given it is player 1's turn
-    And a specialist card for VODKA is available in row 2
+    And a specialist card for VODKA is available in row 3
     And player 1's bladder has 2 VODKA spirits
     When player 1 claims that card
     Then player 1 should have 2 points
@@ -607,21 +640,21 @@ Feature: Game turn actions
 
   Scenario: Claiming a specialist card does not consume bladder spirits
     Given it is player 1's turn
-    And a specialist card for VODKA is available in row 2
+    And a specialist card for VODKA is available in row 3
     And player 1's bladder has 2 VODKA spirits
     When player 1 claims that card
     Then player 1's bladder should contain 2 ingredients
 
   Scenario: Cannot claim specialist card with fewer than 2 matching bladder spirits
     Given it is player 1's turn
-    And a specialist card for VODKA is available in row 2
+    And a specialist card for VODKA is available in row 3
     And player 1's bladder has 1 VODKA spirit
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
 
   Scenario: Cannot claim specialist card with 0 matching bladder spirits
     Given it is player 1's turn
-    And a specialist card for VODKA is available in row 2
+    And a specialist card for VODKA is available in row 3
     And player 1 has 0 spirits in their bladder
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
@@ -629,14 +662,14 @@ Feature: Game turn actions
   Scenario: Cannot claim specialist card using stored spirits from a store card
     Given it is player 1's turn
     And player 1 holds a VODKA store card with 3 stored spirits
-    And a specialist card for VODKA is available in row 2
+    And a specialist card for VODKA is available in row 3
     And player 1 has 0 spirits in their bladder
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
 
   Scenario: Cannot claim specialist card with wrong spirit type in bladder
     Given it is player 1's turn
-    And a specialist card for VODKA is available in row 2
+    And a specialist card for VODKA is available in row 3
     And player 1's bladder has 3 GIN spirits
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
@@ -708,81 +741,11 @@ Feature: Game turn actions
     And player 1 sells cup 1 with no declared specials
     Then player 1 should have 6 points
 
-  # ── ReRollSpecials ──────────────────────────────────────────────────────────
-
-  Scenario: Player re-rolls a single special and gets a new one
-    Given it is player 1's turn
-    And player 1 has "sugar" on their player mat
-    When player 1 re-rolls specials "sugar" and rolls "lemon"
-    Then player 1's player mat should have 1 LEMON
-    And a move record should be created for the game
-    And it should be player 2's turn
-
-  Scenario: Player re-rolls multiple specials
-    Given it is player 1's turn
-    And player 1 has "sugar" and "lemon" on their player mat
-    When player 1 re-rolls specials "sugar,lemon" and rolls "bitters,cointreau"
-    Then player 1's player mat should have 1 BITTERS and 1 COINTREAU
-    And it should be player 2's turn
-
-  Scenario: Player re-rolls a special and rolls nothing — special is lost
-    Given it is player 1's turn
-    And player 1 has "sugar" on their player mat
-    When player 1 re-rolls specials "sugar" and rolls "nothing"
-    Then player 1's player mat should be empty
-    And it should be player 2's turn
-
-  Scenario: Player re-rolls all specials with mixed results
-    Given it is player 1's turn
-    And player 1 has "sugar" and "lemon" on their player mat
-    When player 1 re-rolls specials "sugar,lemon" and rolls "bitters,nothing"
-    Then player 1's player mat should have 1 BITTERS
-    And it should be player 2's turn
-
-  Scenario: Re-roll can yield the same special type
-    Given it is player 1's turn
-    And player 1 has "sugar" on their player mat
-    When player 1 re-rolls specials "sugar" and rolls "sugar"
-    Then player 1's player mat should have 1 SUGAR
-    And it should be player 2's turn
-
-  Scenario: ReRollSpecials with no specials chosen is rejected
-    Given it is player 1's turn
-    And player 1 has "sugar" on their player mat
-    When player 1 tries to re-roll with no specials
-    Then the action should be rejected with a 400 error
-
-  Scenario: ReRollSpecials with a special not on the mat is rejected
-    Given it is player 1's turn
-    And player 1 has "sugar" on their player mat
-    When player 1 tries to re-roll specials "lemon"
-    Then the action should be rejected with a 400 error
-
-  Scenario: ReRollSpecials is rejected when not your turn
-    Given it is player 1's turn
-    And player 1 has "sugar" on their player mat
-    When player 2 tries to re-roll specials "sugar"
-    Then the action should be rejected with a 409 error
-
-  Scenario: ReRollSpecials is blocked while a take-ingredients batch is in progress
-    Given it is player 1's turn
-    And the bag contains no special tokens
-    And player 1 has "sugar" on their player mat
-    When player 1 takes 1 ingredient from the bag
-    And player 1 tries to re-roll specials "sugar"
-    Then the action should be rejected with a 409 error
-
-  Scenario: Bag contents unchanged after ReRollSpecials
-    Given it is player 1's turn
-    And player 1 has "sugar" on their player mat
-    When player 1 re-rolls specials "sugar" and rolls "nothing"
-    Then the bag size should be unchanged
-
   # ── Free Action Cards: Claiming ──────────────────────────────────────────────
 
   Scenario: Claiming a free action card awards 2 points
     Given it is player 1's turn
-    And a free action card for RUM is available in row 2
+    And a free action card for RUM is available in row 3
     And player 1's bladder has 3 RUM spirits
     When player 1 claims that card
     Then player 1 should have 2 points
@@ -791,14 +754,14 @@ Feature: Game turn actions
 
   Scenario: Claiming a free action card does not consume bladder spirits
     Given it is player 1's turn
-    And a free action card for VODKA is available in row 2
+    And a free action card for VODKA is available in row 3
     And player 1's bladder has 3 VODKA spirits
     When player 1 claims that card
     Then player 1's bladder should contain 3 ingredients
 
   Scenario: Cannot claim free action card with fewer than 3 matching bladder spirits
     Given it is player 1's turn
-    And a free action card for GIN is available in row 2
+    And a free action card for GIN is available in row 3
     And player 1's bladder has 2 GIN spirits
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
@@ -831,16 +794,6 @@ Feature: Game turn actions
     And player 1 holds a RUM free action card
     And player 1's cup 0 contains 1 VODKA and 1 COLA
     When player 1 takes 3 ingredients from the bag placing all in cup 1
-    Then it should still be player 1's turn
-    When player 1 sells cup 0 with no declared specials
-    Then it should be player 2's turn
-
-  Scenario: Free action reroll_specials then main action sell_cup
-    Given it is player 1's turn
-    And player 1 holds a WHISKEY free action card
-    And player 1 has "sugar" on their player mat
-    And player 1's cup 0 contains 1 GIN and 1 TONIC
-    When player 1 re-rolls specials "sugar" and rolls "lemon"
     Then it should still be player 1's turn
     When player 1 sells cup 0 with no declared specials
     Then it should be player 2's turn
@@ -880,7 +833,7 @@ Feature: Game turn actions
 
   Scenario: Free action card exposes free_action_type in card data
     Given it is player 1's turn
-    And a free action card for VODKA is available in row 2
+    And a free action card for VODKA is available in row 3
     And player 1's bladder has 3 VODKA spirits
     When player 1 claims that card
     Then player 1's free action card should have free_action_type "sell_cup"

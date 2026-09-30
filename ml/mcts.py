@@ -185,8 +185,6 @@ class RolloutExecutor:
             )
         elif t == "refresh_card_row":
             gs, _ = actions.refresh_card_row(gs, player_id, p["row_position"])
-        elif t == "reroll_specials":
-            gs, _ = actions.reroll_specials(gs, player_id, p["chosen_specials"])
 
         return gs
 

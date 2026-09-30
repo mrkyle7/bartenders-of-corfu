@@ -22,7 +22,6 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from app.GameState import GameState
 from app.api import app
 from app.Ingredient import Ingredient, SpecialType
-from unittest.mock import patch
 
 # ─── Load scenarios from feature files ────────────────────────────────────────
 
@@ -114,6 +113,23 @@ def ctx():
 # ─── Background steps ─────────────────────────────────────────────────────────
 
 
+def _clear_orders_row(game_id: str):
+    """Put the dealt orders at the bottom of the order deck.
+
+    A random order on the table would add its bonus to any matching sale and
+    make point checks flaky; scenarios about orders put one out explicitly.
+    """
+
+    def patch(gs):
+        for r in gs.card_rows:
+            if r.position == 2:
+                gs.order_deck.extend(c.to_dict() for c in r.cards)
+                r.cards = []
+        return gs
+
+    _patch_game_state(game_id, patch)
+
+
 @given("a started game with 2 players", target_fixture="ctx")
 def started_game_2_players():
     p1 = _unique("p1")
@@ -123,6 +139,7 @@ def started_game_2_players():
     game_id = _new_game(t1)
     _join(t2, game_id)
     _start(t1, game_id)
+    _clear_orders_row(game_id)
     game = _get_game(t1, game_id)
     turn_owner_id = game["game_state"]["player_turn"]
     # p1 = whoever goes first; p2 = the other
@@ -198,6 +215,10 @@ def set_open_display(ctx, spec):
 
     def patch(gs: GameState):
         gs.open_display = ingredients
+        # Special tokens set out by hand show "choose any"
+        gs.display_specials = [
+            "any" if i == Ingredient.SPECIAL else None for i in ingredients
+        ]
         return gs
 
     _patch_game_state(ctx["game_id"], patch)
@@ -655,22 +676,23 @@ def player_take_open_to_cup(ctx, n, spec, cup_index):
 
 @when(
     parsers.parse(
-        "player {n:d} takes 1 special from the open display and rolls {special}"
+        "player {n:d} takes the special from the open display choosing {special}"
     )
 )
 def player_take_open_special(ctx, n, special):
-    special = SpecialType[special]
-
-    with patch("app.actions.SpecialType") as mock_SpecialType:
-        mock_SpecialType.roll.return_value = special
-
-        token, _ = _player(ctx, n)
-        assignments = [{"ingredient": Ingredient.SPECIAL.name, "source": "display"}]
-        take_resp = _client.post(
-            f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
-            json={"assignments": assignments},
-            cookies=_auth(token),
-        )
+    token, _ = _player(ctx, n)
+    assignments = [
+        {
+            "ingredient": Ingredient.SPECIAL.name,
+            "source": "display",
+            "special_type": special.lower(),
+        }
+    ]
+    take_resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
+        json={"assignments": assignments},
+        cookies=_auth(token),
+    )
     ctx["last_resp"] = take_resp
     ctx["last_status"] = take_resp.status_code
     ctx["last_resp_body"] = take_resp.text
@@ -1510,35 +1532,6 @@ def player_holds_specialist_card(ctx, n, spirit_type):
 # ── ReRollSpecials steps ─────────────────────────────────────────────────────
 
 
-@when(parsers.parse('player {n:d} re-rolls specials "{chosen}" and rolls "{results}"'))
-def player_reroll_specials(ctx, n, chosen, results):
-    token, _ = _player(ctx, n)
-    chosen_list = [s.strip() for s in chosen.split(",") if s.strip()]
-    result_list = [s.strip() for s in results.split(",") if s.strip()]
-
-    # Record bag size before the action for later assertion
-    game = _get_game(token, ctx["game_id"])
-    ctx["bag_size_before"] = len(game["game_state"].get("bag_contents", []))
-
-    # Map result strings to SpecialType enums for the mock
-    roll_returns = [SpecialType[r.upper()] for r in result_list]
-
-    with patch("app.actions.SpecialType") as mock_st:
-        # Preserve enum members so validation still works
-        for member in SpecialType:
-            setattr(mock_st, member.name, member)
-        mock_st.roll.side_effect = roll_returns
-
-        resp = _client.post(
-            f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
-            json={"chosen_specials": chosen_list},
-            cookies=_auth(token),
-        )
-    assert resp.status_code == 200, resp.text
-    ctx["last_resp"] = resp
-    ctx["last_status"] = resp.status_code
-
-
 @when(parsers.parse('player {n:d} tries to re-roll specials "{chosen}"'))
 def player_try_reroll_specials(ctx, n, chosen):
     token, _ = _player(ctx, n)
@@ -1546,18 +1539,6 @@ def player_try_reroll_specials(ctx, n, chosen):
     resp = _client.post(
         f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
         json={"chosen_specials": chosen_list},
-        cookies=_auth(token),
-    )
-    ctx["last_resp"] = resp
-    ctx["last_status"] = resp.status_code
-
-
-@when(parsers.parse("player {n:d} tries to re-roll with no specials"))
-def player_try_reroll_empty(ctx, n):
-    token, _ = _player(ctx, n)
-    resp = _client.post(
-        f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
-        json={"chosen_specials": []},
         cookies=_auth(token),
     )
     ctx["last_resp"] = resp
@@ -1728,46 +1709,6 @@ def new_game_2_players_lobby():
     }
 
 
-@given(
-    "a started game with 2 players and sell_both_cups mode enabled",
-    target_fixture="ctx",
-)
-def started_game_sell_both_cups():
-    p1 = _unique("p1")
-    p2 = _unique("p2")
-    t1, id1 = _register(p1)
-    t2, id2 = _register(p2)
-    game_id = _new_game(t1)
-    _join(t2, game_id)
-    # Enable mode in the lobby before start
-    resp = _client.patch(
-        f"/v1/games/{game_id}/modes",
-        json={"game_modes": ["sell_both_cups"]},
-        cookies=_auth(t1),
-    )
-    assert resp.status_code == 200, resp.text
-    _start(t1, game_id)
-    game = _get_game(t1, game_id)
-    turn_owner_id = game["game_state"]["player_turn"]
-    if turn_owner_id == id1:
-        active_token, active_id = t1, id1
-        other_token, other_id = t2, id2
-    else:
-        active_token, active_id = t2, id2
-        other_token, other_id = t1, id1
-    return {
-        "game_id": game_id,
-        "p1_token": active_token,
-        "p1_id": active_id,
-        "p2_token": other_token,
-        "p2_id": other_id,
-        "host_token": t1,
-        "non_host_token": t2,
-        "last_resp": None,
-        "last_status": None,
-    }
-
-
 def _patch_modes(ctx: dict, modes: list[str], token_key: str = "host_token"):
     token = ctx.get(token_key) or ctx["p1_token"]
     resp = _client.patch(
@@ -1868,6 +1809,44 @@ def game_no_modes(ctx):
     assert modes == [], f"Expected no modes, got {modes}"
 
 
+@then("the list should be empty")
+def list_is_empty(ctx):
+    assert ctx["last_status"] == 200
+    modes = ctx["last_resp"].json().get("modes", [])
+    assert modes == [], f"Expected no modes, got {modes}"
+
+
+@given(parsers.parse('the orders row holds a "{name}" order'))
+def orders_row_holds(ctx, name):
+    """Put the named order on the table (from the order deck)."""
+
+    def patch(gs):
+        for i, d in enumerate(gs.order_deck):
+            if d["name"] == name:
+                order = gs.order_deck.pop(i)
+                break
+        else:
+            raise AssertionError(f"No {name} order in the deck")
+        from app.card import Card as _Card
+
+        for r in gs.card_rows:
+            if r.position == 2:
+                r.cards.insert(0, _Card.from_dict(order))
+        ctx["target_card_id"] = order["id"]
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@then("the orders row and order deck should hold 18 orders in all")
+def eighteen_orders(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    gs = game["game_state"]
+    on_table = [c for r in gs["card_rows"] if r["position"] == 2 for c in r["cards"]]
+    assert all(c["card_type"] == "order" for c in on_table)
+    assert len(on_table) + len(gs["order_deck"]) == 18
+
+
 @then(parsers.parse('the list should include "{mode}"'))
 def list_includes(ctx, mode):
     assert ctx["last_status"] == 200
@@ -1943,61 +1922,6 @@ def player_tries_sell_same_cup_twice(ctx, n, cup_index):
     ctx["last_status"] = resp.status_code
 
 
-# ─── Generic mode-enabled started game fixture ────────────────────────────────
-
-
-def _started_game_with_modes(modes: list[str]) -> dict:
-    p1 = _unique("p1")
-    p2 = _unique("p2")
-    t1, id1 = _register(p1)
-    t2, id2 = _register(p2)
-    game_id = _new_game(t1)
-    _join(t2, game_id)
-    if modes:
-        resp = _client.patch(
-            f"/v1/games/{game_id}/modes",
-            json={"game_modes": modes},
-            cookies=_auth(t1),
-        )
-        assert resp.status_code == 200, resp.text
-    _start(t1, game_id)
-    game = _get_game(t1, game_id)
-    turn_owner_id = game["game_state"]["player_turn"]
-    if turn_owner_id == id1:
-        active_token, active_id = t1, id1
-        other_token, other_id = t2, id2
-    else:
-        active_token, active_id = t2, id2
-        other_token, other_id = t1, id1
-    return {
-        "game_id": game_id,
-        "p1_token": active_token,
-        "p1_id": active_id,
-        "p2_token": other_token,
-        "p2_id": other_id,
-        "host_token": t1,
-        "non_host_token": t2,
-        "last_resp": None,
-        "last_status": None,
-    }
-
-
-@given(
-    "a started game with 2 players and claim_card_free_action mode enabled",
-    target_fixture="ctx",
-)
-def started_game_claim_card_free_action():
-    return _started_game_with_modes(["claim_card_free_action"])
-
-
-@given(
-    "a started game with 2 players and reroll_specials_free_action mode enabled",
-    target_fixture="ctx",
-)
-def started_game_reroll_specials_free_action():
-    return _started_game_with_modes(["reroll_specials_free_action"])
-
-
 @given(
     parsers.parse(
         "player {n:d} has a take in progress with {count:d} ingredient already taken"
@@ -2016,18 +1940,6 @@ def player_take_in_progress(ctx, n, count):
     _patch_game_state(ctx["game_id"], patch)
 
 
-@when(parsers.parse('player {n:d} re-rolls "{special}"'))
-def player_rerolls_simple(ctx, n, special):
-    token, _ = _player(ctx, n)
-    resp = _client.post(
-        f"/v1/games/{ctx['game_id']}/actions/reroll-specials",
-        json={"chosen_specials": [special]},
-        cookies=_auth(token),
-    )
-    ctx["last_resp"] = resp
-    ctx["last_status"] = resp.status_code
-
-
 @then("the claim should be recorded as a free action")
 def claim_recorded_as_free(ctx):
     assert ctx["last_status"] == 200, ctx["last_resp"].text
@@ -2040,26 +1952,6 @@ def claim_recorded_as_free(ctx):
 
 @then("the claim should be recorded as a main action")
 def claim_recorded_as_main(ctx):
-    assert ctx["last_status"] == 200, ctx["last_resp"].text
-    body = ctx["last_resp"].json()
-    move = body.get("move", {})
-    assert move.get("is_free_action") is False, (
-        f"Expected move.is_free_action=False, got {body}"
-    )
-
-
-@then("the reroll should be recorded as a free action")
-def reroll_recorded_as_free(ctx):
-    assert ctx["last_status"] == 200, ctx["last_resp"].text
-    body = ctx["last_resp"].json()
-    move = body.get("move", {})
-    assert move.get("is_free_action") is True, (
-        f"Expected move.is_free_action=True, got {body}"
-    )
-
-
-@then("the reroll should be recorded as a main action")
-def reroll_recorded_as_main(ctx):
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     body = ctx["last_resp"].json()
     move = body.get("move", {})

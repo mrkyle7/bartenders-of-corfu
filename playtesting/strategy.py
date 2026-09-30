@@ -761,7 +761,7 @@ def _card_claims_by_type(actions: list[Action], card_type: str) -> list[Action]:
 def _free_claim_action(
     free_actions: list[Action], prefer_card_types: list[str] | None = None
 ) -> Action | None:
-    """Pick a free claim_card action (only present under claim_card_free_action mode).
+    """Pick a free claim_card action (claiming is always a free action).
 
     When several are available, prefer claim types in ``prefer_card_types``
     (in order). Falls back to the first claim_card found, with karaoke
@@ -785,28 +785,6 @@ def _free_claim_action(
     return claims[0]
 
 
-def _free_reroll_action(
-    free_actions: list[Action], ps: PlayerState | None = None
-) -> Action | None:
-    """Pick a free reroll_specials action when worthwhile.
-
-    Only present when reroll_specials_free_action mode is on. A reroll is not
-    free of risk: a special that rolls "nothing" is lost outright, so churning
-    the mat every turn (bots used to reroll on 17 of ~20 turns) just gambles away
-    option value. Reroll only while the mat is thin — fewer than 2 specials —
-    when there's upside in fishing for a useful pair and little to lose. Once two
-    specials are banked, keep them (the evaluator already values the option).
-    """
-    if ps is not None and len(ps.special_ingredients) >= 2:
-        return None
-    if ps is not None and not ps.special_ingredients:
-        return None
-    for a in free_actions:
-        if a.action_type == "reroll_specials":
-            return a
-    return None
-
-
 # ---------------------------------------------------------------------------
 #  Strategy ABC
 # ---------------------------------------------------------------------------
@@ -823,8 +801,8 @@ class Strategy(ABC):
     def choose_free_action(
         self, gs: GameState, player_id: UUID, free_actions: list[Action]
     ) -> Action | None:
-        # Default: when claim_card_free_action mode surfaces a free claim,
-        # take any affordable card — free points are always better than nothing.
+        # Claiming is a free action: take any affordable card — free points
+        # are always better than nothing.
         claim = _free_claim_action(free_actions)
         if claim is not None:
             return claim
@@ -951,8 +929,8 @@ class KaraokeRusher(Strategy):
     def choose_free_action(
         self, gs: GameState, player_id: UUID, free_actions: list[Action]
     ) -> Action | None:
-        # Free karaoke claim under claim_card_free_action mode is the dream
-        # — explicitly prefer it over any other claim type or stored-spirit move.
+        # A free karaoke claim is the dream — prefer it over any other claim
+        # type or stored-spirit move.
         claim = _free_claim_action(free_actions, prefer_card_types=["karaoke"])
         if claim is not None:
             return claim
@@ -1071,14 +1049,6 @@ class CocktailHunter(Strategy):
     def choose_free_action(
         self, gs: GameState, player_id: UUID, free_actions: list[Action]
     ) -> Action | None:
-        ps = gs.player_states[player_id]
-        # Cocktail bot benefits enormously from re-rolling specials — bonus
-        # specials that fit existing cocktail recipes can multiply sell value.
-        # Only re-roll when there is at least one special on the mat, so we
-        # actually have something to re-roll.
-        reroll = _free_reroll_action(free_actions, ps)
-        if reroll is not None:
-            return reroll
         claim = _free_claim_action(free_actions)
         if claim is not None:
             return claim
@@ -1889,7 +1859,7 @@ class Mastermind(Strategy):
         ps = gs.player_states[player_id]
         focus = self._focus_spirit(gs, ps)
         cups = CupTracker(ps)
-        # claim_card_free_action mode: take any free claim — bonus points are
+        # Claiming is a free action: take any free claim — bonus points are
         # always above the use_stored_spirit / drink_stored_spirit ceiling
         # (which top out around ~10-65 internal score). Prefer cards that
         # synergise with focus.
@@ -1898,12 +1868,6 @@ class Mastermind(Strategy):
         )
         if claim is not None:
             return claim
-        # reroll_specials_free_action mode: re-roll when there are specials
-        # and the player isn't holding nothing-bonuses already. Free re-roll
-        # is upside-only outside the rare nothing-result.
-        reroll = _free_reroll_action(free_actions, ps)
-        if reroll is not None:
-            return reroll
         best_score, best_action = -1.0, None
 
         for fa in free_actions:
