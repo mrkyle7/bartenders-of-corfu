@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from app import actions
-from app.GameState import GameState, regular_in_bag
+from app.GameState import GameState, drawable_in_bag
 from app.game import GameException
 
 from playtesting.display import format_action, format_game_state
@@ -278,7 +278,7 @@ class GameRunner:
 
                 # Draw from bag — reveals ingredients (specials that come
                 # out go to the specials display and don't count)
-                bag_count = min(remaining, regular_in_bag(gs))
+                bag_count = min(remaining, drawable_in_bag(gs))
                 if bag_count <= 0:
                     break
                 gs, draw_payload = actions.draw_from_bag(gs, player_id, bag_count)

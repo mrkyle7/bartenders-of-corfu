@@ -10,7 +10,7 @@ from uuid import UUID
 
 from app.db import db
 from app.game import Game, GameException
-from app.GameState import regular_in_bag
+from app.GameState import drawable_in_bag
 
 # Importing ml registers the ml-backed bot strategies (mcts, lookahead) into
 # STRATEGY_CLASSES. This is intentionally a hard import with no try/except: if
@@ -253,9 +253,7 @@ def _execute_take(
 
         # Phase 1: display picks (may return fewer than `remaining` if the
         # strategy bails early — bag fills the gap below).
-        display_assignments = strategy.choose_take_assignments(
-            gs, player_id, remaining
-        )
+        display_assignments = strategy.choose_take_assignments(gs, player_id, remaining)
         if display_assignments:
             new_state, payload = game_manager.take_ingredients(
                 game, player_id, display_assignments
@@ -277,7 +275,7 @@ def _execute_take(
 
             # Specials that come out of the bag go to the specials display
             # and don't count, so only spirits and mixers can be drawn.
-            bag_count = min(remaining, regular_in_bag(gs))
+            bag_count = min(remaining, drawable_in_bag(gs))
             if bag_count <= 0:
                 break  # bag empty — fall back to display via outer loop
 

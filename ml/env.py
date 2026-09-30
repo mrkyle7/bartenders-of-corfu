@@ -14,7 +14,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from app.GameState import GameState, regular_in_bag
+from app.GameState import GameState, drawable_in_bag
 from app.Ingredient import Ingredient
 from app.PlayerState import (
     INITIAL_BLADDER_CAPACITY,
@@ -396,7 +396,7 @@ class BartendersEnv(gym.Env):
             if remaining <= 0:
                 break
 
-            bag_count = min(remaining, regular_in_bag(gs))
+            bag_count = min(remaining, drawable_in_bag(gs))
             if bag_count <= 0:
                 # Try display again
                 display_assignments = strategy.choose_take_assignments(

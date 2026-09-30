@@ -6,7 +6,7 @@
 import { api } from './api.js';
 import {
     BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ING, MIXERS, MODES, PAIRINGS,
-    RULES, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
+    RULES, RULES_INTRO, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
     orderRecipe, servesOrder, SPECIALIST_SPECIAL, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
@@ -1570,8 +1570,10 @@ function chalkboard() {
 
 function rulebook() {
     return h('section.rulebook', { 'aria-label': 'Rules' },
+        h('p.rulebook-intro', { text: RULES_INTRO }),
         h('div.rulebook-pages', {}, RULES.map((part) => h('section.rule-part', {},
             h('h3', { text: part.title }),
+            part.lead ? h('p.rule-lead', { text: part.lead }) : null,
             h('ul', {}, part.items.map((t) => h('li', { text: t })))))));
 }
 

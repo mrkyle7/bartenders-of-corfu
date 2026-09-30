@@ -20,7 +20,13 @@ from app.card import (
 )
 from app.cocktails import drink_points, is_cocktail, matches_order
 from app.game import GameException
-from app.GameState import OPEN_DISPLAY_SIZE, GameState, draw_token, regular_in_bag
+from app.GameState import (
+    OPEN_DISPLAY_SIZE,
+    GameState,
+    draw_blind,
+    draw_token,
+    drawable_in_bag,
+)
 from app.Ingredient import (
     BOOZY_SPECIALS,
     SPECIALIST_SPECIAL,
@@ -662,10 +668,11 @@ def draw_from_bag(
 ) -> tuple[GameState, dict]:
     """DrawFromBag — reveals ingredients from the bag and holds them pending assignment.
 
-    Draws `count` ingredients randomly from the bag and stores them in
-    gs.bag_draw_pending. Specials that come out go to the specials display
-    and don't count: the draw carries on. The player must then call take_ingredients with
-    source='pending' assignments to assign each drawn ingredient to a cup or drink.
+    Draws `count` tokens blind from the bag and stores them in
+    gs.bag_draw_pending. Specials come out like anything else and are the
+    player's to deal with. The player must then call take_ingredients with
+    source='pending' assignments to put each drawn token in a glass (a
+    special on its rim) or drink it.
     No other action is permitted while bag_draw_pending is non-empty.
     """
     gs = _deep_copy_state(gs)
@@ -702,17 +709,14 @@ def draw_from_bag(
             status_code=400,
         )
 
-    in_bag = regular_in_bag(gs)
+    in_bag = drawable_in_bag(gs)
     if in_bag < count:
         raise GameException(
             f"Not enough ingredients in bag (need {count}, have {in_bag}).",
             status_code=409,
         )
 
-    specials_before = len(gs.specials_display)
-    drawn: list[Ingredient] = []
-    for _ in range(count):
-        drawn.append(draw_token(gs))
+    drawn: list[Ingredient] = [draw_blind(gs) for _ in range(count)]
 
     gs.bag_draw_pending = drawn
     # Special tokens are rolled as they come out of the bag
@@ -724,7 +728,7 @@ def draw_from_bag(
     payload = {
         "drawn": [i.name for i in drawn],
         "specials": list(gs.bag_draw_pending_specials),
-        "to_specials_display": [i.name for i in gs.specials_display[specials_before:]],
+        "to_specials_display": [],  # kept for old clients; blind draws keep specials
     }
     return gs, payload
 
@@ -794,7 +798,7 @@ def take_ingredients(
         # No pending draw — on the first batch verify enough ingredients exist
         if already_taken == 0:
             available_count = (
-                regular_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
+                drawable_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
             )
             if available_count < take_count:
                 raise GameException(
@@ -865,11 +869,9 @@ def take_ingredients(
                     "Assign your pending bag ingredients before drawing more.",
                     status_code=409,
                 )
-            drawn = draw_token(gs)
+            drawn = draw_blind(gs)
             if drawn is None:
-                raise GameException(
-                    "There are no spirits or mixers left in the bag", status_code=400
-                )
+                raise GameException("The bag is empty", status_code=400)
             ingredient = drawn
             raw_name = ingredient.name
             if ingredient == Ingredient.SPECIAL:

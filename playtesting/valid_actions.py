@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from uuid import UUID
 
-from app.GameState import GameState, regular_in_bag
+from app.GameState import GameState, drawable_in_bag
 from app.Ingredient import SPECIALIST_SPECIAL, Ingredient
 from app.PlayerState import PlayerState
 from app.actions import (
@@ -262,7 +262,9 @@ def _add_take_ingredients(
         return
 
     if not mid_batch:
-        available = regular_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
+        available = (
+            drawable_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
+        )
         if available < take_count:
             return
 
