@@ -19,15 +19,22 @@ config {
     initial_cup_count: Integer = 2
     max_cup_ingredients: Integer = 5      -- spirits and mixers only; specials are always separate
     open_display_size: Integer = 5
-    score_to_win: Integer = 40
+    -- Points that start the last round, by player count: 40 / 35 / 30 for 2 / 3 / 4
+    score_to_win: Integer = 40            -- two players; see score_to_win_for
     karaoke_cards_to_win: Integer = 3     -- claiming this many karaoke cards = instant win
-    min_drunk_to_refresh: Integer = 3     -- drunk level required to refresh a card row
+    min_drunk_to_refresh: Integer = 3     -- drunk level required to clear the orders row
+    min_drunk_to_swipe: Integer = 2       -- drunk level required to swipe the ability row
+    max_specials_per_player: Integer = 2
     karaoke_card_total: Integer = 5       -- total karaoke cards in the game
 }
 
+-- score_to_win_for(players) = 40 when players <= 2, 35 when 3, 30 when 4+
+
 -- ─── Ingredients ──────────────────────────────────────────────────────────────
--- Specials are always placed on the player mat when drawn; they cannot be drunk
--- directly and do not count toward the cup ingredient limit.
+-- The bag holds players + 3 tokens of each spirit and each mixer, and
+-- players + 2 special tokens (4 / 5 / 6 for 2 / 3 / 4 players).
+-- A special token becomes a special on the player mat when taken; it is never
+-- drunk or placed in a cup, and the token itself goes back into the bag.
 
 entity Ingredient {
     kind: Spirit | Mixer | Special
@@ -42,9 +49,16 @@ variant Mixer : Ingredient {
 }
 
 variant Special : Ingredient {
-    -- Resolved by rolling the special die when drawn from the bag.
-    -- "nothing" is never stored; the token is returned to the bag immediately.
+    -- There is exactly one special of each type in the game. It is either in
+    -- the supply or on one player's mat.
     special_type: bitters | cointreau | lemon | sugar | vermouth
+}
+
+-- The face a special token shows. It is rolled as the token leaves the bag,
+-- onto the open display or into a player's hand (DrawFromBag), so everyone can
+-- see which special it offers. The blank face is "choose any".
+value SpecialFace {
+    face: bitters | cointreau | lemon | sugar | vermouth | any
 }
 
 -- ─── Cocktail menu ────────────────────────────────────────────────────────────
@@ -208,14 +222,29 @@ rule PlaceIngredientInCup {
     ensures: cup.ingredients = cup.ingredients + [ingredient]
 }
 
+rule RollSpecialFace {
+    -- Called for each special token as it comes out of the bag (ReplenishDisplay,
+    -- DrawFromBag, or a direct bag draw).
+    when: RollSpecialFace(token)
+    let shown = specials on any player mat + faces showing on the display or in a hand
+    -- Roll the die; a face whose special is in `shown` is rolled again.
+    -- The blank face gives "any".
+    ensures: token.face in (special types not in shown) + [any]
+}
+
 rule DrawSpecialIngredient {
-    -- Called when a player draws a Special token during TakeIngredients.
-    -- The die is rolled immediately to resolve the ingredient type.
-    when: DrawSpecialIngredient(player)
-    if rolled_result != nothing:
-        ensures: player.special_ingredients = player.special_ingredients + [Special(rolled_result)]
-    if rolled_result = nothing:
-        ensures: the special token is returned to board.bag_contents
+    -- Called when a player takes a special token (from the display or the bag)
+    -- during TakeIngredients. The token goes back into the bag.
+    when: DrawSpecialIngredient(player, token, choice?, swap?)
+    ensures: board.bag_contents = board.bag_contents + [token]
+    let special = token.face                      when token.face != any
+                  choice (a special nobody holds)  when token.face = any
+    if player.special_ingredients.count < config.max_specials_per_player:
+        ensures: player.special_ingredients = player.special_ingredients + [special]
+    if player.special_ingredients.count = config.max_specials_per_player:
+        -- The player swaps one of theirs back to the supply, or leaves the new one.
+        if swap in player.special_ingredients:
+            ensures: player.special_ingredients = player.special_ingredients - [swap] + [special]
     -- Specials may never be drunk directly; they always go to the player mat.
 }
 
@@ -285,7 +314,9 @@ rule SellCup {
     ensures: player.special_ingredients = player.special_ingredients - declared_specials
     let sold_ingredients = cup.ingredients (before sale)
     ensures: cup.ingredients = []
-    ensures: board.bag_contents = board.bag_contents + sold_ingredients + declared_specials
+    ensures: board.bag_contents = board.bag_contents + sold_ingredients
+    -- Declared specials go back to the supply (their tokens went back in the
+    -- bag when they were taken).
     ensures: CheckVictory(player)
 }
 
@@ -429,6 +460,8 @@ variant RefreshedRow : RecordedAction {
     row_position: Integer
 }
 
+-- Historic only: re-rolling specials was removed from the game; old games
+-- move histories may still contain these records.
 variant ReRolledSpecials : RecordedAction {
     chosen_specials: List<Special>       -- specials the player chose to re-roll
     results: List<Special?>              -- outcomes in order; null = "nothing"
@@ -512,16 +545,19 @@ guarantee: ProposeUndoTurn is unavailable when there are no MoveRecords for the 
 -- ─── Victory and elimination ──────────────────────────────────────────────────
 
 rule CheckVictory {
-    -- Called after SellCup or ClaimCard. The active player's win takes precedence;
-    -- if another player also meets a condition on the same turn, the active player wins.
+    -- Called after SellCup or ClaimCard.
     when: CheckVictory(player)
     requires: player.status = active
-    if player.points >= config.score_to_win:
-        ensures: session/Game.status = ended
-        ensures: session/Game.winner = player.player_id
     if player.karaoke_cards_claimed >= config.karaoke_cards_to_win:
+        -- Instant win, even during the last round.
         ensures: session/Game.status = ended
         ensures: session/Game.winner = player.player_id
+    if player.points >= score_to_win_for(players.count):
+        -- Starts the last round: play continues until the turn returns to the
+        -- first active player in turn order, so everyone has had equal turns.
+        -- Then the active player with the most points wins (ties go to the
+        -- earliest in turn order).
+        ensures: board.last_round = true
 }
 
 -- ─── Surfaces ─────────────────────────────────────────────────────────────────
@@ -584,11 +620,8 @@ surface PlayerTurn {
         RefreshCardRow(player, row)
             when state.status = active
             and board.player_turn = player.id
-            and state.drunk_level >= config.min_drunk_to_refresh
-        ReRollSpecials(player, chosen_specials)
-            when state.status = active
-            and board.player_turn = player.id
-            and state.special_ingredients.count >= 1
+            and (row is the orders row and state.drunk_level >= config.min_drunk_to_refresh
+                 or row is the ability row and state.drunk_level >= config.min_drunk_to_swipe)
         ProposeUndoTurn(player)
             when state.status = active
             and game.status = started
@@ -600,7 +633,7 @@ surface PlayerTurn {
             and pending_undo.status = pending
             and player.player_id not in pending_undo.votes
 
-    guarantee: exactly one action is taken per turn
+    guarantee: exactly one main action is taken per turn, plus any free actions (see cards.allium)
     guarantee: an eliminated player (hospitalised or wet) takes no further turns; the game continues for others
     guarantee: cup ingredient count never exceeds config.max_cup_ingredients
     guarantee: drunk_level never goes below 0

@@ -31,12 +31,13 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 ## Domain Model
 Formal specs live in `specs/game.allium` and `specs/cards.allium`. Use the `spec-reader` agent to extract rules before implementing game logic. Key rules to know:
 
-**Winning:** 40+ pts OR 3 karaoke cards claimed OR last player standing
+**Winning:** reaching the target (40 / 35 / 30 pts for 2 / 3 / 4 players) starts a last round, most points then wins; OR 3 karaoke cards claimed (instant); OR last player standing
 **Elimination:** `drunk_level > 5` → hospitalised; `bladder.count > bladder_capacity` → wet
-**Turn:** player takes exactly ONE action per turn. `TakeIngredients` may span multiple API batches — the turn only advances when the cumulative total reaches `take_count`. No other action is permitted while a batch is in progress.
-**Cards:** costs are threshold checks only — no bladder ingredients are consumed on claim. `cards.allium` rules supersede same-named rules in `game.allium` (ClaimCard, RefreshCardRow, ReplaceCard, ApplyDrunkModifier, SellCup).
-**Row 1:** always contains karaoke cards, can never be refreshed.
-**Discard:** permanent graveyard (`gs.discard`), never reshuffled.
+**Turn:** one MAIN action (take ingredients, sell one or both cups, drink a cup, wee, clear the orders row at drunk 3+) plus FREE actions, each once a turn: claim a card (always free), swipe the ability row (drunk 2+), and those granted by free-action cards. A free action only holds the turn open while it could be used. `TakeIngredients` may span multiple API batches — the turn only advances when the cumulative total reaches `take_count`.
+**Market:** row 1 = all 5 karaoke cards (never cleared or refilled); row 2 = 3 drink orders (serve one by selling a matching drink for its bonus); row 3 = 3 ability cards. Cleared or served cards go to the bottom of their deck (`order_deck`, `deck`).
+**Cards:** costs are threshold checks only — no bladder ingredients are consumed on claim. `cards.allium` rules supersede same-named rules in `game.allium`.
+**Specials:** one of each type exists; a special token is rolled as it leaves the bag (`display_specials`, `bag_draw_pending_specials`; blank = "any"), taking it puts that special on the mat and the token back in the bag; max 2 per player (`app/specials.py`). No re-rolls.
+**Rules text:** `Game Rules.md` is the player-facing rulebook and the bar top view shows the same rules (`static/bar/data.js`); keep all three in step with the specs.
 
 ## Definition of Done
 A task is complete when:
