@@ -1320,7 +1320,7 @@ async def get_valid_actions(game_id: str, request: Request):
         if game.status == Status.STARTED and game.game_state is not None:
             # Imported here so api module load doesn't pull in playtesting eagerly.
             from playtesting.valid_actions import get_valid_actions as _vactions
-            from app.actions import _available_free_actions
+            from app.actions import _available_free_actions, can_end_turn as _can_end
 
             gs = game.game_state
             raw = _vactions(gs, token_user.id)
@@ -1361,7 +1361,7 @@ async def get_valid_actions(game_id: str, request: Request):
                         gs, ps, gs.free_actions_used_this_turn, usable_only=True
                     )
                 )
-                can_end_turn = main_action_taken and len(free_actions_left) > 0
+                can_end_turn = _can_end(gs, ps)
         return JSONResponse(
             content={
                 "actions": actions,

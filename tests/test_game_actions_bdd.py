@@ -175,6 +175,7 @@ def player_completed_turn(ctx, n):
     draw_resp, take_resp = _draw_and_assign(token, ctx["game_id"], take_count, "drink")
     assert draw_resp.status_code == 200, draw_resp.text
     assert take_resp.status_code == 200, take_resp.text
+    ctx["completed_turn_moves"] = ["draw_from_bag", "take_ingredients"]
     # Drinking spirits can leave a free action usable (swiping the ability
     # cards at drunk 2+), which holds the turn open: end it.
     state = _get_game(token, ctx["game_id"])["game_state"]
@@ -183,6 +184,7 @@ def player_completed_turn(ctx, n):
             f"/v1/games/{ctx['game_id']}/actions/end-turn", cookies=_auth(token)
         )
         assert end_resp.status_code == 200, end_resp.text
+        ctx["completed_turn_moves"].append("end_turn")
     return ctx
 
 
@@ -626,6 +628,22 @@ def bag_and_display_too_few(ctx):
 # ─── When steps ───────────────────────────────────────────────────────────────
 
 
+def _draw_and_assign_pending(token: str, game_id: str, draw_resp, cup_index: int):
+    """Put everything a successful draw left pending into one glass."""
+    drawn = draw_resp.json().get("drawn", [])
+    take_resp = _client.post(
+        f"/v1/games/{game_id}/actions/take-ingredients",
+        json={
+            "assignments": [
+                {"source": "pending", "disposition": "cup", "cup_index": cup_index}
+                for _ in drawn
+            ]
+        },
+        cookies=_auth(token),
+    )
+    return draw_resp, take_resp
+
+
 def _draw_and_assign(
     token: str, game_id: str, count: int, disposition: str = "cup", cup_index: int = 0
 ) -> tuple[dict, dict]:
@@ -848,6 +866,25 @@ def player_drink_cup(ctx, n, cup_index):
         json={"cup_index": cup_index},
         cookies=_auth(token),
     )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(
+    parsers.parse(
+        "player {n:d} tries to take {count:d} ingredients from the bag placing all in cup {cup_index:d}"
+    )
+)
+def player_try_take_n_to_cup(ctx, n, count, cup_index):
+    """Like the take above, but the draw may be refused: record that instead."""
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/draw-from-bag",
+        json={"count": count},
+        cookies=_auth(token),
+    )
+    if resp.status_code == 200:
+        _, resp = _draw_and_assign_pending(token, ctx["game_id"], resp, cup_index)
     ctx["last_resp"] = resp
     ctx["last_status"] = resp.status_code
 
@@ -1311,11 +1348,15 @@ def state_unchanged(ctx):
     )
 
 
-@then("the history should contain 2 moves")
-def history_has_2_moves(ctx):
+@then("the history should contain the completed turn's moves")
+def history_has_completed_turn_moves(ctx):
+    """A draw and a take, plus an end-turn when drinking held the turn open."""
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     moves = ctx["last_resp"].json()["moves"]
-    assert len(moves) == 2, f"Expected 2 moves, got {len(moves)}"
+    expected = ctx["completed_turn_moves"]
+    assert [m["action"]["type"] for m in moves] == expected, (
+        f"Expected moves {expected}, got {[m['action']['type'] for m in moves]}"
+    )
 
 
 @then("the moves should record the action type and player")

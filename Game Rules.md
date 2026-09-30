@@ -49,7 +49,7 @@ On your turn you take **one main action**, and you may also take any **free acti
 - Whatever your free-action cards give you (see "Ability cards")
 - Pour or drink from a Store card (any number of times)
 
-Your turn ends once you've taken your main action and have no free action left that you could use. You can also end it yourself after your main action, giving up the free actions you haven't used.
+Your turn ends once you've taken your main action and have no free action left that you could use. You can also end it yourself after your main action, giving up the free actions you haven't used. If a free-action card's action comes first (see "Ability cards"), it can stand in for your main action, so you can end your turn after it.
 
 ### Take ingredients
 
@@ -147,9 +147,11 @@ Which mixers go with which spirit:
 | Refresher (one per mixer) | 2 of that mixer | 1 | That mixer always sobers you up by 1, even when you drink spirits with it. |
 | Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |
 | Specialist (one per spirit) | 2 of that spirit, or 1 of its special (whisky: bitters, tequila: cointreau, vodka: vermouth, rum: sugar, gin: lemon) | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
-| Greedy Bartender | 3 rum | 2 | Take ingredients a second time each turn (free). |
-| Entrepreneur | 3 vodka | 2 | Sell a second time each turn (free). |
-| Weak Bladder | 3 gin | 2 | A free wee each turn. |
+| Greedy Bartender | 3 rum | 2 | Taking ingredients is free. |
+| Entrepreneur | 3 vodka | 2 | Selling is free. |
+| Weak Bladder | 3 gin | 2 | Going for a wee is free. |
+
+The three free-action cards work the same way. With the card, that action is a free action: do it before or after your main action, but still only once a turn, so your main action can't be the same thing again. If you do it first, you can take a different main action too, or end your turn there.
 
 ## Cocktail menu
 

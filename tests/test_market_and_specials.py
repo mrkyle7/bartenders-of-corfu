@@ -828,3 +828,159 @@ def test_sell_actions_name_the_order_and_its_bonus():
     # One order: only the first glass serves it
     assert both["points"] == 4
     assert both["orders"] == [{"cup_index": 0, "name": "Vodka Tonic", "bonus": 2}]
+
+
+# ─── The Entrepreneur ────────────────────────────────────────────────────────
+
+
+def _entrepreneur(gs: GameState):
+    pid, ps = _me(gs)
+    ps.cards.append(
+        Card(
+            id="c-ent",
+            card_type="free_action",
+            name="Entrepreneur",
+            spirit_type="VODKA",
+        ).to_dict()
+    )
+    ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
+    ps.bladder = [Ingredient.SODA]
+    return pid, ps
+
+
+def _sells(gs: GameState, pid) -> list:
+    from playtesting.valid_actions import get_valid_actions
+
+    return [a for a in get_valid_actions(gs, pid) if a.action_type == "sell_cup"]
+
+
+def test_entrepreneur_sells_for_free_after_another_main_action():
+    gs = _game()
+    pid, _ = _entrepreneur(gs)
+    gs, payload = go_for_a_wee(gs, pid)
+    assert payload["is_free_action"] is False
+    assert gs.player_turn == pid  # the free sale holds the turn open
+    assert _sells(gs, pid) and all(a.is_free for a in _sells(gs, pid))
+    gs, payload = sell_cup(gs, pid, 0, [])
+    assert payload["is_free_action"] is True
+    assert gs.player_turn != pid
+
+
+def test_entrepreneur_sells_first_then_takes_any_other_main_action():
+    gs = _game()
+    pid, ps = _entrepreneur(gs)
+    ps.cups[1] = Cup(ingredients=[Ingredient.GIN, Ingredient.TONIC])
+    assert all(a.is_free for a in _sells(gs, pid))
+    gs, payload = sell_cup(gs, pid, 0, [])
+    assert payload["is_free_action"] is True
+    assert gs.player_turn == pid and not gs.main_action_taken_this_turn
+    # Only one sale a turn: the other glass can't be sold as the main action
+    assert _sells(gs, pid) == []
+    with pytest.raises(GameException) as exc:
+        sell_cup(gs, pid, 1, [])
+    assert exc.value.status_code == 409
+    gs, payload = go_for_a_wee(gs, pid)
+    assert payload["is_free_action"] is False
+    assert gs.player_turn != pid
+
+
+def test_entrepreneur_can_end_the_turn_after_selling_instead_of_a_main_action():
+    gs = _game()
+    pid, ps = _entrepreneur(gs)
+    assert not actions.can_end_turn(gs, ps)
+    gs, _ = sell_cup(gs, pid, 0, [])
+    assert gs.player_turn == pid
+    assert actions.can_end_turn(gs, gs.player_states[pid])
+    gs, payload = end_turn(gs, pid)
+    assert gs.player_turn != pid
+    assert payload["skipped_main_action"] is True
+
+
+def test_without_a_sale_the_turn_cannot_end_before_the_main_action():
+    gs = _game()
+    pid, ps = _entrepreneur(gs)
+    with pytest.raises(GameException) as exc:
+        end_turn(gs, pid)
+    assert exc.value.status_code == 409
+
+
+# ─── Every free-action card works the same way ───────────────────────────────
+
+
+def _with_card(spirit: str):
+    gs = _game()
+    pid, ps = _me(gs)
+    ps.cards.append(
+        Card(
+            id=f"c-{spirit}", card_type="free_action", name=spirit, spirit_type=spirit
+        ).to_dict()
+    )
+    ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
+    ps.cups[1] = Cup(ingredients=[Ingredient.GIN, Ingredient.TONIC])
+    ps.bladder = [Ingredient.SODA]
+    _row(gs, 3).cards = []  # nothing to claim holding the turn open
+    return gs, pid
+
+
+def _full_glass(gs: GameState, pid) -> int:
+    return next(i for i, c in enumerate(gs.player_states[pid].cups) if c.ingredients)
+
+
+def _take_from_display(gs: GameState, pid):
+    n = gs.player_states[pid].take_count
+    cups = gs.player_states[pid].cups
+    emptier = min(range(2), key=lambda i: len(cups[i].ingredients))
+    picks = [
+        {
+            "ingredient": i.name,
+            "source": "display",
+            "disposition": "cup",
+            "cup_index": emptier,
+        }
+        for i in gs.open_display[:n]
+    ]
+    return take_ingredients(gs, pid, picks)
+
+
+_CARD_ACTIONS = {
+    "RUM": ("take_ingredients", _take_from_display),
+    "VODKA": ("sell_cup", lambda gs, pid: sell_cup(gs, pid, _full_glass(gs, pid), [])),
+    "GIN": ("go_for_a_wee", go_for_a_wee),
+}
+
+
+@pytest.mark.parametrize("spirit", ["RUM", "VODKA", "GIN"])
+def test_a_free_action_card_action_is_free_once_and_can_end_the_turn(spirit):
+    action_type, do = _CARD_ACTIONS[spirit]
+    gs, pid = _with_card(spirit)
+    gs, payload = do(gs, pid)
+    assert payload["is_free_action"] is True
+    assert gs.player_turn == pid and not gs.main_action_taken_this_turn
+    # Not offered again, not even as the main action, and refused if tried
+    assert action_type not in {a.action_type for a in _valid(gs, pid)}
+    gs.player_states[pid].bladder = [Ingredient.SODA]  # a wee could happen again
+    with pytest.raises(GameException) as exc:
+        do(gs, pid)
+    assert exc.value.status_code == 409
+    # It stands in for the main action: the turn can end here
+    assert actions.can_end_turn(gs, gs.player_states[pid])
+    ended, payload = end_turn(gs, pid)
+    assert ended.player_turn != pid and payload["skipped_main_action"] is True
+
+
+@pytest.mark.parametrize("spirit", ["RUM", "VODKA", "GIN"])
+def test_a_free_action_card_action_after_the_main_action_is_free(spirit):
+    action_type, do = _CARD_ACTIONS[spirit]
+    gs, pid = _with_card(spirit)
+    gs, _ = actions.drink_cup(gs, pid, 0)  # main action
+    assert gs.player_turn == pid  # the card's action holds the turn open
+    assert any(a.is_free for a in _valid(gs, pid) if a.action_type == action_type)
+    gs, payload = do(gs, pid)
+    assert payload["is_free_action"] is True
+    assert gs.player_turn != pid
+
+
+def _valid(gs: GameState, pid) -> list:
+    from playtesting.valid_actions import get_valid_actions
+
+    return get_valid_actions(gs, pid)

@@ -715,6 +715,18 @@ function turnbar() {
             detail = `Take ${plural(left, 'more ingredient')}: tap tokens on the display or the specials tray, or draw from the bag.`;
         } else if (state.main_action_taken_this_turn) {
             detail = 'Main action done. Use a free action or end your turn.';
+        } else if (valid.can_end_turn) {
+            // A free-action card's action stood in for the main action
+            const used = state.free_actions_used_this_turn ?? [];
+            const left = [
+                used.includes('take_ingredients') ? null : `take ${plural(mine().take_count, 'ingredient')}`,
+                used.includes('sell_cup') ? null : 'sell',
+                'drink a glass',
+                used.includes('go_for_a_wee') ? null : 'wee',
+            ].filter(Boolean);
+            const last = left.pop();
+            const list = left.length ? `${left.join(', ')} or ${last}` : last;
+            detail = `Free action done. ${list[0].toUpperCase()}${list.slice(1)}, or end your turn.`;
         } else {
             detail = `Take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass or wee.`;
         }

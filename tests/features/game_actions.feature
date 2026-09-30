@@ -832,7 +832,27 @@ Feature: Game turn actions
 
   # ── Free Action Cards: Turn Logic ───────────────────────────────────────────
 
-  Scenario: Free action sell_cup then main action take_ingredients
+  Scenario: Entrepreneur sells for free after another main action
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a VODKA free action card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 takes 3 ingredients from the bag placing all in cup 1
+    Then it should still be player 1's turn
+    When player 1 sells cup 0 with no declared specials
+    Then it should be player 2's turn
+
+  Scenario: With the Entrepreneur, a sale made first can end the turn
+    Given it is player 1's turn
+    And the bag contains no special tokens
+    And player 1 holds a VODKA free action card
+    And player 1's cup 0 contains 1 VODKA and 1 COLA
+    When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 ends their turn
+    Then it should be player 2's turn
+
+  Scenario: With the Entrepreneur, selling first leaves the main action
     Given it is player 1's turn
     And the bag contains no special tokens
     And player 1 holds a VODKA free action card
@@ -886,13 +906,22 @@ Feature: Game turn actions
     When player 1 tries to end their turn
     Then the action should be rejected with a 409 error
 
-  Scenario: Second action of same type after free action counts as main action
+  Scenario: A free-action card's action can't be repeated as the main action
     Given it is player 1's turn
     And the bag contains no special tokens
     And player 1 holds a RUM free action card
     When player 1 takes 3 ingredients from the bag placing all in cup 0
     Then it should still be player 1's turn
-    When player 1 takes 3 ingredients from the bag placing all in cup 1
+    When player 1 tries to take 3 ingredients from the bag placing all in cup 1
+    Then the action should be rejected with a 409 error
+
+  Scenario: After a free wee the turn can end without a main action
+    Given it is player 1's turn
+    And player 1 holds a GIN free action card
+    And player 1 has 3 ingredients in their bladder
+    When player 1 goes for a wee
+    Then it should still be player 1's turn
+    When player 1 ends their turn
     Then it should be player 2's turn
 
   Scenario: Free action card exposes free_action_type in card data
