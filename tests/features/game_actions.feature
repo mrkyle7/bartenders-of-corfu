@@ -24,7 +24,27 @@ Feature: Game turn actions
     And a move record should be created for the game
     And it should be player 2's turn
 
-  Scenario: Player takes special ingredients from the open display which gets placed on their player mat
+  Scenario: Player puts a special from the specials display in a glass
+    Given it is player 1's turn
+    And player 1 has an empty cup 0
+    And the open display contains 5 COLA
+    And the specials display contains 1 SUGAR
+    When player 1 takes 1 SUGAR from the specials display placing all in cup 0
+    Then cup 0 should contain exactly 1 SUGAR
+    And it should be player 1's turn
+    When player 1 takes 2 COLA from the open display placing all in cup 0
+    Then cup 0 should contain exactly 1 SUGAR and 2 COLA
+    And it should be player 2's turn
+
+  Scenario: Player cannot take a special that is not on the specials display
+    Given it is player 1's turn
+    And player 1 has an empty cup 0
+    And the specials display contains 1 LEMON
+    When player 1 tries to take 1 SUGAR from the specials display placing all in cup 0
+    Then the action should be rejected with a 400 error
+
+  # Games started before specials were ingredients keep the special die tokens
+  Scenario: In an older game a special die token puts its special on the player mat
     Given it is player 1's turn
     And player 1 has an empty cup 0
     And player 1 has no special tokens on their player mat
@@ -168,6 +188,7 @@ Feature: Game turn actions
     Then row 2 should be refreshed with new cards
     And row 2 should have 3 cards
     And a move record should be created for the game
+    And it should still be player 1's turn
 
   Scenario: Player cannot clear the orders row when not drunk enough
     Given it is player 1's turn

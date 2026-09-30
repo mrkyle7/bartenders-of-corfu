@@ -1,11 +1,13 @@
 from uuid import UUID
 
-from app.Ingredient import Ingredient
+from app.Ingredient import Ingredient, is_special
 
 INITIAL_BLADDER_CAPACITY = 8
 INITIAL_TOILET_TOKENS = 4
 BASE_TAKE_COUNT = 3
 MAX_CUP_INGREDIENTS = 5
+# Specials sit in a glass on top of its five spirits and mixers.
+MAX_CUP_SPECIALS = 2
 MIN_BLADDER_CAPACITY = 4
 
 
@@ -25,8 +27,22 @@ class Cup:
         return sum(1 for i in self.ingredients if i.value.alcohol)
 
     @property
+    def specials(self) -> list[str]:
+        """Special types in the glass ("bitters", ...)."""
+        return [i.name.lower() for i in self.ingredients if is_special(i)]
+
+    @property
+    def base_count(self) -> int:
+        """Spirits and mixers in the glass (specials don't take up room)."""
+        return sum(1 for i in self.ingredients if not is_special(i))
+
+    @property
     def is_full(self) -> bool:
-        return len(self.ingredients) >= MAX_CUP_INGREDIENTS
+        return self.base_count >= MAX_CUP_INGREDIENTS
+
+    @property
+    def specials_full(self) -> bool:
+        return len(self.specials) >= MAX_CUP_SPECIALS
 
     @property
     def is_empty(self) -> bool:
@@ -38,6 +54,7 @@ class Cup:
             "spirit_count": self.spirit_count,
             "is_full": self.is_full,
             "is_empty": self.is_empty,
+            "specials": self.specials,
             "has_cup_doubler": self.has_cup_doubler,
         }
 

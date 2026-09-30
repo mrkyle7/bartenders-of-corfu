@@ -209,6 +209,17 @@ def bag_no_specials(ctx):
     _patch_game_state(ctx["game_id"], patch)
 
 
+@given(parsers.parse("the specials display contains {spec}"))
+def set_specials_display(ctx, spec):
+    specials = _parse_ingredient_spec(spec)
+
+    def patch(gs: GameState):
+        gs.specials_display = specials
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
 @given(parsers.parse("the open display contains {spec}"))
 def set_open_display(ctx, spec):
     ingredients = _parse_ingredient_spec(spec)
@@ -672,6 +683,40 @@ def player_take_open_to_cup(ctx, n, spec, cup_index):
     )
     ctx["last_resp"] = take_resp
     ctx["last_status"] = take_resp.status_code
+
+
+@when(
+    parsers.parse(
+        "player {n:d} takes {spec} from the specials display placing all in cup {cup_index:d}"
+    )
+)
+def player_take_specials_to_cup(ctx, n, spec, cup_index):
+    token, _ = _player(ctx, n)
+    assignments = [
+        {
+            "ingredient": ingredient.name,
+            "source": "specials",
+            "disposition": "cup",
+            "cup_index": cup_index,
+        }
+        for ingredient in _parse_ingredient_spec(spec)
+    ]
+    take_resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
+        json={"assignments": assignments},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = take_resp
+    ctx["last_status"] = take_resp.status_code
+
+
+@when(
+    parsers.parse(
+        "player {n:d} tries to take {spec} from the specials display placing all in cup {cup_index:d}"
+    )
+)
+def player_try_take_specials_to_cup(ctx, n, spec, cup_index):
+    player_take_specials_to_cup(ctx, n, spec, cup_index)
 
 
 @when(

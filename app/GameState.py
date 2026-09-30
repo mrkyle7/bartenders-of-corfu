@@ -3,7 +3,12 @@ from typing import Mapping, Optional
 from uuid import UUID
 
 from app.card import CardRow, build_deck, build_order_deck, deal_market
-from app.Ingredient import Ingredient
+from app.Ingredient import (
+    SPECIAL_INGREDIENTS,
+    SPECIALS_PER_TYPE,
+    Ingredient,
+    is_special,
+)
 from app.PlayerState import Cup, PlayerState
 from app.user import User
 
@@ -20,9 +25,7 @@ def score_to_win(num_players: int) -> int:
 
 
 def create_initial_bag(num_players: int) -> list[Ingredient]:
-    """Each spirit and mixer: players + 3 tokens. Special tokens: players + 2."""
-    from app.specials import special_tokens_for
-
+    """Each spirit and mixer: players + 3 tokens. Each special: 2 tokens."""
     multiplier = num_players + 3
     return (
         [Ingredient.WHISKEY] * multiplier
@@ -34,8 +37,29 @@ def create_initial_bag(num_players: int) -> list[Ingredient]:
         + [Ingredient.SODA] * multiplier
         + [Ingredient.TONIC] * multiplier
         + [Ingredient.CRANBERRY] * multiplier
-        + [Ingredient.SPECIAL] * special_tokens_for(num_players)
+        + [s for s in SPECIAL_INGREDIENTS for _ in range(SPECIALS_PER_TYPE)]
     )
+
+
+def draw_token(gs: "GameState") -> Ingredient | None:
+    """Draw one spirit or mixer at random from the bag.
+
+    Any special that comes out on the way goes to the specials display and
+    the draw carries on. Returns None when the bag has no spirit or mixer left.
+    """
+    while gs.bag_contents:
+        token = random.choice(gs.bag_contents)
+        gs.bag_contents.remove(token)
+        if is_special(token):
+            gs.specials_display.append(token)
+            continue
+        return token
+    return None
+
+
+def regular_in_bag(gs: "GameState") -> int:
+    """Tokens in the bag that a draw can hand you (everything but specials)."""
+    return sum(1 for t in gs.bag_contents if not is_special(t))
 
 
 def _faces_for(
@@ -75,6 +99,7 @@ class GameState:
         order_deck: list[dict] | None = None,
         display_specials: list[str | None] | None = None,
         bag_draw_pending_specials: list[str | None] | None = None,
+        specials_display: list[Ingredient] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -137,6 +162,10 @@ class GameState:
         self.bag_draw_pending_specials: list[str | None] = _faces_for(
             self.bag_draw_pending, bag_draw_pending_specials
         )
+        # Specials drawn from the bag, waiting for anyone to take them.
+        self.specials_display: list[Ingredient] = (
+            list(specials_display) if specials_display is not None else []
+        )
 
     @property
     def score_to_win(self) -> int:
@@ -158,11 +187,6 @@ class GameState:
         bag = list(create_initial_bag(len(players)))
         random.shuffle(bag)
 
-        # Draw 5 ingredients to the open display
-        display_count = min(OPEN_DISPLAY_SIZE, len(bag))
-        open_display = bag[:display_count]
-        bag = bag[display_count:]
-
         player_states: dict[UUID, PlayerState] = {
             pid: PlayerState.new_player(pid) for pid in players
         }
@@ -182,7 +206,7 @@ class GameState:
             bag_contents=bag,
             player_states=player_states,
             player_turn=first_player,
-            open_display=open_display,
+            open_display=[],
             card_rows=card_rows,
             deck=[c.to_dict() for c in ability_deck],
             turn_order=turn_order,
@@ -191,13 +215,14 @@ class GameState:
             game_modes=list(game_modes) if game_modes else [],
             order_deck=[c.to_dict() for c in order_deck],
         )
-        # Special tokens on the display are rolled as they come out
-        from app.specials import roll_face
-
-        gs.display_specials = [None] * len(open_display)
-        for i, token in enumerate(open_display):
-            if token == Ingredient.SPECIAL:
-                gs.display_specials[i] = roll_face(gs)
+        # Draw five spirits and mixers to the open display; specials that
+        # come out go to the specials display.
+        while len(gs.open_display) < OPEN_DISPLAY_SIZE:
+            token = draw_token(gs)
+            if token is None:
+                break
+            gs.open_display.append(token)
+            gs.display_specials.append(None)
         return gs
 
     def to_dict(self) -> dict:
@@ -231,6 +256,7 @@ class GameState:
             "display_specials": list(self.display_specials),
             "bag_draw_pending_specials": list(self.bag_draw_pending_specials),
             "score_to_win": self.score_to_win,
+            "specials_display": [i.name for i in self.specials_display],
         }
 
     @classmethod
@@ -298,4 +324,7 @@ class GameState:
             order_deck=state_data.get("order_deck", []),
             display_specials=state_data.get("display_specials"),
             bag_draw_pending_specials=state_data.get("bag_draw_pending_specials"),
+            specials_display=[
+                Ingredient[i] for i in state_data.get("specials_display", [])
+            ],
         )

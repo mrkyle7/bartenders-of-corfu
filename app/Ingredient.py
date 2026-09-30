@@ -20,7 +20,16 @@ class Ingredient(Enum):
     TONIC = IngredientProps("Tonic", False, False)
     COLA = IngredientProps("Cola", False, False)
     CRANBERRY = IngredientProps("Cranberry", False, False)
+    # The old special die token (games started before specials were
+    # ingredients). New games put the five specials below in the bag instead.
     SPECIAL = IngredientProps("Special Mixer", False, True)
+    # Specials: two of each in the bag. Drawn ones wait on the specials
+    # display; a player takes one into a glass or drinks it (like a mixer).
+    BITTERS = IngredientProps("Bitters", False, True)
+    COINTREAU = IngredientProps("Cointreau", False, True)
+    LEMON = IngredientProps("Lemon", False, True)
+    SUGAR = IngredientProps("Sugar", False, True)
+    VERMOUTH = IngredientProps("Vermouth", False, True)
 
 
 class SpecialType(Enum):
@@ -46,3 +55,23 @@ class SpecialType(Enum):
                 cls.NOTHING,
             ]
         )
+
+
+SPECIAL_INGREDIENTS: tuple[Ingredient, ...] = (
+    Ingredient.BITTERS,
+    Ingredient.COINTREAU,
+    Ingredient.LEMON,
+    Ingredient.SUGAR,
+    Ingredient.VERMOUTH,
+)
+SPECIALS_PER_TYPE = 2
+
+
+def is_special(ingredient: Ingredient) -> bool:
+    """A special ingredient (bitters, cointreau, lemon, sugar, vermouth)."""
+    return ingredient in SPECIAL_INGREDIENTS
+
+
+def special_type_of(ingredient: Ingredient) -> str | None:
+    """The special type name ("bitters", ...) of a special ingredient."""
+    return ingredient.name.lower() if ingredient in SPECIAL_INGREDIENTS else None

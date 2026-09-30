@@ -7,11 +7,12 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from uuid import UUID
 
-from app.GameState import GameState
+from app.GameState import GameState, regular_in_bag
 from app.Ingredient import Ingredient
 from app.PlayerState import PlayerState
 from app.actions import (
     CLAIM_CARD,
+    CLEAR_ORDERS,
     MIN_DRUNK_TO_REFRESH,
     MIN_DRUNK_TO_SWIPE,
     SWIPE_ABILITIES,
@@ -165,7 +166,13 @@ def get_valid_actions(gs: GameState, player_id: UUID) -> list[Action]:
         used = set(gs.free_actions_used_this_turn or [])
         if CLAIM_CARD not in used:
             _add_claim_card(gs, ps, result)
-        _add_refresh_card_row(gs, ps, result, swiped=SWIPE_ABILITIES in used)
+        _add_refresh_card_row(
+            gs,
+            ps,
+            result,
+            swiped=SWIPE_ABILITIES in used,
+            cleared=CLEAR_ORDERS in used,
+        )
 
     used_free = set(gs.free_actions_used_this_turn or [])
 
@@ -249,7 +256,9 @@ def _add_take_ingredients(
         return
 
     if not mid_batch:
-        available = len(gs.bag_contents) + len(gs.open_display)
+        available = (
+            regular_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
+        )
         if available < take_count:
             return
 
@@ -500,10 +509,14 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
 
 
 def _add_refresh_card_row(
-    gs: GameState, ps: PlayerState, result: list[Action], swiped: bool = False
+    gs: GameState,
+    ps: PlayerState,
+    result: list[Action],
+    swiped: bool = False,
+    cleared: bool = False,
 ):
-    """Clearing the orders row (main action, drunk 3+) and swiping the ability
-    row (free action once a turn, drunk 2+). The karaoke row is never cleared."""
+    """Clearing the orders row (drunk 3+) and swiping the ability row (drunk
+    2+): each a free action once a turn. The karaoke row is never cleared."""
     for row in gs.card_rows:
         if row.position == KARAOKE_ROW:
             continue
@@ -519,11 +532,12 @@ def _add_refresh_card_row(
                         description="Swipe the ability cards",
                     )
                 )
-        elif ps.drunk_level >= MIN_DRUNK_TO_REFRESH and row.cards:
+        elif not cleared and ps.drunk_level >= MIN_DRUNK_TO_REFRESH and row.cards:
             result.append(
                 Action(
                     action_type="refresh_card_row",
                     params={"row_position": row.position},
+                    is_free=True,
                     description="Clear the orders",
                 )
             )

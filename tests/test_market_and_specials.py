@@ -20,7 +20,7 @@ from app.actions import (
 from app.card import Card, CardRow
 from app.game import GameException
 from app.GameState import GameState, score_to_win
-from app.Ingredient import Ingredient, SpecialType
+from app.Ingredient import SPECIAL_INGREDIENTS, Ingredient, SpecialType
 from app.PlayerState import Cup
 
 
@@ -46,11 +46,15 @@ def _order(name: str, drink: str, bonus: int, **kw) -> Card:
 # ─── Setting up ──────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("players,tokens,target", [(2, 4, 40), (3, 5, 35), (4, 6, 30)])
-def test_setup_scales_with_players(players, tokens, target):
+@pytest.mark.parametrize("players,target", [(2, 40), (3, 35), (4, 30)])
+def test_setup_scales_with_players(players, target):
     gs = _game(players)
-    in_play = gs.bag_contents + gs.open_display
-    assert in_play.count(Ingredient.SPECIAL) == tokens
+    in_play = gs.bag_contents + gs.open_display + gs.specials_display
+    assert in_play.count(Ingredient.GIN) == players + 3
+    # Two of each special, whatever the number of players; no die tokens
+    for special in SPECIAL_INGREDIENTS:
+        assert in_play.count(special) == 2
+    assert Ingredient.SPECIAL not in in_play
     assert gs.score_to_win == target == score_to_win(players)
     assert gs.to_dict()["score_to_win"] == target
 
@@ -69,11 +73,13 @@ def test_market_has_every_karaoke_card_then_orders_then_abilities():
     assert "Cocktail Shaker" not in names
 
 
-def test_display_specials_line_up_with_the_display():
-    gs = _game(4)
-    assert len(gs.display_specials) == len(gs.open_display)
-    for token, face in zip(gs.open_display, gs.display_specials):
-        assert (face is not None) == (token == Ingredient.SPECIAL)
+def test_the_display_shows_five_spirits_and_mixers_and_specials_go_aside():
+    for _ in range(20):
+        gs = _game(4)
+        assert len(gs.open_display) == 5
+        assert not any(i in SPECIAL_INGREDIENTS for i in gs.open_display)
+        assert all(i in SPECIAL_INGREDIENTS for i in gs.specials_display)
+        assert gs.to_dict()["specials_display"] == [i.name for i in gs.specials_display]
 
 
 # ─── Claiming cards is a free action, once a turn ───────────────────────────
@@ -232,7 +238,7 @@ def test_a_drink_nobody_ordered_scores_as_usual():
 # ─── Clearing rows ───────────────────────────────────────────────────────────
 
 
-def test_clearing_orders_needs_drunk_three_and_is_the_main_action():
+def test_clearing_orders_needs_drunk_three_and_is_free_once_a_turn():
     gs = _game()
     pid, ps = _me(gs)
     ps.drunk_level = 2
@@ -241,9 +247,26 @@ def test_clearing_orders_needs_drunk_three_and_is_the_main_action():
     ps.drunk_level = 3
     before = [c.id for c in _row(gs, 2).cards]
     new, payload = refresh_card_row(gs, pid, 2)
-    assert payload["is_free_action"] is False
+    assert payload["is_free_action"] is True
+    assert new.player_turn == pid and not new.main_action_taken_this_turn
     assert [d["id"] for d in new.order_deck[-3:]] == before
     assert len(_row(new, 2).cards) == 3
+    with pytest.raises(GameException) as exc:
+        refresh_card_row(new, pid, 2)
+    assert exc.value.status_code == 409
+
+
+def test_clearing_orders_after_the_main_action_still_works():
+    gs = _game()
+    pid, ps = _me(gs)
+    ps.drunk_level = 4  # a wee sobers you up by one
+    ps.bladder = [Ingredient.SODA]
+    gs.card_rows[0].cards = []  # nothing to claim
+    after_wee, _ = go_for_a_wee(gs, pid)
+    # The turn waits: the orders could still be cleared
+    assert after_wee.player_turn == pid
+    new, payload = refresh_card_row(after_wee, pid, 2)
+    assert payload["is_free_action"] is True
 
 
 def test_swiping_abilities_needs_drunk_two_and_is_free_once_a_turn():
@@ -272,6 +295,209 @@ def test_karaoke_row_is_never_cleared():
 
 
 # ─── Specials ────────────────────────────────────────────────────────────────
+
+
+def _bag_of(gs: GameState, tokens: list[Ingredient]) -> None:
+    gs.bag_contents = list(tokens)
+
+
+def test_specials_drawn_to_fill_the_display_go_to_the_specials_display():
+    gs = _game()
+    gs.open_display = [Ingredient.GIN] * 3
+    gs.display_specials = [None] * 3
+    gs.specials_display = []
+    _bag_of(gs, [Ingredient.LEMON, Ingredient.SUGAR, Ingredient.RUM, Ingredient.COLA])
+    actions._replenish_display(gs)
+    assert sorted(gs.open_display, key=lambda i: i.name) == [
+        Ingredient.COLA,
+        Ingredient.GIN,
+        Ingredient.GIN,
+        Ingredient.GIN,
+        Ingredient.RUM,
+    ]
+    assert sorted(i.name for i in gs.specials_display) == ["LEMON", "SUGAR"]
+    assert gs.bag_contents == []
+
+
+def test_a_blind_draw_skips_specials_onto_the_specials_display(monkeypatch):
+    monkeypatch.setattr("app.GameState.random.choice", lambda seq: seq[0])
+    gs = _game()
+    pid, _ = _me(gs)
+    gs.specials_display = []
+    _bag_of(gs, [Ingredient.BITTERS, Ingredient.VERMOUTH, Ingredient.VODKA])
+    new, payload = actions.draw_from_bag(gs, pid, 1)
+    assert new.bag_draw_pending == [Ingredient.VODKA]
+    assert sorted(i.name for i in new.specials_display) == ["BITTERS", "VERMOUTH"]
+    assert sorted(payload["to_specials_display"]) == ["BITTERS", "VERMOUTH"]
+
+
+def test_a_blind_draw_needs_enough_spirits_and_mixers_in_the_bag():
+    gs = _game()
+    pid, _ = _me(gs)
+    _bag_of(gs, [Ingredient.BITTERS, Ingredient.VODKA])
+    with pytest.raises(GameException) as exc:
+        actions.draw_from_bag(gs, pid, 2)
+    assert exc.value.status_code == 409
+
+
+def test_a_special_goes_in_a_glass_on_top_of_five():
+    gs = _game()
+    pid, ps = _me(gs)
+    gs.specials_display = [Ingredient.SUGAR, Ingredient.LEMON]
+    ps.cups[0] = Cup(ingredients=[Ingredient.GIN] * 5)
+    new, payload = take_ingredients(
+        gs,
+        pid,
+        [
+            {
+                "ingredient": "SUGAR",
+                "source": "specials",
+                "disposition": "cup",
+                "cup_index": 0,
+            }
+        ],
+    )
+    cup = new.player_states[pid].cups[0]
+    assert cup.ingredients[-1] == Ingredient.SUGAR
+    assert cup.specials == ["sugar"] and cup.is_full
+    assert new.specials_display == [Ingredient.LEMON]
+    assert payload["taken"][0] == {
+        "ingredient": "SUGAR",
+        "source": "specials",
+        "disposition": "cup",
+        "cup_index": 0,
+    }
+    # It counts as one of the ingredients you take this turn
+    assert new.ingredients_taken_this_turn == 1
+
+
+def test_a_glass_holds_at_most_two_specials():
+    gs = _game()
+    pid, ps = _me(gs)
+    gs.specials_display = [Ingredient.BITTERS]
+    ps.cups[1] = Cup(
+        ingredients=[Ingredient.WHISKEY, Ingredient.VERMOUTH, Ingredient.LEMON]
+    )
+    with pytest.raises(GameException):
+        take_ingredients(
+            gs,
+            pid,
+            [
+                {
+                    "ingredient": "BITTERS",
+                    "source": "specials",
+                    "disposition": "cup",
+                    "cup_index": 1,
+                }
+            ],
+        )
+
+
+def test_you_can_only_take_a_special_that_is_showing():
+    gs = _game()
+    pid, _ = _me(gs)
+    gs.specials_display = [Ingredient.LEMON]
+    with pytest.raises(GameException):
+        take_ingredients(
+            gs,
+            pid,
+            [{"ingredient": "SUGAR", "source": "specials", "disposition": "drink"}],
+        )
+
+
+def test_drinking_specials_sobers_you_like_a_mixer():
+    gs = _game()
+    pid, ps = _me(gs)
+    ps.drunk_level = 2  # takes five: two specials, three mixers
+    gs.specials_display = [Ingredient.LEMON, Ingredient.SUGAR]
+    gs.open_display = [Ingredient.SODA] * 3 + [Ingredient.GIN] * 2
+    gs.display_specials = [None] * 5
+    _bag_of(gs, [Ingredient.GIN] * 10)  # the refill draws no new specials
+    new, payload = take_ingredients(
+        gs,
+        pid,
+        [
+            {"ingredient": name, "source": "specials", "disposition": "drink"}
+            for name in ("LEMON", "SUGAR")
+        ]
+        + [{"ingredient": "SODA", "source": "display", "disposition": "drink"}] * 3,
+    )
+    assert payload["turn_complete"]
+    me = new.player_states[pid]
+    assert me.drunk_level == 0
+    assert sorted(i.name for i in me.bladder) == [
+        "LEMON",
+        "SODA",
+        "SODA",
+        "SODA",
+        "SUGAR",
+    ]
+    assert new.specials_display == []
+
+
+def test_specials_never_pay_for_cards():
+    gs = _game()
+    pid, ps = _me(gs)
+    ps.bladder = [Ingredient.LEMON, Ingredient.SUGAR, Ingredient.BITTERS]
+    for row in gs.card_rows:
+        for card in row.cards:
+            assert not actions._can_afford(ps, card)
+
+
+def test_a_cocktail_made_with_specials_in_the_glass():
+    gs = _game()
+    pid, ps = _me(gs)
+    gs.card_rows[1].cards = []
+    ps.cups[0] = Cup(
+        ingredients=[Ingredient.RUM, Ingredient.SUGAR, Ingredient.RUM, Ingredient.SODA]
+    )
+    bag = len(gs.bag_contents)
+    new, payload = sell_cup(gs, pid, 0, [])
+    assert payload["points_earned"] == 10
+    # Everything in the glass, the sugar included, goes back in the bag
+    assert len(new.bag_contents) == bag + 4
+    assert Ingredient.SUGAR in new.bag_contents
+
+
+def test_a_special_spoils_a_simple_drink():
+    gs = _game()
+    pid, ps = _me(gs)
+    ps.cups[0] = Cup(ingredients=[Ingredient.RUM, Ingredient.COLA, Ingredient.LEMON])
+    with pytest.raises(GameException):
+        sell_cup(gs, pid, 0, [])
+
+
+def test_a_cocktail_order_is_served_by_specials_in_the_glass():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = [_order("Mojito please", "cocktail", 4, cocktail="Mojito")]
+    gs.order_deck = []
+    ps.cups[0] = Cup(
+        ingredients=[Ingredient.RUM, Ingredient.RUM, Ingredient.SODA, Ingredient.SUGAR]
+    )
+    new, payload = sell_cup(gs, pid, 0, [])
+    assert payload["points_earned"] == 14
+    assert payload["orders"] == [{"name": "Mojito please", "bonus": 4}]
+
+
+def test_an_old_game_with_die_tokens_still_loads_and_plays():
+    """Games started before specials were ingredients keep their die tokens."""
+    gs = _game()
+    data = gs.to_dict()
+    data.pop("specials_display")
+    data["open_display"][0] = "SPECIAL"
+    data["display_specials"] = ["lemon", None, None, None, None]
+    old = GameState.from_dict(data)
+    assert old.specials_display == []
+    pid, _ = _me(old)
+    new, payload = take_ingredients(
+        old, pid, [{"ingredient": "SPECIAL", "source": "display", "display_index": 0}]
+    )
+    assert new.player_states[pid].special_ingredients == ["lemon"]
+
+
+# ─── Specials in games started before they were ingredients ─────────────────
+# Those games keep the special die tokens; a special goes on the player's mat.
 
 
 def _display_special(gs: GameState, face: str) -> int:
