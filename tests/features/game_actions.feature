@@ -842,12 +842,14 @@ Feature: Game turn actions
     When player 1 sells cup 0 with no declared specials
     Then it should be player 2's turn
 
-  Scenario: With the Entrepreneur, selling first is the main action
+  Scenario: With the Entrepreneur, selling first leaves the main action
     Given it is player 1's turn
     And the bag contains no special tokens
     And player 1 holds a VODKA free action card
     And player 1's cup 0 contains 1 VODKA and 1 COLA
     When player 1 sells cup 0 with no declared specials
+    Then it should still be player 1's turn
+    When player 1 takes 3 ingredients from the bag
     Then it should be player 2's turn
 
   Scenario: Free action go_for_a_wee then main action sell_cup

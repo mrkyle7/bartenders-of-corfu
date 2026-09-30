@@ -94,10 +94,9 @@ variant FreeActionCard : Card {
     -- ongoing: grants the player one free additional action of free_action_type per turn.
     -- Mapping:
     --   RUM     → take_ingredients  (Greedy Bartender)
-    --   VODKA   → sell_cup          (Entrepreneur): only once a different main
-    --                                action has been taken this turn. Before
-    --                                that a sale is the main action, and a
-    --                                main-action sale gives no second sale.
+    --   VODKA   → sell_cup          (Entrepreneur): selling is free, before or
+    --                                after the main action, but still once a
+    --                                turn: the main action can't be a sale.
     --   GIN     → go_for_a_wee      (Weak Bladder)
 }
 
@@ -354,7 +353,6 @@ rule ApplyDrunkModifier {
 
 amendment game/BoardState {
     main_action_taken_this_turn: Boolean = false
-    main_action_this_turn: String?   -- which action was the main one
     free_actions_used_this_turn: List<String> = []
 }
 

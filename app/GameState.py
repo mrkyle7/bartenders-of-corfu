@@ -94,7 +94,6 @@ class GameState:
         discard: list[dict] | None = None,
         last_round: bool = False,
         main_action_taken_this_turn: bool = False,
-        main_action_this_turn: str | None = None,
         free_actions_used_this_turn: list[str] | None = None,
         game_modes: list[str] | None = None,
         order_deck: list[dict] | None = None,
@@ -143,9 +142,6 @@ class GameState:
         self.last_round: bool = last_round
         # Free action tracking: has the player taken their main (non-free) action this turn?
         self.main_action_taken_this_turn: bool = main_action_taken_this_turn
-        # Which action it was (e.g. "take_ingredients"), so the Entrepreneur's
-        # free sell can require a different main action first.
-        self.main_action_this_turn: str | None = main_action_this_turn
         # Which free action types have been used this turn (e.g. ["sell_cup", "go_for_a_wee"])
         self.free_actions_used_this_turn: list[str] = (
             free_actions_used_this_turn
@@ -253,7 +249,6 @@ class GameState:
             "discard": self.discard,
             "last_round": self.last_round,
             "main_action_taken_this_turn": self.main_action_taken_this_turn,
-            "main_action_this_turn": self.main_action_this_turn,
             "free_actions_used_this_turn": list(self.free_actions_used_this_turn),
             "game_modes": list(self.game_modes),
             "order_deck": self.order_deck,
@@ -322,7 +317,6 @@ class GameState:
             main_action_taken_this_turn=state_data.get(
                 "main_action_taken_this_turn", False
             ),
-            main_action_this_turn=state_data.get("main_action_this_turn"),
             free_actions_used_this_turn=state_data.get(
                 "free_actions_used_this_turn", []
             ),

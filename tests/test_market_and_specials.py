@@ -857,7 +857,6 @@ def _sells(gs: GameState, pid) -> list:
 def test_entrepreneur_sells_for_free_after_another_main_action():
     gs = _game()
     pid, _ = _entrepreneur(gs)
-    assert all(not a.is_free for a in _sells(gs, pid))  # a sale now is the main one
     gs, payload = go_for_a_wee(gs, pid)
     assert payload["is_free_action"] is False
     assert gs.player_turn == pid  # the free sale holds the turn open
@@ -867,21 +866,19 @@ def test_entrepreneur_sells_for_free_after_another_main_action():
     assert gs.player_turn != pid
 
 
-def test_entrepreneur_selling_as_the_main_action_gives_no_second_sale():
+def test_entrepreneur_sells_first_then_takes_any_other_main_action():
     gs = _game()
     pid, ps = _entrepreneur(gs)
     ps.cups[1] = Cup(ingredients=[Ingredient.GIN, Ingredient.TONIC])
+    assert all(a.is_free for a in _sells(gs, pid))
     gs, payload = sell_cup(gs, pid, 0, [])
+    assert payload["is_free_action"] is True
+    assert gs.player_turn == pid and not gs.main_action_taken_this_turn
+    # Only one sale a turn: the other glass can't be sold as the main action
+    assert _sells(gs, pid) == []
+    with pytest.raises(GameException) as exc:
+        sell_cup(gs, pid, 1, [])
+    assert exc.value.status_code == 409
+    gs, payload = go_for_a_wee(gs, pid)
     assert payload["is_free_action"] is False
-    assert gs.player_turn != pid  # no second sale to hold the turn for
-
-
-def test_main_action_is_recorded_and_survives_a_reload():
-    gs = _game()
-    pid, _ = _entrepreneur(gs)
-    gs, _ = go_for_a_wee(gs, pid)
-    assert gs.main_action_this_turn == "go_for_a_wee"
-    again = GameState.from_dict(gs.to_dict())
-    assert again.main_action_this_turn == "go_for_a_wee"
-    gs, _ = sell_cup(gs, pid, 0, [])
-    assert gs.main_action_this_turn is None  # reset for the next player
+    assert gs.player_turn != pid

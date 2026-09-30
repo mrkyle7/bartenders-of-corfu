@@ -163,7 +163,6 @@ def _advance_turn(gs: GameState) -> GameState:
     # Reset all per-turn tracking whenever the turn advances
     _reset_take_batch_state(gs)
     gs.main_action_taken_this_turn = False
-    gs.main_action_this_turn = None
     gs.free_actions_used_this_turn = []
 
     if not gs.turn_order:
@@ -221,21 +220,6 @@ def _usable_now(gs: GameState, ps: "PlayerState", action_type: str) -> bool:
     return True
 
 
-def _card_free_action_open(gs: GameState, action_type: str) -> bool:
-    """Whether a free-action card's action can be used as a free action now.
-
-    The Entrepreneur's free sell (``sell_cup``) comes only after a different
-    main action: until then a sale is the main action, and after selling as
-    the main action there is no second sale.
-    """
-    if action_type == "sell_cup":
-        return (
-            gs.main_action_taken_this_turn
-            and getattr(gs, "main_action_this_turn", None) != "sell_cup"
-        )
-    return True
-
-
 def _available_free_actions(
     gs: GameState, ps: "PlayerState", used: list[str], usable_only: bool = False
 ) -> set[str]:
@@ -252,11 +236,7 @@ def _available_free_actions(
         if card_dict.get("card_type") == "free_action":
             spirit = card_dict.get("spirit_type")
             action_type = FREE_ACTION_TYPES.get(spirit) if spirit else None
-            if (
-                action_type
-                and action_type not in used
-                and _card_free_action_open(gs, action_type)
-            ):
+            if action_type and action_type not in used:
                 actions.add(action_type)
     for action_type in (CLAIM_CARD, CLEAR_ORDERS, SWIPE_ABILITIES):
         if action_type in used:
@@ -304,10 +284,13 @@ def _finish_turn_action(gs: GameState, player_id: UUID, action_type: str) -> boo
         # Use as free action
         gs.free_actions_used_this_turn.append(action_type)
         is_free = True
+    elif action_type == "sell_cup" and "sell_cup" in gs.free_actions_used_this_turn:
+        # The Entrepreneur's sale is free, not an extra one: after it the main
+        # action can be anything but another sale.
+        raise GameException("You have already sold this turn", status_code=409)
     elif not gs.main_action_taken_this_turn:
         # Use as main action
         gs.main_action_taken_this_turn = True
-        gs.main_action_this_turn = action_type
         is_free = False
     else:
         raise GameException(
