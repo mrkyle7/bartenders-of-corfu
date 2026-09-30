@@ -175,6 +175,7 @@ def player_completed_turn(ctx, n):
     draw_resp, take_resp = _draw_and_assign(token, ctx["game_id"], take_count, "drink")
     assert draw_resp.status_code == 200, draw_resp.text
     assert take_resp.status_code == 200, take_resp.text
+    ctx["completed_turn_moves"] = ["draw_from_bag", "take_ingredients"]
     # Drinking spirits can leave a free action usable (swiping the ability
     # cards at drunk 2+), which holds the turn open: end it.
     state = _get_game(token, ctx["game_id"])["game_state"]
@@ -183,6 +184,7 @@ def player_completed_turn(ctx, n):
             f"/v1/games/{ctx['game_id']}/actions/end-turn", cookies=_auth(token)
         )
         assert end_resp.status_code == 200, end_resp.text
+        ctx["completed_turn_moves"].append("end_turn")
     return ctx
 
 
@@ -1346,11 +1348,15 @@ def state_unchanged(ctx):
     )
 
 
-@then("the history should contain 2 moves")
-def history_has_2_moves(ctx):
+@then("the history should contain the completed turn's moves")
+def history_has_completed_turn_moves(ctx):
+    """A draw and a take, plus an end-turn when drinking held the turn open."""
     assert ctx["last_status"] == 200, ctx["last_resp"].text
     moves = ctx["last_resp"].json()["moves"]
-    assert len(moves) == 2, f"Expected 2 moves, got {len(moves)}"
+    expected = ctx["completed_turn_moves"]
+    assert [m["action"]["type"] for m in moves] == expected, (
+        f"Expected moves {expected}, got {[m['action']['type'] for m in moves]}"
+    )
 
 
 @then("the moves should record the action type and player")
