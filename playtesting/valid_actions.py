@@ -285,6 +285,7 @@ def _add_sell_cup(ps: PlayerState, result: list[Action], gs: GameState | None = 
             order = _order_served(gs, ps, cup_idx, [])
             if order is not None:
                 params["order"] = order.name
+                params["order_bonus"] = order.bonus
             result.append(
                 Action(
                     action_type="sell_cup",
@@ -380,7 +381,14 @@ def _add_sell_both_cups(
             first = _order_served(gs, ps, 0, ds0)
             if first is not None:
                 pts1 = _full_sell_points(ps, 1, ds1, gs, {first.id})
+            second = _order_served(gs, ps, 1, ds1, {first.id} if first else set())
             total = pts0 + pts1
+            # Which order each glass serves, for showing the bonus
+            orders = [
+                {"cup_index": ci, "name": o.name, "bonus": o.bonus}
+                for ci, o in ((0, first), (1, second))
+                if o is not None
+            ]
             result.append(
                 Action(
                     action_type="sell_cup",
@@ -391,6 +399,7 @@ def _add_sell_both_cups(
                             {"cup_index": 1, "declared_specials": list(ds1)}
                         ],
                         "points": total,
+                        "orders": orders,
                     },
                     description=(
                         f"Sell both cups for {total}pts "

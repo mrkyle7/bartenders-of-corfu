@@ -1058,10 +1058,12 @@ function glass(pid, cupIndex, { interactive }) {
     if (interactive && !handItems().length) {
         for (const a of actionsOf('sell_cup').filter((x) => x.params.cup_index === cupIndex && !x.params.additional_cups)) {
             const specials = a.params.declared_specials ?? [];
+            const name = drinkName(cup.ingredients, specials);
+            const order = a.params.order ? ` (+${a.params.order_bonus} order)` : '';
             buttons.push(h('button.btn.go.tiny', {
                 type: 'button', onclick: () => sell(a.params), 'data-k': `sell-${cupIndex}-${specials.join('-')}`,
-                'aria-label': `Sell glass ${cupIndex + 1} as ${drinkName(cup.ingredients, specials)} for ${plural(a.params.points, 'point')}`,
-            }, h('strong', { text: `Sell for ${a.params.points}${freeNote('sell_cup')}` }), h('span', { text: drinkName(cup.ingredients, specials) })));
+                'aria-label': `Sell glass ${cupIndex + 1} as ${name} for ${plural(a.params.points, 'point')}${a.params.order ? `, including +${a.params.order_bonus} for the ${a.params.order} order` : ''}`,
+            }, h('strong', { text: `Sell for ${a.params.points}${freeNote('sell_cup')}` }), h('span', { text: `${name}${order}` })));
         }
         if (actionsOf('drink_cup').some((a) => a.params.cup_index === cupIndex)) {
             buttons.push(h('button.btn.tiny', { type: 'button', onclick: () => drinkCup(cupIndex), text: 'Drink it', 'data-k': `drinkcup-${cupIndex}` }));
@@ -1081,7 +1083,12 @@ function sellBoth() {
     const cups = mine().cups;
     return h('div.sell-both', {}, options.map((a) => {
         const second = a.params.additional_cups[0];
-        const names = `${drinkName(cups[a.params.cup_index].ingredients, a.params.declared_specials ?? [])} and ${drinkName(cups[second.cup_index].ingredients, second.declared_specials ?? [])}`;
+        const orderFor = (ci) => (a.params.orders ?? []).find((o) => o.cup_index === ci);
+        const label = (ci, declared) => {
+            const o = orderFor(ci);
+            return `${drinkName(cups[ci].ingredients, declared ?? [])}${o ? ` (+${o.bonus} order)` : ''}`;
+        };
+        const names = `${label(a.params.cup_index, a.params.declared_specials)} and ${label(second.cup_index, second.declared_specials)}`;
         return h('button.btn.go.tiny', {
             type: 'button', onclick: () => sell(a.params), 'data-k': `sellboth-${JSON.stringify(a.params)}`,
             'aria-label': `Sell both glasses, ${names}, for ${plural(a.params.points, 'point')}`,
