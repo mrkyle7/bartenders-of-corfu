@@ -75,6 +75,15 @@ def _make_it_my_turn(base_url, new_game, new_user, other_user_and_jwt):
             other_user_and_jwt["jwt"],
             take,
         )
+        # Drinking spirits can leave a free action usable (swiping the
+        # ability cards at drunk 2+), which holds their turn open: end it.
+        game = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
+        if game["game_state"]["player_turn"] != new_user["user"]["id"]:
+            _api_post(
+                base_url,
+                f"/v1/games/{new_game}/actions/end-turn",
+                other_user_and_jwt["jwt"],
+            )
 
 
 def _assign_through_dock(page, count):
