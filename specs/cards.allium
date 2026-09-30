@@ -182,8 +182,9 @@ rule SellCup {
     requires: player.status = active
     requires: it is player's turn
     requires: 1 <= cups.count <= 2, no cup twice
-    requires: all declared_specials together ⊆ player.special_ingredients
+    requires: all declared_specials together ⊆ player.special_ingredients  -- legacy games; else empty
     requires: each (cup, declared_specials) is a valid sellable drink
+    -- A cup's specials are the ones in it plus any declared (legacy games).
     for (cup, declared_specials) in cups:
         let base_points = drink_points(cup, declared_specials)
         let is_cocktail = (cup, declared_specials) matches a named cocktail recipe
@@ -200,7 +201,8 @@ rule SellCup {
         ensures: player.special_ingredients = player.special_ingredients - declared_specials
         ensures: board.bag_contents = board.bag_contents + cup.ingredients (before sale)
         ensures: cup.ingredients = []
-    -- Declared specials return to the supply.
+    -- Specials in a cup go back in the bag with it; declared ones (legacy
+    -- games) return to the supply.
     ensures: CheckVictory(player)
     -- Selling (one cup or both) is one main action.
 }
@@ -287,13 +289,16 @@ rule RefreshCardRow {
     requires: it is player's turn
     requires: no TakeIngredients batch is in progress
     requires: row.position != 1                  -- the karaoke row is never cleared
-    requires row.position = 2:                   -- clearing the orders: main action
+    requires row.position = 2:                   -- clearing the orders: free action
         player.drunk_level >= game/config.min_drunk_to_refresh
+        and "refresh_orders_row" not in free_actions_used_this_turn
     requires row.position = 3:                   -- swiping the abilities: free action
         player.drunk_level >= game/config.min_drunk_to_swipe
         and "refresh_ability_row" not in free_actions_used_this_turn
     ensures: every card in row goes to the bottom of its deck, in order
     ensures: config.row_size new cards are dealt from the top (fewer if the deck runs out)
+    if row.position = 2:
+        ensures: free_actions_used_this_turn = free_actions_used_this_turn + ["refresh_orders_row"]
     if row.position = 3:
         ensures: free_actions_used_this_turn = free_actions_used_this_turn + ["refresh_ability_row"]
 }
@@ -308,9 +313,10 @@ rule ApplyDrunkModifier {
     let spirits      = consumed where kind = Spirit
     let refresher_mixer_types = { card.mixer_type for card in player.cards where kind = Refresher }
     let hot_mixers   = consumed where kind = Mixer and mixer_type in refresher_mixer_types
-    let plain_mixers = consumed where kind = Mixer and mixer_type not in refresher_mixer_types
+    let plain_mixers = consumed where (kind = Mixer and mixer_type not in refresher_mixer_types)
+                                   or kind = Special
     -- Spirits raise drunk level; hot_mixers always lower it (-1 each);
-    -- plain mixers lower it only when no spirits were consumed.
+    -- plain mixers and specials lower it only when no spirits were consumed.
     let delta = spirits.count - hot_mixers.count
     if spirits.count = 0:
         let delta = delta - plain_mixers.count
@@ -319,9 +325,10 @@ rule ApplyDrunkModifier {
 }
 
 -- ─── Free action turn rules ──────────────────────────────────────────────────
--- A turn is one main action (TakeIngredients, SellCup, DrinkCup, GoForAWee,
--- clearing the orders row) plus free actions, each at most once per turn:
+-- A turn is one main action (TakeIngredients, SellCup, DrinkCup, GoForAWee)
+-- plus free actions, each at most once per turn:
 --   claim_card           — always available (ClaimCard)
+--   refresh_orders_row   — always available at drunk 3+ (clearing row 2)
 --   refresh_ability_row  — always available at drunk 2+ (swiping row 3)
 --   take_ingredients / sell_cup / go_for_a_wee — granted by FreeActionCards
 -- DrinkStoredSpirit and UseStoredSpirit are free and unlimited.
@@ -340,8 +347,9 @@ rule FreeActionTurnLogic {
     --
     -- After the action: the turn advances when main_action_taken is true AND no
     -- unused free action could be used right now. claim_card counts only while
-    -- the player can afford a card in row 1 or row 3; refresh_ability_row only
-    -- at drunk 2+ with ability cards to swipe. Card-granted free actions count
+    -- the player can afford a card in row 1 or row 3; refresh_orders_row only
+    -- at drunk 3+ with orders to clear; refresh_ability_row only at drunk 2+
+    -- with ability cards to swipe. Card-granted free actions count
     -- while unused.
     requires: true  -- applied inline in each action handler
 }
@@ -375,7 +383,7 @@ guarantee: cleared cards go to the bottom of their own deck; nothing is discarde
 guarantee: order cards are never claimed; a sale serves at most one order per cup
 guarantee: order bonuses are never doubled and never get the specialist bonus
 guarantee: card costs are threshold checks only — no bladder ingredients are removed on claim
-guarantee: stored spirits never count toward a card cost
+guarantee: stored spirits and specials never count toward a card cost
 guarantee: the Store card effect (transferring spirits to stored_spirits) is not a cost consumption
 guarantee: ClaimCard for a CupDoubler card requires a cup parameter; invalid without one
 guarantee: cup.has_cup_doubler is set at claim time and never cleared; persists through sell/refill cycles
@@ -387,7 +395,7 @@ guarantee: the Specialist sell bonus is applied after cup doubler doubling: fina
 guarantee: multiple specialist cards stack: a cup with 2 matching spirit types adds the bonus for each
 guarantee: claiming a card is always a free action, at most once per turn
 guarantee: swiping the ability row is a free action at most once per turn
-guarantee: clearing the orders row is a main action
+guarantee: clearing the orders row is a free action at most once per turn
 guarantee: a partial TakeIngredients batch blocks ClaimCard and RefreshCardRow until the take is finished
 guarantee: a free action only holds the turn open while it could be used
 guarantee: FreeActionCard free_action_type is visible to all players on the claimed card

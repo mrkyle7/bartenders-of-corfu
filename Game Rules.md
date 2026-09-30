@@ -14,17 +14,16 @@ Ingredient tokens go in the bag. Each spirit and each mixer has **players + 3** 
 
 - Spirits: whisky, rum, vodka, gin, tequila
 - Mixers: cola, soda water, tonic water, cranberry
-- Special tokens (purple): **4 with two players, 5 with three, 6 with four**
+- Specials (purple): **2 each** of bitters, cointreau, lemon, sugar and vermouth, whatever the number of players
 
 Also:
 
-- One special of each type: bitters, cointreau, lemon, sugar, vermouth. There is only one of each.
 - 5 karaoke cards, 19 ability cards and 18 order cards.
 - For each player: a player mat with two glasses, a bladder track, a drunk track and 4 toilet tokens.
 
 ## Setting up
 
-- Put all the ingredient tokens in the bag, then draw 5 onto the open display. Roll the special die for every special token that comes out (see "Specials").
+- Put all the ingredient tokens in the bag, then draw onto the open display until it shows 5 spirits and mixers. Any special that comes out goes to the specials tray instead (see "Specials").
 - Lay out the market:
   - **Karaoke row:** all 5 karaoke cards, face up.
   - **Orders row:** shuffle the orders and deal 3.
@@ -41,11 +40,11 @@ On your turn you take **one main action**, and you may also take any **free acti
 - Sell your glasses
 - Drink a glass
 - Go for a wee
-- Clear the orders row (drunk 3 or more)
 
 **Free actions** (each once a turn):
 
 - Claim a card
+- Clear the orders row (drunk 3 or more)
 - Swipe the ability row (drunk 2 or more)
 - Whatever your free-action cards give you (see "Ability cards")
 - Pour or drink from a Store card (any number of times)
@@ -55,36 +54,34 @@ Your turn ends once you've taken your main action and have no free action left t
 ### Take ingredients
 
 - You must take exactly **3 ingredients plus your drunk level**. At drunk 2 you take 5.
-- Take them from the open display, blind from the bag, or both, in any order.
+- Take them from the open display, the specials tray, blind from the bag, or any mix, in any order.
 - You can take several at once, but you must decide where every ingredient in hand goes before taking more:
-  - **Into a glass.** Each glass holds at most 5 ingredients.
+  - **Into a glass.** Each glass holds at most 5 spirits and mixers, plus up to 2 specials.
   - **Drink it.** It goes into your bladder.
 - Nothing goes back in the bag.
-- You can't take ingredients if the bag and display together hold fewer than you need.
+- You can't take ingredients if the bag, the display and the specials tray together hold fewer than you need.
 - When you've taken them all, your drunk level changes once for everything you drank (see "Drinking"), and the display is refilled from the bag.
 
 ### Specials
 
-- **Rolled as they come out.** A special token is rolled the moment it leaves the bag, onto the display or into your hand, so everyone can see which special it offers.
-- **No duplicates showing.** A face whose special is already on someone's mat, or already showing, is rolled again.
-- **The blank face is "choose any".** When you take it, you pick any special nobody holds.
-- **Taking one.** Put that special on your mat, and the token goes back into the bag. A special token doesn't count against your glasses or your bladder.
-- **Two at most.** If you already have two, swap one back or leave the new one. A special you give back is free for others to take.
-- **Using them.** Specials are used when you sell a cocktail, then go back to the supply.
+- **In the bag like everything else.** There are two each of bitters, cointreau, lemon, sugar and vermouth.
+- **They go to the specials tray.** Whenever a special comes out of the bag, whether refilling the display or drawn blind, put it on the specials tray and keep drawing. The display always shows 5 spirits and mixers, and a blind draw never hands you a special.
+- **Anyone can take them.** Taking a special from the tray is one of the ingredients you take this turn. It goes straight into one of your glasses (up to 2 specials per glass, on top of its 5 spirits and mixers), or you drink it.
+- **Only for cocktails.** A glass with a special in it can only be sold as the cocktail it makes.
+- **Drinking one.** It goes into your bladder and sobers you like a mixer, but it never counts toward a card's cost. Why drink one? So nobody else gets it.
 
 ### Drinking
 
 - You can drink ingredients as you take them, or drink a whole glass as your main action.
 - **Everything you drink goes into your bladder.**
-- **Drunk level:** each spirit drunk in the action raises it by 1. If you drank **only mixers**, you sober up by 1 per mixer instead (never below 0).
+- **Drunk level:** each spirit drunk in the action raises it by 1. If you drank **no spirits**, you sober up by 1 per mixer or special instead (never below 0).
 - **Hospital:** above drunk 5 you are out of the game.
 - **Wetting yourself:** more ingredients in your bladder than it has spaces, and you are out of the game.
-- **When you're out:** everything you held (bladder, glasses, stored spirits, specials) goes back for the others to use.
+- **When you're out:** everything you held (bladder, glasses, stored spirits) goes back in the bag for the others to use.
 
 ### Sell your glasses
 
-- Sell one glass, or both in one action. Sold ingredients go back in the bag.
-- Specials you declare for a cocktail come off your mat.
+- Sell one glass, or both in one action. Sold ingredients, specials included, go back in the bag.
 
 Drinks you can sell:
 
@@ -106,7 +103,7 @@ Which mixers go with which spirit:
 | Cranberry | ✓ | | | | |
 
 - **Simple drinks:** at most two spirits, and only one kind of mixer (any number of it).
-- **Cocktails:** the glass must hold exactly the recipe's spirits and mixers, nothing extra, and you declare exactly the recipe's specials.
+- **Cocktails:** the glass must hold exactly the recipe: its spirits, mixers and specials, nothing extra.
 
 ### Orders
 
@@ -129,14 +126,14 @@ Which mixers go with which spirit:
 ### Claim a card (free action)
 
 - Take a karaoke card or an ability card if your bladder meets its cost.
-- Costs are **checked, not paid**: the ingredients stay in your bladder. Stored spirits don't count.
+- Costs are **checked, not paid**: the ingredients stay in your bladder. Stored spirits and specials don't count.
 - Karaoke cards aren't replaced. A claimed ability card is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
 - Orders can't be claimed: you serve them by selling the drink.
 
 ### Clearing the rows
 
 - **The karaoke row** is never cleared.
-- **The orders row** (main action, drunk 3 or more): put all three orders on the bottom of the order deck and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
+- **The orders row** (free action once a turn, drunk 3 or more): put all three orders on the bottom of the order deck and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
 - **The ability row** (free action once a turn, drunk 2 or more): put all three cards on the bottom of the ability deck and deal three new ones.
 
 ## Cards
