@@ -1067,10 +1067,10 @@ function glass(pid, cupIndex, { interactive }) {
     ];
     const layers = Array.from({ length: CUP_SIZE }, (_, i) => slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'));
     const showRim = garnish.length || (placing && isSpecial(held.name));
-    const rim = showRim
-        ? h('span.glass-rim', { 'aria-hidden': 'true' },
-            Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty')))
-        : null;
+    // The rim always takes its space, so glasses line up whether or not
+    // they have specials on top; its slots show only when in use.
+    const rim = h('span.glass-rim', { 'aria-hidden': 'true', cls: showRim ? '' : 'is-unused' },
+        Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty')));
 
     const vessel = h(room ? 'button.glass' : 'div.glass', {
         cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''}`,
