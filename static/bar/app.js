@@ -816,11 +816,6 @@ function bladderCounts(ps) {
 function costHave(card, ps) {
     if (!ps) return Infinity;
     const have = bladderCounts(ps);
-    if (card.card_type === 'karaoke') {
-        for (const c of ps.cards) if (c.card_type === 'store' && c.spirit_type === card.spirit_type) {
-            have[card.spirit_type] = (have[card.spirit_type] ?? 0) + (c.stored_spirits?.length ?? 0);
-        }
-    }
     if (card.card_type === 'cup_doubler') return Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
     // One of its special pays for a specialist in full
     if (card.card_type === 'specialist' && have[SPECIALIST_SPECIAL[card.spirit_type]]) return cardCost(card).length;
@@ -850,7 +845,7 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
     const short = Math.max(0, cost.length - have);
     const label = isOrder
         ? `Order: ${card.name}. ${cardText(card)}`
-        : `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} Costs ${costCaption(card)} in your bladder.${ps && short ? ` You need ${short} more.` : ''}${claimable ? ' You can claim it.' : ''}`;
+        : `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} Costs ${costCaption(card)} in your bladder${card.card_type === 'karaoke' ? ', and drunk 3 or more' : ''}.${ps && short ? ` You need ${short} more.` : ''}${claimable ? ' You can claim it.' : ''}`;
     const subject = isOrder ? null : cardSubject(card);
     const specials = isOrder ? orderRecipe(card).specials : [];
 
@@ -925,7 +920,7 @@ function renderMarket() {
 
     return h('section.market', { 'aria-label': 'Cards' },
         h('div.card-row.is-karaoke', { 'aria-label': 'Karaoke stage', role: 'group' },
-            tag('Karaoke stage', 'Three songs wins. Never cleared.'),
+            tag('Karaoke stage', 'Sing at drunk 3+ with 2 of the song’s spirit. Three songs wins.'),
             h('div.row-cards', {}, cells(1, 5))),
         h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
             tag('Orders', 'Sell what they want for the bonus. Clear at drunk 3+ (free).', 2, 'Clear (free)'),

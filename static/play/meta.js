@@ -35,7 +35,7 @@ export const CARD_TYPES = {
     karaoke: {
         icon: '🎤',
         title: 'Karaoke',
-        cost: (c) => `3× ${ING[c.spirit_type]?.label ?? 'spirit'} drunk`,
+        cost: (c) => `2× ${ING[c.spirit_type]?.label ?? 'spirit'} drunk, at drunk 3+`,
         effect: () => '+5 points. Claim 3 karaoke cards to win instantly!',
     },
     store: {
@@ -59,7 +59,7 @@ export const CARD_TYPES = {
     specialist: {
         icon: '⭐',
         title: 'Specialist',
-        cost: (c) => `2× ${ING[c.spirit_type]?.label ?? 'spirit'} drunk`,
+        cost: (c) => `2× ${ING[c.spirit_type]?.label ?? 'spirit'} (or 1 of its special) drunk`,
         effect: (c) => `+2 points. +2 bonus points whenever you sell a drink containing ${ING[c.spirit_type]?.label ?? 'that spirit'}.`,
     },
     free_action: {

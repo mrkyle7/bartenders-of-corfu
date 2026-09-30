@@ -36,7 +36,8 @@ entity Card {
 variant KaraokeCard : Card {
     spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
     name: String
-    -- cost: 3 bladder spirits of this card's spirit_type (stored spirits don't count)
+    -- cost: 2 bladder spirits of this card's spirit_type (stored spirits don't count),
+    --   and drunk_level >= config.min_drunk_to_sing (checked, not paid)
     -- worth 5 points when claimed; counts toward win condition
 }
 
@@ -155,6 +156,8 @@ default FreeActionCard weak_bladder     = { spirit_type: GIN,   name: "Weak Blad
 
 config {
     karaoke_card_points:    Integer = 5
+    min_drunk_to_sing:      Integer = 3    -- drunk level needed to claim a karaoke card
+    karaoke_spirits:        Integer = 2    -- spirits of the song's type paid to claim it
     store_card_points:      Integer = 1
     refresher_card_points:  Integer = 1
     cup_doubler_card_points: Integer = 2
@@ -245,7 +248,8 @@ rule ClaimCard {
     requires: "claim_card" not in free_actions_used_this_turn
     requires: card in row 1 or row 3            -- orders can't be claimed
     requires card.kind = Karaoke:
-        player.bladder where spirit_type = card.spirit_type has count >= 3
+        player.drunk_level >= config.min_drunk_to_sing          -- checked, not paid
+        and player.bladder where spirit_type = card.spirit_type has count >= config.karaoke_spirits
     requires card.kind = Store:
         player.bladder where spirit_type = card.spirit_type has count >= 1
     requires card.kind = Refresher:

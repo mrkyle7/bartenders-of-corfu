@@ -232,7 +232,7 @@ def _threshold_proximity(
             ct = card.card_type
             if ct == "karaoke":
                 need, have, worth, spirit_cost = (
-                    3,
+                    2,  # plus drunk 3+ to sing
                     _have_spirit(spirit_counts, card.spirit_type),
                     w.karaoke_acquire,
                     True,

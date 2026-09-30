@@ -432,7 +432,8 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
             ct = card.card_type
 
             if ct == "karaoke":
-                if card.spirit_type and _available_spirits(ps, card.spirit_type) >= 3:
+                # Drunk 3+ and 2 of its spirit in the bladder
+                if card_payment(ps, card) is not None:
                     result.append(
                         Action(
                             action_type="claim_card",

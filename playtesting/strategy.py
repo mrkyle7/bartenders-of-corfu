@@ -697,9 +697,9 @@ def _opponent_threats(gs: GameState, ps: PlayerState) -> dict[Ingredient, float]
             if spirit is None:
                 continue
             in_bladder = sum(1 for i in opp.bladder if i == spirit)
-            if 1 <= in_bladder <= 2:
-                # Closer to 3 → stronger threat
-                bump(spirit, 0.4 * in_bladder)
+            if in_bladder == 1:
+                # One more of it sings the song; more so once they're drunk
+                bump(spirit, 0.4 if opp.drunk_level < 2 else 0.8)
 
         # 4. Partial drinks in opponent's cups
         for cup in opp.cups:
@@ -734,6 +734,7 @@ def _smart_take_assignments(
     drunk_cap: int = 3,
     special_mode: str = "fit",
     prefix: list[dict] | None = None,
+    drink_first: set[Ingredient] | None = None,
 ) -> list[dict]:
     """Shared smart assignment builder — returns display-only assignments.
 
@@ -758,6 +759,9 @@ def _smart_take_assignments(
 
     ``prefix`` holds assignments a strategy already chose; they count toward
     ``count`` and their ingredients are no longer available.
+
+    ``drink_first`` names spirits to drink from the display before anything
+    else (a karaoke singer's song spirits), while the drunk cap allows.
 
     Within each priority class, ingredients opponents need are picked
     first as a denial play (see `_opponent_threats`).
@@ -812,6 +816,21 @@ def _smart_take_assignments(
 
     for _ in range(max(0, count - len(assignments))):
         placed = False
+
+        # Pass 0: spirits we want in the bladder (e.g. for a karaoke song)
+        if drink_first and spirits_drunk_so_far < spirit_drink_budget:
+            ing = next((i for i in display_available if i in drink_first), None)
+            if ing is not None:
+                display_available.remove(ing)
+                assignments.append(
+                    {
+                        "ingredient": ing.name,
+                        "source": "display",
+                        "disposition": "drink",
+                    }
+                )
+                spirits_drunk_so_far += 1
+                placed = True
 
         # Pass 1: preferred spirit → cup (specialist bot: keep focus spirit
         # ahead of specials so the +2 specialist bonus path stays primary)
@@ -1331,8 +1350,9 @@ class RandomStrategy(Strategy):
 class KaraokeRusher(Strategy):
     """Rushes karaoke cards for the 3-karaoke win.
 
-    Needs spirits in bladder for threshold checks, so drinks spirits
-    when close to claiming. Otherwise plays safe with spirits→cups.
+    A song needs drunk 3+ and 2 of its spirit in the bladder, so it drinks
+    the songs' spirits (which also gets it drunk enough) up to drunk 4,
+    then sings. Otherwise plays safe with spirits→cups.
     """
 
     name = "KaraokeRusher"
@@ -1354,6 +1374,12 @@ class KaraokeRusher(Strategy):
         karaoke = _card_claims_by_type(valid_actions, "karaoke")
         if karaoke:
             return karaoke[0]
+
+        # Singing means living at drunk 3+: step back from the edge first
+        if ps.drunk_level >= 4 or _is_in_danger(ps):
+            wee = _find_action(valid_actions, "go_for_a_wee")
+            if wee:
+                return wee
 
         # Safe specials take — bank them on the mat for future cocktails
         take = _safe_specials_take(gs, ps, valid_actions)
@@ -1416,50 +1442,71 @@ class KaraokeRusher(Strategy):
     ) -> list[dict]:
         ps = gs.player_states[player_id]
         cups = CupTracker(ps)
-        targets = self._target_spirits(gs)
 
-        # Only drink spirits when safe (drunk ≤ 1) and close to claiming
-        # (have 1-2 already, need 1-2 more). Otherwise play safe.
-        if ps.drunk_level <= 1:
-            for t in targets:
-                ing = _SPIRIT_MAP.get(t)
-                if ing:
-                    have = sum(1 for i in ps.bladder if i == ing)
-                    if 1 <= have < 3:
-                        return _smart_take_assignments(
-                            gs,
-                            ps,
-                            count,
-                            cups,
-                            prefer_spirit=ing,
-                            spirit_to_cup=False,
-                            drunk_aware=False,
-                            mixer_to_cup_if_paired=False,
-                        )
+        # Drink a song's spirit while it still needs one and drunk stays ≤ 4:
+        # the drinking is what gets it to drunk 3 to sing.
+        ing = self._song_to_drink(gs, ps)
+        if ing is not None:
+            return _smart_take_assignments(
+                gs,
+                ps,
+                count,
+                cups,
+                drunk_cap=4,
+                drink_first=self._song_spirits_needed(gs, ps),
+            )
 
         return _smart_take_assignments(gs, ps, count, cups)
+
+    def _song_spirits_needed(self, gs: GameState, ps: PlayerState) -> set[Ingredient]:
+        """Song spirits still short of the 2 a song needs."""
+        needed = set()
+        for t in self._target_spirits(gs):
+            ing = _SPIRIT_MAP.get(t)
+            if ing is not None and sum(1 for i in ps.bladder if i == ing) < 2:
+                needed.add(ing)
+        return needed
+
+    def _song_to_drink(self, gs: GameState, ps: PlayerState) -> Ingredient | None:
+        """The karaoke spirit worth drinking now, if any: the song closest to
+        its 2 spirits, while drunk is below 4."""
+        if ps.drunk_level >= 4:
+            return None
+        best, best_have = None, -1
+        for t in self._target_spirits(gs):
+            ing = _SPIRIT_MAP.get(t)
+            if ing is None:
+                continue
+            have = sum(1 for i in ps.bladder if i == ing)
+            if have < 2 and have > best_have:
+                best, best_have = ing, have
+        return best
 
     def choose_pending_assignments(
         self, gs: GameState, player_id: UUID, drawn: list[Ingredient]
     ) -> list[dict]:
         ps = gs.player_states[player_id]
         cups = CupTracker(ps)
-        targets = self._target_spirits(gs)
 
-        # If safe and close to karaoke claim, drink drawn spirits to bladder
-        if ps.drunk_level <= 1:
-            for t in targets:
-                ing = _SPIRIT_MAP.get(t)
-                if ing:
-                    have = sum(1 for i in ps.bladder if i == ing)
-                    if 1 <= have < 3:
-                        return _smart_pending_assignments(
-                            ps,
-                            drawn,
-                            cups,
-                            spirit_to_cup=False,
-                            drunk_aware=False,
-                        )
+        # Drink drawn song spirits it still needs (up to drunk 4); the rest
+        # are handled as usual.
+        if self._song_to_drink(gs, ps) is not None:
+            needed = self._song_spirits_needed(gs, ps)
+            already = sum(1 for i in gs.drunk_ingredients_this_turn if i in _SPIRITS)
+            budget = max(0, 4 - ps.drunk_level - already)
+            song, rest = [], []
+            for ing in drawn:
+                if ing in needed and len(song) < budget:
+                    song.append(ing)
+                    needed.discard(ing)  # one of each per batch is plenty
+                else:
+                    rest.append(ing)
+            if song:
+                rest_asg = _smart_pending_assignments(
+                    ps, rest, cups, spirits_already_drunk=already + len(song)
+                )
+                drink = [{"source": "pending", "disposition": "drink"}] * len(song)
+                return _in_drawn_order(drawn, song + rest, drink + rest_asg)
 
         return _smart_pending_assignments(ps, drawn, cups)
 
@@ -2031,7 +2078,8 @@ class Mastermind(Strategy):
                     if current < 3 <= after and not self._has_doubler(ps):
                         value += 35
                 if card.card_type == "karaoke" and card.spirit_type == name:
-                    if current < 3 <= after:
+                    # A song: 2 of its spirit, and drunk 3+ (this drink helps)
+                    if current < 2 <= after and ps.drunk_level + 1 >= 3:
                         kc = ps.karaoke_cards_claimed
                         value += 100 if kc >= 2 else (25 if kc >= 1 else 10)
                 if card.card_type == "store" and card.spirit_type == name:
@@ -2456,7 +2504,7 @@ class Mastermind(Strategy):
                     if before < 3 <= after and not self._has_doubler(ps):
                         value = max(value, 65.0)
                 if card.card_type == "karaoke" and card.spirit_type == spirit_name:
-                    if before < 3 <= after:
+                    if before < 2 <= after and ps.drunk_level + (after - before) >= 3:
                         kc = ps.karaoke_cards_claimed
                         v = 200.0 if kc >= 2 else (50.0 if kc >= 1 else 25.0)
                         value = max(value, v)

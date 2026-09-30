@@ -5,7 +5,7 @@ You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails t
 ## Winning
 
 - **Points:** the first player to reach the target starts the last round. The target is **40 points with 2 players, 35 with 3, and 30 with 4**. The round is played out so everyone has had the same number of turns, then the player with the most points wins (on a tie, the one earliest in turn order).
-- **Karaoke:** claim **3 karaoke cards** and you win on the spot, even during the last round.
+- **Karaoke:** sing **3 karaoke songs** and you win on the spot, even during the last round. A song needs you to be drunk 3 or more, with 2 of its spirit in your bladder.
 - **Last one standing:** if everyone else has gone to hospital, wet themselves or left, you win.
 
 ## What's in the box
@@ -128,6 +128,7 @@ Which mixers go with which spirit:
 
 - Take a karaoke card or an ability card if your bladder holds its cost.
 - **The cost is paid:** those ingredients leave your bladder and go back into the bag. Stored spirits don't count.
+- A karaoke card also needs you to be **drunk 3 or more**. Your drunk level is only checked, not paid.
 - Karaoke cards aren't replaced. A claimed ability card is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
 - Orders can't be claimed: you serve them by selling the drink.
 
@@ -141,7 +142,7 @@ Which mixers go with which spirit:
 
 | Card | Cost (in your bladder) | Points | What it does |
 |---|---|---|---|
-| Karaoke (one per spirit) | 3 of that spirit | 5 | Claim three and you win. |
+| Karaoke (one per spirit) | 2 of that spirit, and drunk 3 or more | 5 | Claim three and you win. |
 | Store (one per spirit) | 1 of that spirit | 1 | The rest of that spirit in your bladder moves onto the card. Pour stored spirits into a glass or drink them whenever you like on your turn (free); a wee doesn't flush them. |
 | Refresher (one per mixer) | 2 of that mixer | 1 | That mixer always sobers you up by 1, even when you drink spirits with it. |
 | Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |

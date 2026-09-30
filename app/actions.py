@@ -53,6 +53,9 @@ MAX_DRUNK_LEVEL = 5
 # ability row is a free action once a turn and needs drunk 2+.
 MIN_DRUNK_TO_REFRESH = 3
 MIN_DRUNK_TO_SWIPE = 2
+# Karaoke: sing when you're drunk enough, with 2 of the song's spirit drunk
+MIN_DRUNK_TO_SING = 3
+KARAOKE_SPIRITS = 2
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -535,7 +538,7 @@ def card_payment(
     """The bladder ingredients that pay for a card, or None if it can't be paid.
 
     Claiming a karaoke or ability card takes its cost out of the bladder and
-    back into the bag. ``pay_with`` picks how to pay where there's a choice:
+    back into the bag. A karaoke song also needs drunk 3+ (checked, not paid). ``pay_with`` picks how to pay where there's a choice:
     the spirit for a cup doubler (any spirit with three will do without it),
     and for a specialist either its spirit (two) or its special (one; the
     special is used by default when held).
@@ -550,7 +553,12 @@ def card_payment(
         return [Ingredient[name]] * n
 
     ct = card.card_type
-    if ct in ("karaoke", "free_action"):
+    if ct == "karaoke":
+        # Drunk level is checked, not paid; the two spirits are paid
+        if ps.drunk_level < MIN_DRUNK_TO_SING:
+            return None
+        return take(card.spirit_type, KARAOKE_SPIRITS)
+    if ct == "free_action":
         return take(card.spirit_type, 3)
     if ct == "store":
         return take(card.spirit_type, 1)
@@ -1190,6 +1198,12 @@ def claim_card(
     needs_spirit = ("karaoke", "store", "specialist", "free_action")
     if card_type in needs_spirit and target_card.spirit_type is None:
         raise GameException("Card has no spirit type", status_code=500)
+    if card_type == "karaoke" and ps.drunk_level < MIN_DRUNK_TO_SING:
+        raise GameException(
+            f"You need to be drunk level {MIN_DRUNK_TO_SING}+ to sing karaoke; "
+            f"you are at {ps.drunk_level}",
+            status_code=400,
+        )
     paid = card_payment(ps, target_card, spirit_type)
     if paid is None:
         raise GameException(

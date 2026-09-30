@@ -88,7 +88,8 @@ def test_the_display_shows_five_spirits_and_mixers_and_specials_go_aside():
 def test_claiming_is_free_and_leaves_the_main_action():
     gs = _game()
     pid, ps = _me(gs)
-    ps.bladder = [Ingredient.RUM] * 3
+    ps.bladder = [Ingredient.RUM] * 2
+    ps.drunk_level = 3
     sea_shanty = next(c for c in _row(gs, 1).cards if c.spirit_type == "RUM")
 
     new, payload = claim_card(gs, pid, sea_shanty.id)
@@ -103,7 +104,8 @@ def test_claiming_is_free_and_leaves_the_main_action():
 def test_only_one_claim_a_turn():
     gs = _game()
     pid, ps = _me(gs)
-    ps.bladder = [Ingredient.RUM] * 3 + [Ingredient.GIN] * 3
+    ps.bladder = [Ingredient.RUM] * 2 + [Ingredient.GIN] * 2
+    ps.drunk_level = 3
     karaoke = _row(gs, 1).cards
     rum = next(c for c in karaoke if c.spirit_type == "RUM")
     gin = next(c for c in karaoke if c.spirit_type == "GIN")
@@ -134,9 +136,13 @@ def test_orders_cannot_be_claimed():
 def test_turn_waits_while_a_claim_is_possible_then_ends_after_it():
     gs = _game()
     pid, ps = _me(gs)
-    ps.bladder = [Ingredient.RUM] * 3
+    ps.bladder = [Ingredient.RUM] * 2
+    ps.drunk_level = 3
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
     gs.card_rows[1].cards = []  # no orders to muddy the sale
+    # nothing to swipe either (drunk 3 could otherwise swipe the abilities)
+    _row(gs, 3).cards = []
+    gs._deck_dicts = []
     gs, _ = sell_cup(gs, pid, 0, [])
     # Main action done, but Sea Shanty is affordable: the turn stays open
     assert gs.player_turn == pid
@@ -755,14 +761,31 @@ def test_the_wrong_special_does_not_pay_for_a_specialist():
         claim_card(gs, pid, "sp")
 
 
-def test_karaoke_takes_its_three_spirits_out_of_the_bladder():
+def test_karaoke_needs_drunk_three_and_takes_two_spirits():
     gs = _game()
     pid, ps = _me(gs)
     card = next(c for c in _row(gs, 1).cards if c.spirit_type == "GIN")
-    ps.bladder = [Ingredient.GIN] * 4
-    new, _ = claim_card(gs, pid, card.id)
-    assert new.player_states[pid].bladder == [Ingredient.GIN]
-    assert new.player_states[pid].karaoke_cards_claimed == 1
+    ps.bladder = [Ingredient.GIN] * 3
+    ps.drunk_level = 2
+    with pytest.raises(GameException):
+        claim_card(gs, pid, card.id)
+    ps.drunk_level = 3
+    new, payload = claim_card(gs, pid, card.id)
+    me = new.player_states[pid]
+    assert me.bladder == [Ingredient.GIN]
+    assert me.karaoke_cards_claimed == 1
+    assert me.drunk_level == 3  # drunk is checked, not paid
+    assert payload["paid"] == ["GIN", "GIN"]
+
+
+def test_one_spirit_does_not_sing_a_song_however_drunk():
+    gs = _game()
+    pid, ps = _me(gs)
+    card = next(c for c in _row(gs, 1).cards if c.spirit_type == "GIN")
+    ps.bladder = [Ingredient.GIN]
+    ps.drunk_level = 5
+    with pytest.raises(GameException):
+        claim_card(gs, pid, card.id)
 
 
 def test_a_store_card_pays_one_spirit_and_stores_the_rest():

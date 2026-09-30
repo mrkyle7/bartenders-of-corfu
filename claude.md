@@ -31,7 +31,7 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 ## Domain Model
 Formal specs live in `specs/game.allium` and `specs/cards.allium`. Use the `spec-reader` agent to extract rules before implementing game logic. Key rules to know:
 
-**Winning:** reaching the target (40 / 35 / 30 pts for 2 / 3 / 4 players) starts a last round, most points then wins; OR 3 karaoke cards claimed (instant); OR last player standing
+**Winning:** reaching the target (40 / 35 / 30 pts for 2 / 3 / 4 players) starts a last round, most points then wins; OR 3 karaoke cards claimed (instant; each needs drunk 3+ and 2 of its spirit, the spirits paid); OR last player standing
 **Elimination:** `drunk_level > 5` → hospitalised; `bladder.count > bladder_capacity` → wet
 **Turn:** one MAIN action (take ingredients, sell one or both cups, drink a cup, wee) plus FREE actions, each once a turn: claim a card (always free), clear the orders row (drunk 3+), swipe the ability row (drunk 2+), and those granted by free-action cards. A free action only holds the turn open while it could be used. `TakeIngredients` may span multiple API batches — the turn only advances when the cumulative total reaches `take_count`.
 **Market:** row 1 = all 5 karaoke cards (never cleared or refilled); row 2 = 3 drink orders (serve one by selling a matching drink for its bonus); row 3 = 3 ability cards. Cleared or served cards go to the bottom of their deck (`order_deck`, `deck`).

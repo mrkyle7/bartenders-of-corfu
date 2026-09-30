@@ -177,8 +177,9 @@ class TestKaraokeOverridesLastRound:
             CardRow(position=2, cards=[]),
             CardRow(position=3, cards=[]),
         ]
-        # Give player 3 RUM in bladder
-        ps1.bladder = [Ingredient.RUM, Ingredient.RUM, Ingredient.RUM]
+        # A song needs drunk 3+ and 2 RUM in the bladder
+        ps1.bladder = [Ingredient.RUM, Ingredient.RUM]
+        ps1.drunk_level = 3
 
         gs, _ = actions.claim_card(gs, p1, karaoke_card.id)
         assert gs.winner == p1  # Instant win
@@ -210,7 +211,8 @@ class TestKaraokeOverridesLastRound:
             CardRow(position=2, cards=[]),
             CardRow(position=3, cards=[]),
         ]
-        ps2.bladder = [Ingredient.RUM, Ingredient.RUM, Ingredient.RUM]
+        ps2.bladder = [Ingredient.RUM, Ingredient.RUM]
+        ps2.drunk_level = 3
         gs, _ = actions.claim_card(gs, p2, karaoke_card.id)
         assert gs.winner == p2  # P2 wins with karaoke despite P1 having 52 pts
 
@@ -279,8 +281,9 @@ class TestLastRoundWithFreeActionModes:
                 )
             ],
         )
-        # P2 can afford the karaoke card, so a free claim is open to them
-        player_states[pids[1]].bladder = [Ingredient.RUM] * 3
+        # P2 can sing the karaoke song, so a free claim is open to them
+        player_states[pids[1]].bladder = [Ingredient.RUM] * 2
+        player_states[pids[1]].drunk_level = 3
         return gs, pids
 
     def test_p2_trigger_then_end_turn_ends_game(self):

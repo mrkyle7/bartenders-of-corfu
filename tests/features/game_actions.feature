@@ -165,14 +165,25 @@ Feature: Game turn actions
     Given it is player 1's turn
     And a karaoke card is available in row 1
     And player 1 has 3 spirits in their bladder
+    And player 1 has a drunk level of 3
     When player 1 claims that card
     Then player 1 should have 1 card
     And row 1 should have 5 cards
+    And player 1's bladder should contain 1 ingredients
+
+  Scenario: Singing karaoke needs drunk level 3
+    Given it is player 1's turn
+    And a karaoke card is available in row 1
+    And player 1 has 3 spirits in their bladder
+    And player 1 has a drunk level of 2
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
 
   Scenario: Claiming a card is a free action and keeps the turn
     Given it is player 1's turn
     And a karaoke card is available in row 1
     And player 1 has 3 spirits in their bladder
+    And player 1 has a drunk level of 3
     When player 1 claims that card
     Then it should still be player 1's turn
 
@@ -291,6 +302,7 @@ Feature: Game turn actions
     And player 2 has claimed 2 karaoke cards
     And a karaoke card is available in row 1
     And player 2 has 3 spirits in their bladder
+    And player 2 has a drunk level of 3
     When player 1 sells cup 0 declaring specials "sugar,lemon"
     Then the last round should be active
     When player 2 claims that card
@@ -322,6 +334,7 @@ Feature: Game turn actions
     And player 1 has claimed 2 karaoke cards
     And a karaoke card is available in row 1
     And player 1 has 3 spirits in their bladder
+    And player 1 has a drunk level of 3
     When player 1 claims that card
     Then the game should be over
     And player 1 should be the winner
@@ -388,7 +401,8 @@ Feature: Game turn actions
   Scenario: Karaoke card claim cannot use stored spirits toward the cost
     Given it is player 1's turn
     And player 1 holds a VODKA store card with 1 stored spirit
-    And player 1 has 2 spirits in their bladder
+    And player 1 has 1 spirit in their bladder
+    And player 1 has a drunk level of 3
     And a karaoke card is available in row 1
     When player 1 claims that card
     Then the action should be rejected with a 400 error

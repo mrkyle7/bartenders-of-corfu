@@ -132,7 +132,7 @@ export function cardText(card) {
     const spirit = ING[card.spirit_type]?.label;
     const mixer = ING[card.mixer_type]?.label;
     switch (card.card_type) {
-        case 'karaoke': return 'Sing three karaoke songs and you win on the spot.';
+        case 'karaoke': return 'Sing when you’re drunk 3 or more. Three songs and you win on the spot.';
         case 'store': return `Keeps your ${spirit} out of your bladder. Pour it or drink it whenever you like.`;
         case 'refresher': return `Every ${mixer} you drink sobers you up by one, even with spirits.`;
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
@@ -149,7 +149,7 @@ export function cardText(card) {
 // 'ANY_SPIRIT' means three of one spirit of your choice.
 export function cardCost(card) {
     switch (card.card_type) {
-        case 'karaoke':
+        case 'karaoke': return Array(2).fill(card.spirit_type); // and drunk 3+
         case 'free_action': return Array(3).fill(card.spirit_type);
         case 'store': return [card.spirit_type];
         case 'specialist': return Array(2).fill(card.spirit_type);
@@ -182,7 +182,7 @@ export const RULES = [
         title: 'Winning',
         items: [
             'Reach the target to start the last round: 40 points with two players, 35 with three, 30 with four. The round finishes so everyone has had the same number of turns, then the most points wins (a tie goes to whoever is earliest in turn order).',
-            'Claim three karaoke cards and you win on the spot, even in the last round.',
+            'Sing three karaoke songs and you win on the spot, even in the last round. A song needs drunk 3 or more and 2 of its spirit in your bladder.',
             'Last one standing wins when everyone else is in hospital, wet or gone home.',
         ],
     },
@@ -230,7 +230,7 @@ export const RULES = [
         title: 'Cards',
         items: [
             'Claiming pays the cost: those ingredients leave your bladder and go back in the bag. Stored spirits don’t count. A Store card pays one spirit and the rest of it moves onto the card.',
-            'Karaoke cards are all out from the start and aren’t replaced. A claimed ability card is replaced from the deck.',
+            'A karaoke song also needs you drunk 3 or more (checked, not paid). Karaoke cards are all out from the start and aren’t replaced. A claimed ability card is replaced from the deck.',
             'Clearing the orders (drunk 3 or more) or swiping the abilities (drunk 2 or more) is free, once a turn each. All three cards go to the bottom of their deck and three new ones are dealt. The karaoke row is never cleared.',
         ],
     },
