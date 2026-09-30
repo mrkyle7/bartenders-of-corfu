@@ -82,10 +82,10 @@ h1, h2, p { margin: 0; }
 }
 .turnbar.tone-you { background: var(--kumquat); color: var(--kumquat-ink); }
 .turnbar.tone-win { background: #f2c230; color: #2a2000; }
-.turn-words { flex: 1 1 320px; min-width: 0; }
+.turn-words { flex: 1 1 200px; min-width: 0; }
 .turn-head { font: 800 24px/1.15 var(--display); }
 .turn-detail { font-size: 15px; margin-top: 2px; }
-.turn-buttons { display: flex; gap: 8px; }
+.turn-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .prompt {
     flex: 1 1 100%;
@@ -965,31 +965,26 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     body.has-sheet .table, body.has-sheet .turnbar { margin-right: 460px; }
 }
 
-/* What's left of your turn. */
+/* The free actions you could use right now, as small chips. */
 .action-strip {
     flex: 1 1 100%;
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
     margin: 0;
     padding: 0;
     list-style: none;
+    font-size: 13px;
 }
+.act-lead { font-weight: 700; }
 .act {
-    display: grid;
-    gap: 1px;
-    padding: 5px 10px;
+    padding: 3px 9px;
     border-radius: 5px;
-    border: 2px solid rgba(42, 20, 4, 0.55);
-    background: rgba(255, 255, 255, 0.35);
-    min-width: 120px;
+    border: 2px solid var(--kumquat-ink);
+    background: #fff;
+    font-weight: 800;
 }
-.act-kind { font-weight: 800; font-size: 13px; }
-.act-state { font-size: 12px; }
-.act.is-open { background: #fff; border-color: var(--kumquat-ink); }
-.act.is-used { opacity: 0.6; text-decoration: line-through; text-decoration-thickness: 1.5px; }
-.act.is-used .act-state { text-decoration: none; }
-.act.is-off { border-style: dashed; background: transparent; }
 
 /* Choosing what a special token becomes. */
 .special-choice { margin-top: 10px; padding: 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); }
@@ -1149,19 +1144,18 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     }
     body { font-size: 14px; }
     .table { padding: 14px 12px 40px; gap: 18px; }
-    .turnbar { padding: 10px 12px; }
-    .turn-head { font-size: 20px; }
-    .turn-detail { font-size: 14px; }
+    .turnbar { padding: 8px 12px; }
+    .turn-head { font-size: 18px; }
+    .turn-detail { font-size: 13px; line-height: 1.3; }
+    .turn-words { flex-basis: 150px; }
     .wordmark { font-size: 17px; }
     .card-row, .card-row.is-karaoke { grid-template-columns: 1fr; gap: 6px; --cw: calc((100vw - 32px - 20px) / 3); }
     .card-row .pile { --cw: 84px; justify-self: start; }
     .row-tag { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
     .menu { padding: 16px; }
     .menu-title { font-size: 28px; }
-    .act { min-width: 0; flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; padding: 3px 7px; }
-    .act-kind { font-size: 12px; }
-    .act-state { font-size: 11px; }
-    .action-strip { gap: 4px; }
+    .action-strip { gap: 4px; font-size: 12px; }
+    .act { padding: 2px 7px; }
     .turnbar { gap: 6px 12px; }
     .row-cards { gap: 10px; }
     .supply { justify-content: center; }

@@ -714,9 +714,9 @@ function turnbar() {
         } else if (takeUnderway()) {
             detail = `Take ${plural(left, 'more ingredient')}: tap tokens on the display or the specials tray, or draw from the bag.`;
         } else if (state.main_action_taken_this_turn) {
-            detail = 'Your main action is done. Use a free action, or end your turn.';
+            detail = 'Main action done. Use a free action or end your turn.';
         } else {
-            detail = `Main action: take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass or go for a wee.`;
+            detail = `Take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass or wee.`;
         }
     } else {
         headline = `${seatName(state.player_turn)} is playing`;
@@ -728,7 +728,7 @@ function turnbar() {
     kids.push(h('div.turn-words', {},
         h('p.turn-head', { text: headline }),
         detail ? h('p.turn-detail', { text: detail }) : null));
-    if (myTurn()) kids.push(actionStrip());
+    const strip = myTurn() ? actionStrip() : null;
 
     const buttons = [];
     if (myTurn() && valid.can_end_turn && !handItems().length) {
@@ -736,7 +736,7 @@ function turnbar() {
     }
     if (game.status !== 'NEW') {
         for (const [sheet, label] of [['menu', 'Drinks menu'], ['rules', 'Rules']]) {
-            buttons.push(h('button.btn.sheet-btn', {
+            buttons.push(h('button.btn.tiny.sheet-btn', {
                 type: 'button', text: label, 'data-k': `open-${sheet}`,
                 cls: ui.sheet === sheet ? 'is-open' : '',
                 'aria-expanded': String(ui.sheet === sheet), 'aria-controls': 'sheet',
@@ -745,6 +745,7 @@ function turnbar() {
         }
     }
     if (buttons.length) kids.push(h('div.turn-buttons', {}, buttons));
+    if (strip) kids.push(strip);
 
     const undo = game.pending_undo;
     if (undo && undo.status === 'pending') {
@@ -767,41 +768,29 @@ function turnbar() {
     bar.replaceChildren(...kids);
 }
 
-// What's left of your turn: the main action and each free action, and why a
-// free action can't be used right now.
+// The free actions you could use right now; nothing else (the line above
+// already says whether your main action is still to do).
 function actionStrip() {
     const state = gs();
     const ps = mine();
     const used = new Set(state.free_actions_used_this_turn ?? []);
     const open = new Set(valid.free_actions_left ?? []);
     const mainDone = state.main_action_taken_this_turn;
-    const tiles = [h('li.act', { cls: mainDone ? 'is-used' : 'is-open' },
-        h('span.act-kind', { text: 'Main action' }),
-        h('span.act-state', { text: mainDone ? 'Done' : takeUnderway() ? 'Taking now' : 'Still to do' }))];
     const cardFree = new Set(ps.cards.filter((c) => c.card_type === 'free_action').map((c) => c.free_action_type));
     const clearRowOf = { refresh_orders_row: 2, refresh_ability_row: 3 };
+    const tiles = [];
     for (const [type, label] of Object.entries(FREE_ACTIONS)) {
         const always = type === 'claim_card' || type in clearRowOf;
-        if (!always && !cardFree.has(type)) continue;
+        if ((!always && !cardFree.has(type)) || used.has(type)) continue;
         const row = clearRowOf[type];
-        let status;
-        let cls;
-        if (used.has(type)) {
-            status = 'Used';
-            cls = 'is-used';
-        } else if (row ? actionsOf('refresh_card_row').some((a) => a.params.row_position === row)
-            : open.has(type) || (!mainDone && can(type))) {
-            status = 'Free now';
-            cls = 'is-open';
-        } else {
-            const needs = { refresh_orders_row: 3, refresh_ability_row: 2 }[type];
-            status = type === 'claim_card' ? 'Nothing you can afford'
-                : needs && ps.drunk_level < needs ? `Needs drunk ${needs}` : 'Not now';
-            cls = 'is-off';
-        }
-        tiles.push(h('li.act', { cls }, h('span.act-kind', { text: `${label} (free)` }), h('span.act-state', { text: status })));
+        const usable = row
+            ? actionsOf('refresh_card_row').some((a) => a.params.row_position === row)
+            : open.has(type) || (!mainDone && can(type));
+        if (usable) tiles.push(h('li.act', { text: label }));
     }
-    return h('ul.action-strip', { 'aria-label': 'Your actions this turn' }, tiles);
+    if (!tiles.length) return null;
+    return h('ul.action-strip', { 'aria-label': 'Free actions you can use now' },
+        h('li.act-lead', { text: 'Free now:' }), tiles);
 }
 
 // ─── Cards ──────────────────────────────────────────────────────────────────
