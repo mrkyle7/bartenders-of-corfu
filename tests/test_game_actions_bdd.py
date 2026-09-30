@@ -175,6 +175,14 @@ def player_completed_turn(ctx, n):
     draw_resp, take_resp = _draw_and_assign(token, ctx["game_id"], take_count, "drink")
     assert draw_resp.status_code == 200, draw_resp.text
     assert take_resp.status_code == 200, take_resp.text
+    # Drinking spirits can leave a free action usable (swiping the ability
+    # cards at drunk 2+), which holds the turn open: end it.
+    state = _get_game(token, ctx["game_id"])["game_state"]
+    if state["player_turn"] == pid:
+        end_resp = _client.post(
+            f"/v1/games/{ctx['game_id']}/actions/end-turn", cookies=_auth(token)
+        )
+        assert end_resp.status_code == 200, end_resp.text
     return ctx
 
 

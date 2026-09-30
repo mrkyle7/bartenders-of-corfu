@@ -71,9 +71,13 @@ def test_bar_lobby_start_lays_out_the_table(
     # A fresh bladder: eight open spaces, four toilet tokens in reserve
     assert page.locator(".mat.is-mine .bladder-slots .slot.is-empty").count() == 8
     assert page.locator(".mat.is-mine .loo-reserve .loo").count() == 4
-    # The drinks menu and score track are always on the table
-    assert page.locator(".menu .menu-item").count() == 9
+    # The score track is on the table; the drinks menu opens from the turn bar
     assert page.locator(".score-track .score-cell").count() == 41
+    page.locator('[data-k="open-menu"]').click()
+    page.locator("#sheet .menu .menu-item").first.wait_for(
+        state="visible", timeout=5000
+    )
+    assert page.locator("#sheet .menu .menu-item").count() == 9
 
 
 def test_bar_take_from_display_into_a_glass(

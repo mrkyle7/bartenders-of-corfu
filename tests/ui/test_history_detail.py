@@ -52,6 +52,17 @@ def _take_full_turn(base_url, game_id, jwt, cup_index=0):
     )
 
 
+_MIXERS = {"COLA", "SODA", "TONIC", "CRANBERRY"}
+
+
+def _end_turn_if_open(base_url, game_id, jwt):
+    """End the turn when a free action (e.g. swiping at drunk 2+) holds it open."""
+    game = _api_get(base_url, f"/v1/games/{game_id}", jwt)
+    state = game["game_state"]
+    if state.get("main_action_taken_this_turn"):
+        _api_post(base_url, f"/v1/games/{game_id}/actions/end-turn", jwt)
+
+
 def _active_and_other_jwt(base_url, game_id, new_user, other_user_and_jwt):
     """Return (active_jwt, other_jwt) based on whose turn it is."""
     game = _api_get(base_url, f"/v1/games/{game_id}", new_user["jwt"])
@@ -180,7 +191,9 @@ def test_wee_detail_shows_flushed_label(
     open_display = list(game["game_state"]["open_display"])
     # Drink real spirits/mixers before any SPECIAL token so the bladder is
     # guaranteed non-empty (display has ~4.5 non-SPECIAL out of 5 on average).
-    open_display.sort(key=lambda name: name == "SPECIAL")
+    # Mixers first: drinking spirits can leave a free action open (swiping
+    # the ability cards at drunk 2+), which keeps the turn from passing.
+    open_display.sort(key=lambda name: (name == "SPECIAL", name not in _MIXERS))
     chosen = open_display[:3]
     _api_post(
         base_url,
@@ -193,8 +206,10 @@ def test_wee_detail_shows_flushed_label(
             ]
         },
     )
+    _end_turn_if_open(base_url, new_game, active)
     # Other player takes a turn → back to active player
     _take_full_turn(base_url, new_game, other)
+    _end_turn_if_open(base_url, new_game, other)
     # Now active player can go for a wee
     wee_resp = _api_post(
         base_url, f"/v1/games/{new_game}/actions/go-for-a-wee", active
