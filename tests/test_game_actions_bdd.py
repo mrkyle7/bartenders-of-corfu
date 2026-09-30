@@ -28,6 +28,7 @@ from app.Ingredient import Ingredient, SpecialType
 scenarios("features/game_actions.feature")
 scenarios("features/undo.feature")
 scenarios("features/game_modes.feature")
+scenarios("features/notifications.feature")
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2082,3 +2083,95 @@ def deck_excludes_cocktail_shaker(ctx):
     assert "Cocktail Shaker" not in names, (
         f"Cocktail Shaker should be removed; deck/rows contain: {names}"
     )
+
+
+# ─── Notifications ────────────────────────────────────────────────────────────
+
+
+def _endpoint_for(ctx: dict, n: int) -> str:
+    return f"https://push.example.com/bdd/{ctx['game_id']}/p{n}"
+
+
+@given(parsers.parse("player {n:d} has turned on notifications"))
+def player_turned_on_notifications(ctx, n, monkeypatch):
+    """Subscribes a device for player n, and keeps what the server sends."""
+    from app import push
+
+    sent = ctx.setdefault("sent_pushes", [])
+
+    def fake_send(subscription_info, title, body, url, tag=None):
+        sent.append({"endpoint": subscription_info["endpoint"], "body": body})
+        return True
+
+    monkeypatch.setattr(push, "send_push", fake_send)
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        "/v1/push-subscriptions",
+        json={
+            "endpoint": _endpoint_for(ctx, n),
+            "keys": {"p256dh": "FAKEP256DH", "auth": "FAKEAUTH"},
+        },
+        cookies=_auth(token),
+    )
+    assert resp.status_code == 201, resp.text
+
+
+@given(parsers.parse("player {n:d} is not looking at the game"))
+def player_not_looking(ctx, n):
+    token, _ = _player(ctx, n)
+    resp = _client.post(f"/v1/games/{ctx['game_id']}/away", cookies=_auth(token))
+    assert resp.status_code == 200, resp.text
+
+
+@given(parsers.parse("player {n:d} is looking at the game"))
+def player_looking(ctx, n):
+    token, _ = _player(ctx, n)
+    _get_game(token, ctx["game_id"])
+
+
+@when(parsers.parse('player {n:d} turns on notifications for "{endpoint}"'))
+def player_turns_on_notifications_for(ctx, n, endpoint):
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        "/v1/push-subscriptions",
+        json={"endpoint": endpoint, "keys": {"p256dh": "P", "auth": "A"}},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(parsers.parse("player {n:d} turns off player {m:d}'s notifications"))
+def player_turns_off_others_notifications(ctx, n, m):
+    token, _ = _player(ctx, n)
+    resp = _client.request(
+        "DELETE",
+        "/v1/push-subscriptions",
+        json={"endpoint": _endpoint_for(ctx, m)},
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@then(parsers.parse('player {n:d} should be sent a notification saying "{text}"'))
+def player_sent_notification(ctx, n, text):
+    mine = [p for p in ctx["sent_pushes"] if p["endpoint"] == _endpoint_for(ctx, n)]
+    assert len(mine) == 1, ctx["sent_pushes"]
+    assert text in mine[0]["body"]
+
+
+@then(parsers.parse("player {n:d} should not be sent a notification"))
+def player_not_sent_notification(ctx, n):
+    assert not [
+        p for p in ctx["sent_pushes"] if p["endpoint"] == _endpoint_for(ctx, n)
+    ], ctx["sent_pushes"]
+
+
+@then(parsers.parse("player {n:d} should still have notifications on"))
+def player_still_has_notifications(ctx, n):
+    from app.db import db
+
+    _, pid = _player(ctx, n)
+    endpoints = [s["endpoint"] for s in db.get_push_subscriptions(UUID(pid))]
+    assert _endpoint_for(ctx, n) in endpoints

@@ -14,7 +14,7 @@ const state = {
     replayCursor:  -1,     // index into _replayTurns (-1 = live)
     historyMoves:  [],     // cached moves from /history
     pendingUndo:   null,   // current pending undo request object
-    lastKnownTurn: null,   // player_turn UUID from last render (for notification detection)
+    lastKnownTurn: null,   // player_turn UUID from last render (to refresh the notification bell)
 
     // Modal state (cup doubler still uses modal)
     cupDoublerCard:      null,

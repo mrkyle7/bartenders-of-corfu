@@ -12,38 +12,6 @@ import S from './state.js';
 import { inviteBox } from './invite.js';
 
 // ─────────────────────────────────────────────────────────────
-// Web Push subscription helper (shared with script.js)
-// ─────────────────────────────────────────────────────────────
-
-function _urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const raw = atob(base64);
-    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-}
-
-async function subscribeToPush() {
-    if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
-    try {
-        const reg = await navigator.serviceWorker.ready;
-        const existing = await reg.pushManager.getSubscription();
-        if (existing) return;
-        const resp = await fetch('/vapid-public-key');
-        if (!resp.ok) return;
-        const { public_key } = await resp.json();
-        const sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: _urlBase64ToUint8Array(public_key),
-        });
-        await fetch('/v1/push-subscriptions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(sub.toJSON()),
-        });
-    } catch (_) {}
-}
-
-// ─────────────────────────────────────────────────────────────
 // Initial load + polling
 // ─────────────────────────────────────────────────────────────
 async function load() {
@@ -69,34 +37,13 @@ async function load() {
         console.warn('Could not fetch user details:', e);
     }
 
-    // Register service worker for PWA + notification click handling
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-
-    // Request browser notification permission, then subscribe to Web Push
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then((perm) => {
-            if (perm === 'granted') subscribeToPush();
-        });
-    } else if ('Notification' in window && Notification.permission === 'granted') {
-        subscribeToPush();
-    }
-
-    // Background polling: tell SW to poll all games when tab is hidden
+    // Notifications come from the server (see static/push.js). It only
+    // sends them while this page isn't showing the game: polling stops when
+    // the page is hidden, and the server is told straight away.
+    window.bocPush?.sync();
+    window.bocPush?.watchGame(S.gameId);
     document.addEventListener('visibilitychange', () => {
-        if (!navigator.serviceWorker?.controller) return;
-        if (document.visibilityState === 'hidden') {
-            const turns = {};
-            if (S.gameId && S.lastKnownTurn) turns[S.gameId] = S.lastKnownTurn;
-            navigator.serviceWorker.controller.postMessage({
-                type: 'START_POLL',
-                playerId: S.me?.id,
-                knownTurns: turns,
-            });
-        } else {
-            navigator.serviceWorker.controller.postMessage({ type: 'STOP_POLL' });
-        }
+        if (document.visibilityState === 'visible' && !S.replayMode) refreshGame(true);
     });
 
     await refreshGame();
@@ -144,17 +91,9 @@ async function refreshGame(quiet = false) {
         S.validActions = validActions;
         S.pendingUndo = game.pending_undo || null;
         const newTurn = game.game_state && game.game_state.player_turn;
-        const isMyTurn = S.me && newTurn === S.me.id;
         const turnChanged = S.lastKnownTurn !== null && newTurn !== S.lastKnownTurn;
-        if (isMyTurn && turnChanged) notifyMyTurn();
         if (turnChanged) refreshNotificationBell();
         S.lastKnownTurn = newTurn;
-        // Keep SW in sync with current turn
-        if (turnChanged && navigator.serviceWorker?.controller) {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'UPDATE_TURN', gameId: S.gameId, lastKnownTurn: newTurn
-            });
-        }
         renderAll(game);
         schedulePoll(game);
     } catch (e) {
@@ -199,34 +138,6 @@ function sortPlayersByTurnOrder(playerIds, gs) {
     return ids.sort((a, b) => rank(a) - rank(b));
 }
 
-async function notifyMyTurn() {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    if (document.visibilityState === 'visible') return;
-
-    // Prefer SW-based notification (supports click-to-focus)
-    const reg = await navigator.serviceWorker?.ready;
-    if (reg) {
-        await reg.showNotification('Bartenders of Corfu', {
-            body: "It's your turn!",
-            icon: '/static/favicon.ico',
-            tag: 'turn-notification',
-            data: { url: window.location.href },
-        });
-    } else {
-        new Notification("Bartenders of Corfu", {
-            body: "It's your turn!",
-            icon: '/static/favicon.ico',
-        });
-    }
-
-    // Keep SW in sync so it doesn't re-notify
-    if (navigator.serviceWorker?.controller) {
-        navigator.serviceWorker.controller.postMessage({
-            type: 'UPDATE_TURN', lastKnownTurn: S.lastKnownTurn
-        });
-    }
-}
-
 async function refreshNotificationBell() {
     if (!S.me) return;
     try {
@@ -236,6 +147,7 @@ async function refreshNotificationBell() {
         const count = data.games.filter(g =>
             g.status === 'STARTED' && g.game_state && g.game_state.player_turn === S.me.id
         ).length;
+        window.bocPush?.setBadge(count);
         const bell = document.getElementById('gbNotificationBell');
         if (!bell) return;
         const badge = bell.querySelector('.notif-badge');
@@ -255,8 +167,10 @@ function schedulePoll(game) {
     if (!game || game.status !== 'STARTED') return;
     const gs = game.game_state || {};
     const myTurn = S.me && gs.player_turn === S.me.id;
-    // Poll when it's not our turn, or when an undo vote is pending (any player needs updates)
-    if (!myTurn || S.pendingUndo) {
+    // Poll when it's not our turn, or when an undo vote is pending (any player
+    // needs updates), and only while the page is showing: the server counts a
+    // player who polls as watching and doesn't notify them.
+    if ((!myTurn || S.pendingUndo) && document.visibilityState === 'visible') {
         S.pollTimer = setTimeout(() => refreshGame(true), 3000);
     }
 

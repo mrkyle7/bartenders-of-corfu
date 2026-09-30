@@ -57,9 +57,13 @@ async function boot() {
         }
         toastError(e.message);
     }
+    // Polls only while the page is showing, so the server counts you as
+    // watching and only notifies you when you're not (static/push.js).
     setInterval(() => {
         if (!busy && document.visibilityState === 'visible') refresh().catch(() => {});
     }, POLL_MS);
+    window.bocPush?.sync();
+    window.bocPush?.watchGame(gameId);
 }
 
 async function ensureNames(g) {
