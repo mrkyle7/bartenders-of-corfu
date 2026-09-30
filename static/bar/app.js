@@ -1722,7 +1722,8 @@ function render({ force = false } = {}) {
 
     $('table').replaceChildren(...[
         around.length ? h('div.across', { 'aria-label': 'Other players' }, around.map(mat)) : null,
-        h('div.middle', {}, renderMarket(), h('div.middle-side', {}, renderSupply(), renderScoreTrack())),
+        // The bag and display sit under the cards, right above your mat
+        h('div.middle', {}, h('div.middle-main', {}, renderMarket(), renderSupply()), h('div.middle-side', {}, renderScoreTrack())),
         isMember() && gs().player_states[me.id] ? mat(me.id) : null,
         h('div.extras', {}, chalkboard()),
         housekeeping(),

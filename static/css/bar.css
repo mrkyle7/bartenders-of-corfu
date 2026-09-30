@@ -303,6 +303,7 @@ button.tok { cursor: pointer; }
     gap: 22px;
     align-items: start;
 }
+.middle-main { display: grid; gap: 22px; align-content: start; min-width: 0; }
 .middle-side { display: grid; gap: 22px; }
 
 .extras {
@@ -602,7 +603,7 @@ button.card { cursor: pointer; }
 
 /* Specials that came out of the bag wait on their own small tray. */
 .specials-tray {
-    flex: 1 1 100%;
+    flex: 1 1 240px;
     padding: 8px 12px 10px;
     border-radius: 10px;
     background: rgba(74, 38, 114, 0.35);
@@ -1144,14 +1145,15 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 
 @media (max-width: 1180px) {
     .middle { grid-template-columns: 1fr; }
-    .middle-side { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+    .middle-side { order: -1; } /* score first, so the bag stays by your mat */
+    .supply { justify-content: center; }
     .market { justify-content: center; }
 }
 
 @media (max-width: 860px) {
     /* One column: bag and display sit right above your mat, the score
        track moves below it. */
-    .middle, .middle-side { display: contents; }
+    .middle, .middle-main, .middle-side { display: contents; }
     .across { order: 1; }
     .market { order: 2; }
     .supply { order: 3; }
