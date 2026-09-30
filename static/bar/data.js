@@ -70,7 +70,29 @@ export const CARD_KINDS = {
     cup_doubler: { label: 'Doubler', points: 2 },
     specialist: { label: 'Specialist', points: 2 },
     free_action: { label: 'Free action', points: 2 },
+    order: { label: 'Order', points: 0 },
 };
+
+// The ingredients an order asks for (tokens) and the specials it needs.
+export function orderRecipe(card) {
+    if (card.drink === 'simple') return { cup: [card.spirit_type, card.mixer_type], specials: [] };
+    if (card.drink === 'slammer') return { cup: ['TEQUILA', 'TEQUILA'], specials: [] };
+    const c = COCKTAILS.find((x) => x.name === card.cocktail);
+    return c ? { cup: c.cup, specials: c.specials } : { cup: [], specials: [] };
+}
+
+// Whether a glass (and the specials declared) would serve this order.
+export function servesOrder(card, cup, specials = []) {
+    const name = drinkName(cup, specials);
+    if (card.drink === 'cocktail') return name === card.cocktail;
+    const spirits = [...new Set(cup.filter((i) => ING[i]?.kind === 'spirit'))];
+    const mixers = [...new Set(cup.filter((i) => ING[i]?.kind === 'mixer'))];
+    if (COCKTAILS.some((c) => c.name === name)) return false;
+    if (card.drink === 'slammer') return name === 'Tequila Slammer';
+    return spirits.length === 1 && spirits[0] === card.spirit_type
+        && mixers.length === 1 && mixers[0] === card.mixer_type
+        && cup.filter((i) => ING[i]?.kind === 'spirit').length <= 2;
+}
 
 const FREE_ACTION_TEXT = {
     take_ingredients: 'Take ingredients a second time every turn.',
@@ -89,6 +111,9 @@ export function cardText(card) {
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
         case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails).`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
+        case 'order':
+            if (card.drink === 'simple') return `Serve a ${card.name}, single or double, for +${card.bonus} on top.`;
+            return `Serve a ${card.name} for +${card.bonus} on top.`;
         default: return '';
     }
 }
@@ -103,15 +128,84 @@ export function cardCost(card) {
         case 'specialist': return Array(2).fill(card.spirit_type);
         case 'refresher': return Array(2).fill(card.mixer_type);
         case 'cup_doubler': return Array(3).fill('ANY_SPIRIT');
+        case 'order': return orderRecipe(card).cup;
         default: return [];
     }
 }
 
-export const MODES = {
-    sell_both_cups: { label: 'Sell both cups', desc: 'Sell both glasses in one action.' },
-    claim_card_free_action: { label: 'Free card claims', desc: 'Claiming a card doesn’t use your action.' },
-    reroll_specials_free_action: { label: 'Free re-rolls', desc: 'Re-rolling specials doesn’t use your action.' },
+// Optional house rules offered in the lobby (none at the moment).
+export const MODES = {};
+
+// The drunk track, sober to stretcher.
+export const DRUNK_LABELS = ['Sober', 'Merry', 'Tipsy', 'Squiffy', 'Sozzled', 'Legless'];
+
+// Free actions by the name the server uses for them.
+export const FREE_ACTIONS = {
+    claim_card: 'Claim a card',
+    refresh_ability_row: 'Swipe the abilities',
+    take_ingredients: 'Take again',
+    sell_cup: 'Sell again',
+    go_for_a_wee: 'A free wee',
 };
+
+// The rule book shown on the table. Keep in step with "Game Rules.md".
+export const RULES = [
+    {
+        title: 'Winning',
+        items: [
+            'Reach the target to start the last round: 40 points with two players, 35 with three, 30 with four. The round finishes so everyone has had the same number of turns, then the most points wins (a tie goes to whoever is earliest in turn order).',
+            'Claim three karaoke cards and you win on the spot, even in the last round.',
+            'Last one standing wins when everyone else is in hospital, wet or gone home.',
+        ],
+    },
+    {
+        title: 'Your turn',
+        items: [
+            'One main action: take ingredients, sell your glasses (one or both), drink a glass, go for a wee, or clear the orders (drunk 3 or more).',
+            'Free actions, each once a turn, before or after: claim a card, swipe the ability cards (drunk 2 or more), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
+            'Your turn ends when your main action is done and there is nothing free left you could use. You can end it early after your main action.',
+        ],
+    },
+    {
+        title: 'Taking ingredients',
+        items: [
+            'Take exactly 3 plus your drunk level, from the display, blind from the bag, or both.',
+            'Put each one in a glass (five at most) or drink it before you take more. Nothing goes back.',
+            'Your drunk level changes once, after the whole take: +1 per spirit drunk, or −1 per mixer if you drank only mixers.',
+        ],
+    },
+    {
+        title: 'Specials',
+        items: [
+            'A special token is rolled as it comes out of the bag, so the display shows which special it offers. The blank face is "choose any".',
+            'Take one and that special goes on your mat; the token goes back in the bag. There is one of each special, and you can hold two at most: swap one back or leave the new one.',
+            'Specials are used for cocktails and go back to the supply when you sell.',
+        ],
+    },
+    {
+        title: 'Selling',
+        items: [
+            'One spirit with one kind of mixer: 1 point. Two of the same spirit with one kind of mixer: 3. Tequila slammer (two tequila, nothing else): 3.',
+            'Cocktails score 10 (Long Island Iced Tea 15) and must match the recipe exactly, specials included.',
+            'If an order on the table wants your drink, you also get its bonus: +2 simple drinks, +3 slammer, +4 cocktails, +5 Long Island. Bonuses aren’t doubled.',
+        ],
+    },
+    {
+        title: 'Drink, wee and limits',
+        items: [
+            'Everything you drink goes into your bladder. More than it holds and you’ve wet yourself; above drunk 5 it’s hospital. Either way you’re out.',
+            'A wee empties your bladder into the bag and sobers you up by 1. Each wee seals a bladder space with a toilet token, down to 4 spaces.',
+        ],
+    },
+    {
+        title: 'Cards',
+        items: [
+            'Costs are checked against your bladder, not paid. Stored spirits don’t count.',
+            'Karaoke cards are all out from the start and aren’t replaced. A claimed ability card is replaced from the deck.',
+            'Clearing the orders or swiping the abilities sends all three cards to the bottom of their deck and deals three new ones. The karaoke row is never cleared.',
+        ],
+    },
+];
 
 // One pawn colour per seat, in turn order.
 export const SEAT_COLOURS = ['#e0452b', '#2f8fdb', '#3fae5a', '#f2c230'];
@@ -137,14 +231,18 @@ export function describeMove(move, nameOf) {
             if (cups.length) bits.push(`poured ${list(cups)}`);
             if (drunk.length) bits.push(`drank ${list(drunk)}`);
             for (const s of taken.filter((t) => t.disposition === 'special')) {
-                bits.push(s.special_type === 'nothing' ? 'rolled a blank' : `rolled ${SPECIALS[s.special_type]?.label ?? s.special_type}`);
+                const got = SPECIALS[s.special_type]?.label;
+                if (!got) bits.push(s.face ? 'left a special' : 'rolled a blank');
+                else if (s.swapped) bits.push(`took ${got}, giving back ${SPECIALS[s.swapped]?.label ?? s.swapped}`);
+                else bits.push(`took ${got}`);
             }
             return `${who} ${bits.join(', ') || 'took ingredients'}`;
         }
         case 'sell_cup': {
             const cups = a.sold_cups ?? [a];
             const drinks = cups.map((c) => drinkName(c.ingredients ?? [], c.declared_specials ?? [])).join(' and ');
-            return `${who} sold ${drinks} for ${a.points_earned} points`;
+            const orders = (a.orders ?? []).map((o) => o.name);
+            return `${who} sold ${drinks} for ${a.points_earned} points${orders.length ? `, serving the ${orders.join(' and ')} order` : ''}`;
         }
         case 'drink_cup': return `${who} downed a glass of ${list(a.ingredients)}`;
         case 'go_for_a_wee': return `${who} went for a wee`;
@@ -155,7 +253,8 @@ export function describeMove(move, nameOf) {
             const got = (a.results ?? []).map((r) => (r ? (SPECIALS[r]?.label ?? r) : 'a blank'));
             return `${who} re-rolled and got ${got.join(', ') || 'nothing'}`;
         }
-        case 'refresh_card_row': return `${who} cleared card row ${a.row_position}`;
+        case 'refresh_card_row':
+            return a.row_position === 2 ? `${who} cleared the orders` : a.row_position === 3 ? `${who} swiped the ability cards` : `${who} cleared card row ${a.row_position}`;
         case 'end_turn': return `${who} ended their turn`;
         case 'quit_game': return `${who} left the bar`;
         case 'cancel_game': return 'The game was called off';

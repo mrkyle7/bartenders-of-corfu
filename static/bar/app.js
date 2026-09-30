@@ -5,8 +5,9 @@
 
 import { api } from '/static/play/api.js';
 import {
-    CARD_KINDS, COCKTAILS, ING, MIXERS, MODES, PAIRINGS, SEAT_COLOURS, SPECIALS, SPIRITS,
-    cardCost, cardText, describeMove, drinkName,
+    CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, ING, MIXERS, MODES, PAIRINGS, RULES,
+    SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, orderRecipe,
+    servesOrder,
 } from './data.js';
 
 const POLL_MS = 2000;
@@ -25,16 +26,21 @@ let lastSignature = '';
 let endingShown = false;
 
 // Local, not-yet-sent state: tokens picked off the display, where each token
-// in your hand is going, which specials are picked for a re-roll, and the
-// question currently asked in the turn bar.
+// in your hand is going, and the question currently asked in the turn bar.
 const ui = {
     picks: [], // open-display slot indexes, in the order picked up
     pickedFrom: '', // the display the picks refer to
-    staged: {}, // hand key -> { to: 'cup' | 'mouth' | 'roll', cup }
+    // hand key -> { to: 'cup', cup } | { to: 'mouth' } |
+    //             { to: 'mat', choice?, swap?, leave? } for a special token
+    staged: {},
+    specialDraft: {}, // hand key -> { choice } while a "choose any" is half made
     selected: null, // hand key being placed
-    reroll: new Set(), // indexes into my special_ingredients
     prompt: null, // { text, choices: [{ label, onclick, kind }] }
+    historyOpen: false, // show every move, not just the latest
 };
+
+const SPECIAL_TYPES = ['bitters', 'cointreau', 'lemon', 'sugar', 'vermouth'];
+const MAX_SPECIALS = 2;
 
 const $ = (id) => document.getElementById(id);
 
@@ -89,7 +95,10 @@ const KIND_ICONS = {
     cup_doubler: '<svg viewBox="0 0 24 24"><path d="M2 11a10 7 0 0 1 20 0z" fill="currentColor"/><path d="M12 11v9a2 2 0 0 1-4 0" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
     specialist: '<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" fill="currentColor"/></svg>',
     free_action: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/></svg>',
+    order: '<svg viewBox="0 0 24 24"><path d="M5 2h14v19l-2.3-1.6L14.3 21 12 19.4 9.7 21l-2.4-1.6L5 21z" fill="currentColor"/><path d="M8 7h8M8 10.5h8M8 14h5" style="stroke:var(--scene-bottom)" stroke-width="1.5"/></svg>',
 };
+
+const AMBULANCE = '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 4h17v12H2z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M19 7h6l4 5v4H19z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M21 8.5h3.4l2.6 3.3H21z" fill="#bfe3f5"/><path d="M8.5 6.5h2v3h3v2h-3v3h-2v-3h-3v-2h3z" fill="#e0452b"/><path d="M2 13h27" stroke="#e0452b" stroke-width="1.2"/><circle cx="7" cy="16.5" r="2.3" fill="#2b2b2b"/><circle cx="24" cy="16.5" r="2.3" fill="#2b2b2b"/><rect x="11" y="2" width="3" height="2" fill="#2f8fdb"/></svg>';
 
 // Ingredient pictures, as printed on the real tokens. `currentColor` is the
 // token's ink; `var(--fill)` cuts detail back out in the token's colour.
@@ -115,12 +124,12 @@ const TOKEN_NAMES = {
 // ring, a picture and its name. Tokens are one size wherever they sit;
 // `print` is only for the small pictures printed on a card.
 // `name` is an ingredient key, 'ANY_SPIRIT', or a rolled special ('lemon'…).
-function token(name, { onclick, label, state, selected, key, print } = {}) {
+function token(name, { onclick, label, state, selected, key, print, printed: printedName } = {}) {
     const special = SPECIALS[name];
     const meta = ING[name];
     const kind = special ? 'rolled' : meta?.kind ?? 'spirit';
     const text = special?.label ?? meta?.label ?? 'Any one spirit';
-    const printed = special?.label ?? TOKEN_NAMES[name] ?? meta?.label ?? '';
+    const printed = printedName ?? special?.label ?? TOKEN_NAMES[name] ?? meta?.label ?? '';
     const node = h(onclick ? 'button.tok' : 'span.tok', {
         cls: `tok-${kind} ing-${name.toLowerCase()}${state ? ` is-${state}` : ''}${selected ? ' is-selected' : ''}${print ? ' tok-print' : ''}`,
         style: { '--len': String(Math.max(printed.length, 4)) },
@@ -136,6 +145,16 @@ function token(name, { onclick, label, state, selected, key, print } = {}) {
     if (!print) node.append(h('span.tok-name', { text: printed, 'aria-hidden': 'true' }));
     return node;
 }
+
+// A token as it sits on the table: a special token shows its rolled face.
+function tableToken(name, face, opts = {}) {
+    if (name !== 'SPECIAL') return token(name, opts);
+    if (face && face !== 'any') return token(face, { ...opts, label: opts.label ?? `${SPECIALS[face].label} special` });
+    return token('SPECIAL', { ...opts, printed: 'Any', label: opts.label ?? 'Special: choose any' });
+}
+
+const tokenLabel = (name, face) => (name !== 'SPECIAL' ? ING[name].label
+    : face && face !== 'any' ? `${SPECIALS[face].label} special` : 'choose-any special');
 
 function slot(child, cls = '') {
     return h('span.slot', { cls }, child);
@@ -254,11 +273,67 @@ const seatColour = (pid) => SEAT_COLOURS[Math.max(0, seatOrder().indexOf(pid)) %
 
 function handItems() {
     if (!myTurn()) return [];
-    const pending = gs().bag_draw_pending.map((name, i) => ({ key: `p${i}`, name, source: 'pending' }));
+    const faces = gs().bag_draw_pending_specials ?? [];
+    const pending = gs().bag_draw_pending.map((name, i) => ({
+        key: `p${i}`, name, source: 'pending', face: faces[i] ?? (name === 'SPECIAL' ? 'any' : null),
+    }));
     const picks = ui.picks.map((slotIndex) => ({
-        key: `d${slotIndex}`, name: gs().open_display[slotIndex], source: 'display', slotIndex,
+        key: `d${slotIndex}`,
+        name: gs().open_display[slotIndex],
+        source: 'display',
+        slotIndex,
+        face: displayFace(slotIndex),
     }));
     return [...pending, ...picks];
+}
+
+// ─── Specials ───────────────────────────────────────────────────────────────
+
+// What a special token on the display shows: a special, or 'any'.
+function displayFace(slotIndex) {
+    if (gs().open_display[slotIndex] !== 'SPECIAL') return null;
+    return (gs().display_specials ?? [])[slotIndex] ?? 'any';
+}
+
+const isSpecialToken = (it) => it.name === 'SPECIAL';
+
+// Specials nobody holds and no token is showing, less those already chosen in
+// your hand: what a "choose any" can become.
+function freeSpecialTypes(exceptKey) {
+    const taken = new Set();
+    for (const ps of Object.values(gs().player_states)) for (const s of ps.special_ingredients) taken.add(s);
+    for (const f of [...(gs().display_specials ?? []), ...(gs().bag_draw_pending_specials ?? [])]) {
+        if (f && f !== 'any') taken.add(f);
+    }
+    for (const [key, st] of Object.entries(ui.staged)) {
+        if (key !== exceptKey && st.to === 'mat' && st.choice) taken.add(st.choice);
+    }
+    return SPECIAL_TYPES.filter((t) => !taken.has(t));
+}
+
+// How many specials you'd hold once the specials already placed from your
+// hand (other than `exceptKey`) land on your mat.
+function specialsAfterHand(exceptKey) {
+    let count = mine().special_ingredients.length;
+    for (const it of handItems()) {
+        const st = ui.staged[it.key];
+        if (it.key === exceptKey || !st || st.to !== 'mat' || st.leave || st.swap) continue;
+        count += 1;
+    }
+    return count;
+}
+
+// The special a staged special token will become (null if left).
+function specialOf(it) {
+    const st = ui.staged[it.key];
+    if (!st || st.leave) return null;
+    return it.face === 'any' ? st.choice : it.face;
+}
+
+// The hand item being held, if it's a spirit or mixer (specials go to the mat).
+function heldIngredient() {
+    const it = handItems().find((x) => x.key === ui.selected);
+    return it && !isSpecialToken(it) ? it : null;
 }
 
 const takeLeft = () => (mine() ? mine().take_count - gs().ingredients_taken_this_turn - handItems().length : 0);
@@ -272,13 +347,15 @@ function reconcile() {
     }
     const keys = new Set(handItems().map((it) => it.key));
     for (const key of Object.keys(ui.staged)) if (!keys.has(key)) delete ui.staged[key];
+    for (const key of Object.keys(ui.specialDraft)) if (!keys.has(key)) delete ui.specialDraft[key];
+    // A special showing a face goes straight to your mat when there's room;
+    // "choose any" and a third special wait for you to decide.
     for (const it of handItems()) {
-        if (ING[it.name]?.kind === 'special') ui.staged[it.key] = { to: 'roll' };
+        if (!isSpecialToken(it) || ui.staged[it.key]) continue;
+        if (it.face !== 'any' && specialsAfterHand(it.key) < MAX_SPECIALS) ui.staged[it.key] = { to: 'mat' };
     }
     if (ui.selected && (!keys.has(ui.selected) || ui.staged[ui.selected])) ui.selected = null;
     if (!ui.selected) ui.selected = handItems().find((it) => !ui.staged[it.key])?.key ?? null;
-    const specials = mine()?.special_ingredients ?? [];
-    for (const i of [...ui.reroll]) if (i >= specials.length || !can('reroll_specials')) ui.reroll.delete(i);
     if (!myTurn()) ui.prompt = null;
 }
 
@@ -328,14 +405,33 @@ function drawFromBag(count) {
 }
 
 function selectInHand(key) {
-    if (ui.staged[key]?.to === 'roll') return;
     delete ui.staged[key];
+    delete ui.specialDraft[key];
     ui.selected = ui.selected === key ? null : key;
     render({ force: true });
 }
 
+// Settle a special token in your hand: which special ("choose any"), and
+// what to do when you'd hold more than two.
+function settleSpecial(key, decision) {
+    const it = handItems().find((x) => x.key === key);
+    if (!it) return;
+    const draft = { ...(ui.specialDraft[key] ?? {}), ...decision };
+    const atLimit = specialsAfterHand(key) >= MAX_SPECIALS;
+    if (it.face === 'any' && !draft.choice && !draft.leave) {
+        ui.specialDraft[key] = draft;
+    } else if (atLimit && !draft.swap && !draft.leave) {
+        ui.specialDraft[key] = draft;
+    } else {
+        ui.staged[key] = { to: 'mat', ...draft };
+        delete ui.specialDraft[key];
+        ui.selected = handItems().find((x) => !ui.staged[x.key])?.key ?? null;
+    }
+    render({ force: true });
+}
+
 function placeSelected(to, cup) {
-    const item = handItems().find((it) => it.key === ui.selected);
+    const item = heldIngredient();
     if (!item) return;
     if (to === 'cup') {
         const inCup = mine().cups[cup].ingredients.length + stagedTo('cup', cup).length;
@@ -357,12 +453,18 @@ function finishPlacing() {
     }
     const assignments = items.map((it) => {
         const where = ui.staged[it.key];
-        return {
+        const a = {
             ingredient: it.name,
             source: it.source,
             disposition: where.to === 'cup' ? 'cup' : 'drink',
             cup_index: where.to === 'cup' ? where.cup : 0,
         };
+        if (it.source === 'display') a.display_index = displayIndexAtSend(it, items);
+        if (where.to === 'mat') {
+            if (where.choice) a.special_type = where.choice;
+            if (where.swap) a.swap_special = where.swap;
+        }
+        return a;
     });
     const drinks = items.filter((it) => ui.staged[it.key].to === 'mouth').map((it) => it.name);
     const finishing = mine().take_count - gs().ingredients_taken_this_turn - items.length === 0;
@@ -373,9 +475,10 @@ function finishPlacing() {
             ui.selected = null;
             for (const record of result?.move?.taken ?? []) {
                 if (record.disposition !== 'special') continue;
-                toast(record.special_type === 'nothing'
-                    ? 'The die came up blank. It goes back in the bag.'
-                    : `You rolled ${SPECIALS[record.special_type]?.label}. It's on your mat.`);
+                const got = SPECIALS[record.special_type]?.label;
+                if (!got) toast('You left the special. Its token goes back in the bag.');
+                else if (record.swapped) toast(`${got} is on your mat; ${SPECIALS[record.swapped]?.label} went back.`);
+                else toast(`${got} is on your mat.`);
             }
             const status = result?.game_state?.player_states?.[me.id]?.status;
             if (status === 'hospitalised') toast('You passed out and went to hospital. You are out of the game.', 'error');
@@ -395,13 +498,23 @@ function finishPlacing() {
     run();
 }
 
+// The server takes display tokens one at a time, so a slot further along the
+// display moves down by one for each earlier slot taken before it.
+function displayIndexAtSend(item, items) {
+    const earlier = items.filter((x) => x.source === 'display' && items.indexOf(x) < items.indexOf(item));
+    return item.slotIndex - earlier.filter((x) => x.slotIndex < item.slotIndex).length;
+}
+
 function sell(params) {
     const body = { cup_index: params.cup_index, declared_specials: params.declared_specials ?? [] };
     if (params.additional_cups) body.additional_cups = params.additional_cups;
     act(() => api.sellCup(gameId, body), {
         after: (result) => {
             const earned = result?.move?.points_earned;
-            if (earned !== undefined) toast(`Sold for ${plural(earned, 'point')}.`);
+            const served = (result?.move?.orders ?? []).map((o) => `${o.name} (+${o.bonus})`);
+            if (earned !== undefined) {
+                toast(`Sold for ${plural(earned, 'point')}.${served.length ? ` Order served: ${served.join(', ')}.` : ''}`);
+            }
         },
     });
 }
@@ -453,28 +566,13 @@ function claim(card) {
 }
 
 function clearRow(position) {
-    ask(`Clear card row ${position}? Its cards go to the discard pile and new ones are dealt.`, [
-        { label: 'Clear the row', onclick: () => act(() => api.refreshCardRow(gameId, position)), kind: 'go' },
-        { label: 'Leave it', onclick: () => { ui.prompt = null; render({ force: true }); } },
+    const orders = position === 2;
+    ask(orders
+        ? 'Clear the orders? All three go to the bottom of the order deck and three new ones are dealt. This is your main action.'
+        : 'Swipe the ability cards? All three go to the bottom of the deck and three new ones are dealt. This is free, once a turn.', [
+        { label: orders ? 'Clear the orders' : 'Swipe them', onclick: () => act(() => api.refreshCardRow(gameId, position)), kind: 'go' },
+        { label: 'Leave them', onclick: () => { ui.prompt = null; render({ force: true }); } },
     ]);
-}
-
-function toggleReroll(i) {
-    if (ui.reroll.has(i)) ui.reroll.delete(i);
-    else ui.reroll.add(i);
-    render({ force: true });
-}
-
-function reroll() {
-    const specials = mine().special_ingredients;
-    const chosen = [...ui.reroll].sort((a, b) => a - b).map((i) => specials[i]);
-    ui.reroll.clear();
-    act(() => api.rerollSpecials(gameId, chosen), {
-        after: (result) => {
-            const got = (result?.move?.results ?? []).map((r) => (r ? SPECIALS[r]?.label ?? r : 'a blank'));
-            if (got.length) toast(`You rolled ${got.join(', ')}.`);
-        },
-    });
 }
 
 function storeDrink(cardIndex) {
@@ -544,15 +642,16 @@ function turnbar() {
         const hand = handItems();
         if (hand.length) {
             const unplaced = hand.filter((it) => !ui.staged[it.key]).length;
-            detail = unplaced
-                ? `Tap a glass or your mouth to put down the ${ING[hand.find((it) => it.key === ui.selected)?.name]?.label ?? 'token'} you're holding.`
-                : 'Everything is placed. Press "Done placing" on your mat.';
+            const held = hand.find((it) => it.key === ui.selected);
+            detail = !unplaced ? 'Everything is placed. Press "Done placing" on your mat.'
+                : held && isSpecialToken(held) ? 'Decide what to do with the special in your hand.'
+                    : `Tap a glass or your mouth to put down the ${held ? ING[held.name].label : 'token'} you're holding.`;
         } else if (takeUnderway()) {
             detail = `Take ${plural(left, 'more ingredient')}: tap tokens on the display or draw from the bag.`;
         } else if (state.main_action_taken_this_turn) {
-            detail = 'You can still use a free action, or end your turn.';
+            detail = 'Your main action is done. Use a free action, or end your turn.';
         } else {
-            detail = `Take ${plural(mine().take_count, 'ingredient')}, or sell or drink a glass, go for a wee, claim a card or re-roll.`;
+            detail = `Main action: take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass, go for a wee or clear the orders.`;
         }
     } else {
         headline = `${seatName(state.player_turn)} is playing`;
@@ -564,6 +663,7 @@ function turnbar() {
     kids.push(h('div.turn-words', {},
         h('p.turn-head', { text: headline }),
         detail ? h('p.turn-detail', { text: detail }) : null));
+    if (myTurn()) kids.push(actionStrip());
 
     const buttons = [];
     if (myTurn() && valid.can_end_turn && !handItems().length) {
@@ -592,6 +692,40 @@ function turnbar() {
     bar.replaceChildren(...kids);
 }
 
+// What's left of your turn: the main action and each free action, and why a
+// free action can't be used right now.
+function actionStrip() {
+    const state = gs();
+    const ps = mine();
+    const used = new Set(state.free_actions_used_this_turn ?? []);
+    const open = new Set(valid.free_actions_left ?? []);
+    const mainDone = state.main_action_taken_this_turn;
+    const tiles = [h('li.act', { cls: mainDone ? 'is-used' : 'is-open' },
+        h('span.act-kind', { text: 'Main action' }),
+        h('span.act-state', { text: mainDone ? 'Done' : takeUnderway() ? 'Taking now' : 'Still to do' }))];
+    const cardFree = new Set(ps.cards.filter((c) => c.card_type === 'free_action').map((c) => c.free_action_type));
+    for (const [type, label] of Object.entries(FREE_ACTIONS)) {
+        const always = type === 'claim_card' || type === 'refresh_ability_row';
+        if (!always && !cardFree.has(type)) continue;
+        let status;
+        let cls;
+        if (used.has(type)) {
+            status = 'Used';
+            cls = 'is-used';
+        } else if (open.has(type) || (!mainDone && can(type === 'refresh_ability_row' ? 'refresh_card_row' : type)
+            && (type !== 'refresh_ability_row' || actionsOf('refresh_card_row').some((a) => a.params.row_position === 3)))) {
+            status = 'Free now';
+            cls = 'is-open';
+        } else {
+            status = type === 'claim_card' ? 'Nothing you can afford'
+                : type === 'refresh_ability_row' ? (ps.drunk_level < 2 ? 'Needs drunk 2' : 'Not now') : 'Not now';
+            cls = 'is-off';
+        }
+        tiles.push(h('li.act', { cls }, h('span.act-kind', { text: `${label} (free)` }), h('span.act-state', { text: status })));
+    }
+    return h('ul.action-strip', { 'aria-label': 'Your actions this turn' }, tiles);
+}
+
 // ─── Cards ──────────────────────────────────────────────────────────────────
 
 function bladderCounts(ps) {
@@ -615,6 +749,7 @@ function costHave(card, ps) {
 
 function costCaption(card) {
     const cost = cardCost(card);
+    if (card.card_type === 'order') return 'Wanted';
     if (card.card_type === 'cup_doubler') return '3 of one spirit';
     return `${cost.length} ${ING[cost[0]]?.label.replace(' water', '') ?? ''}`;
 }
@@ -628,12 +763,16 @@ const cardSubject = (card) => card.spirit_type ?? card.mixer_type ?? null;
 // cost badge and points star, name ribbon, kind, and the rule in a frame.
 function cardFace(card, { claimable, owner, index, compact } = {}) {
     const kind = CARD_KINDS[card.card_type] ?? { label: 'Card', points: 0 };
-    const ps = owner ? null : (game.status === 'STARTED' && mine()?.status === 'active' ? mine() : null);
+    const isOrder = card.card_type === 'order';
+    const ps = owner || isOrder ? null : (game.status === 'STARTED' && mine()?.status === 'active' ? mine() : null);
     const cost = cardCost(card);
     const have = costHave(card, ps);
     const short = Math.max(0, cost.length - have);
-    const label = `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} Costs ${costCaption(card)} in your bladder.${ps && short ? ` You need ${short} more.` : ''}${claimable ? ' You can claim it.' : ''}`;
-    const subject = cardSubject(card);
+    const label = isOrder
+        ? `Order: ${card.name}. ${cardText(card)}`
+        : `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} Costs ${costCaption(card)} in your bladder.${ps && short ? ` You need ${short} more.` : ''}${claimable ? ' You can claim it.' : ''}`;
+    const subject = isOrder ? null : cardSubject(card);
+    const specials = isOrder ? orderRecipe(card).specials : [];
 
     const face = h(claimable ? 'button.card' : 'div.card', {
         cls: `kind-${card.card_type}${claimable ? ' is-claimable' : ''}${compact ? ' is-compact' : ''}`,
@@ -647,13 +786,15 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
         h('span.card-lights'),
         h('span.card-emblem', { svg: KIND_ICONS[card.card_type] ?? '' }),
         subject ? h('span.card-subject', {}, token(subject, { print: true })) : null,
-        h('span.card-costbadge', { cls: ps && short ? 'is-short' : '' },
-            h('span.card-costtoks', {}, cost.map((name, i) => token(name, { print: true, state: i >= have ? 'missing' : undefined }))),
+        h('span.card-costbadge', { cls: `${ps && short ? 'is-short' : ''}${isOrder ? ' is-order' : ''}` },
+            h('span.card-costtoks', {},
+                cost.map((name, i) => token(name, { print: true, state: i >= have ? 'missing' : undefined })),
+                specials.map((sp) => token(sp, { print: true }))),
             h('span.card-costcap', { text: costCaption(card) })),
         h('span.card-star', {},
             h('span.card-star-shape', { svg: STAR }),
-            h('span.card-star-num', { text: kind.points }),
-            h('span.card-star-cap', { text: 'Points' }))),
+            h('span.card-star-num', { text: isOrder ? `+${card.bonus}` : kind.points }),
+            h('span.card-star-cap', { text: isOrder ? 'Bonus' : 'Points' }))),
     h('span.card-ribbon', {}, h('span.card-name', { text: card.name })),
     h('span.card-kind', { text: kind.label }),
     compact ? null : h('span.card-rule', {}, h('span', { text: cardText(card) })));
@@ -679,9 +820,9 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
     return face;
 }
 
-function cardBack(count, label) {
+function cardBack(count, label, word = 'Bartenders of Corfu') {
     return h('div.pile', { role: 'img', 'aria-label': label },
-        count ? h('div.card.card-back', {}, h('span.back-mark', { text: 'Bartenders of Corfu' })) : h('div.card-space'),
+        count ? h('div.card.card-back', {}, h('span.back-mark', { text: word })) : h('div.card-space'),
         h('span.pile-count', { text: count ? plural(count, 'card') : 'Empty' }));
 }
 
@@ -689,31 +830,31 @@ function renderMarket() {
     const state = gs();
     const claimable = new Set(actionsOf('claim_card').map((a) => a.params.card_id));
     const clearable = new Set(actionsOf('refresh_card_row').map((a) => a.params.row_position));
-    const discard = state.discard ?? [];
-    const topDiscard = discard[discard.length - 1];
-
-    const rows = [1, 2, 3].map((position) => {
-        const row = state.card_rows.find((r) => r.position === position) ?? { cards: [] };
-        const cells = [0, 1, 2].map((i) => (row.cards[i]
+    const rowOf = (position) => state.card_rows.find((r) => r.position === position) ?? { cards: [] };
+    const cells = (position, size) => {
+        const row = rowOf(position);
+        return Array.from({ length: Math.max(size, row.cards.length) }, (_, i) => (row.cards[i]
             ? cardFace(row.cards[i], { claimable: claimable.has(row.cards[i].id) })
             : h('div.card-space', { role: 'img', 'aria-label': 'Empty slot' })));
-        return h('div.card-row', { 'aria-label': position === 1 ? 'Karaoke row' : `Card row ${position}`, role: 'group' },
-            h('div.row-tag', {},
-                h('span', { text: position === 1 ? 'Karaoke stage' : `Row ${position}` }),
-                position === 1 ? h('span.row-note', { text: 'Never cleared' })
-                    : clearable.has(position)
-                        ? h('button.btn.tiny', { type: 'button', onclick: () => clearRow(position), text: 'Clear row', 'data-k': `clear-${position}` })
-                        : h('span.row-note', { text: 'Clear at drunk 3+' })),
-            h('div.row-cards', {}, cells));
-    });
+    };
+    const tag = (title, note, position, buttonText) => h('div.row-tag', {},
+        h('span', { text: title }),
+        position && clearable.has(position)
+            ? h('button.btn.tiny', { type: 'button', onclick: () => clearRow(position), text: buttonText, 'data-k': `clear-${position}` })
+            : h('span.row-note', { text: note }));
 
     return h('section.market', { 'aria-label': 'Cards' },
-        h('div.piles', {},
-            cardBack(state.deck_size, `Draw deck, ${plural(state.deck_size, 'card')} left`),
-            h('div.pile', { role: 'group', 'aria-label': `Discard pile, ${plural(discard.length, 'card')}` },
-                topDiscard ? cardFace(topDiscard, { compact: true, owner: 'discard' }) : h('div.card-space'),
-                h('span.pile-count', { text: discard.length ? `${plural(discard.length, 'card')} discarded` : 'No discards' }))),
-        h('div.rows', {}, rows));
+        h('div.card-row.is-karaoke', { 'aria-label': 'Karaoke stage', role: 'group' },
+            tag('Karaoke stage', 'Three songs wins. Never cleared.'),
+            h('div.row-cards', {}, cells(1, 5))),
+        h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
+            tag('Orders', 'Sell what they want for the bonus. Clear at drunk 3+ (main action).', 2, 'Clear the orders'),
+            h('div.row-cards', {}, cells(2, 3)),
+            cardBack(state.order_deck_size ?? 0, `Order deck, ${plural(state.order_deck_size ?? 0, 'order')}`, 'Orders')),
+        h('div.card-row', { 'aria-label': 'Ability cards', role: 'group' },
+            tag('Ability cards', 'Swipe at drunk 2+ (free).', 3, 'Swipe (free)'),
+            h('div.row-cards', {}, cells(3, 3)),
+            cardBack(state.deck_size, `Ability deck, ${plural(state.deck_size, 'card')}`, 'Abilities')));
 }
 
 // ─── Bag and open display ───────────────────────────────────────────────────
@@ -729,18 +870,20 @@ function renderSupply() {
         Array.from({ length: 5 }, (_, i) => {
             const name = state.open_display[i];
             if (!name) return slot(null, 'is-empty');
+            const face = displayFace(i);
+            const what = tokenLabel(name, face);
             const picked = ui.picks.includes(i);
             if (picked) {
-                return slot(token(name, {
+                return slot(tableToken(name, face, {
                     state: 'lifted', key: `disp-${i}`,
-                    label: `${ING[name].label} is in your hand. Tap to put it back.`,
+                    label: `${what} is in your hand. Tap to put it back.`,
                     onclick: () => pickFromDisplay(i),
                 }), 'is-lifted');
             }
             const canPick = taking && left > 0;
-            return slot(token(name, {
+            return slot(tableToken(name, face, {
                 key: `disp-${i}`,
-                label: canPick ? `Take the ${ING[name].label}` : ING[name].label,
+                label: canPick ? `Take the ${what}` : what,
                 onclick: canPick ? () => pickFromDisplay(i) : undefined,
                 state: canPick ? 'takeable' : undefined,
             }));
@@ -766,10 +909,11 @@ function renderSupply() {
 
 function renderScoreTrack() {
     const seats = seatOrder();
-    const cells = Array.from({ length: 41 }, (_, n) => {
-        const here = seats.filter((pid) => Math.min(40, gs().player_states[pid].points) === n);
-        return h('li.score-cell', { cls: n % 5 === 0 ? 'is-five' : n === 40 ? 'is-goal' : '' },
-            n % 5 === 0 ? h('span.score-num', { text: n === 40 ? '40 wins' : n, 'aria-hidden': 'true' }) : null,
+    const target = gs().score_to_win ?? 40;
+    const cells = Array.from({ length: target + 1 }, (_, n) => {
+        const here = seats.filter((pid) => Math.min(target, gs().player_states[pid].points) === n);
+        return h('li.score-cell', { cls: n % 5 === 0 ? 'is-five' : '' },
+            n % 5 === 0 || n === target ? h('span.score-num', { text: n === target ? `${target}+ last round` : n, 'aria-hidden': 'true' }) : null,
             here.map((pid) => h('span.pawn', {
                 style: { '--seat': seatColour(pid) }, role: 'img',
                 'aria-label': `${seatName(pid)}: ${plural(gs().player_states[pid].points, 'point')}`,
@@ -786,7 +930,7 @@ function glass(pid, cupIndex, { interactive }) {
     const ps = gs().player_states[pid];
     const cup = ps.cups[cupIndex];
     const incoming = interactive ? stagedTo('cup', cupIndex) : [];
-    const placing = interactive && ui.selected;
+    const placing = interactive && !!heldIngredient();
     const room = cup.ingredients.length + incoming.length < CUP_SIZE;
     const contents = [
         ...cup.ingredients.map((name) => token(name)),
@@ -828,7 +972,7 @@ function glass(pid, cupIndex, { interactive }) {
         buttons.length ? h('div.glass-actions', {}, buttons) : null);
 }
 
-// Only with the "sell both cups" house rule: one action sells both glasses.
+// One action can sell both glasses.
 function sellBoth() {
     if (handItems().length) return null;
     const options = actionsOf('sell_cup').filter((a) => a.params.additional_cups?.length);
@@ -846,7 +990,7 @@ function sellBoth() {
 
 function mouth() {
     const drinks = stagedTo('mouth');
-    const placing = !!ui.selected;
+    const placing = !!heldIngredient();
     const after = drunkAfter(drinks.map((it) => it.name));
     const node = h(placing ? 'button.mouth' : 'div.mouth', {
         cls: placing ? 'is-target' : '',
@@ -905,10 +1049,14 @@ function drunkTrack(pid) {
         const hospital = lvl === MAX_DRUNK + 1;
         const here = hospital ? out : !out && ps.drunk_level === lvl;
         return h('li.drunk-step', { cls: `lvl-${lvl}${here ? ' is-here' : ''}` },
-            h('span.drunk-num', { text: hospital ? 'H' : lvl, 'aria-hidden': 'true' }),
+            hospital
+                ? h('span.drunk-ambulance', { svg: AMBULANCE })
+                : h('span.drunk-num', { text: lvl, 'aria-hidden': 'true' }),
+            h('span.drunk-word', { text: hospital ? 'Hospital' : DRUNK_LABELS[lvl], 'aria-hidden': 'true' }),
             here ? h('span.pawn', { style: { '--seat': seatColour(pid) }, 'aria-hidden': 'true' }) : null);
     });
-    return h('div.drunk', { role: 'group', 'aria-label': out ? 'Drunk track: in hospital' : `Drunk level ${ps.drunk_level} of ${MAX_DRUNK}` },
+    const where = out ? 'in hospital' : `${DRUNK_LABELS[ps.drunk_level] ?? ''}, level ${ps.drunk_level} of ${MAX_DRUNK}`;
+    return h('div.drunk', { role: 'group', 'aria-label': `Drunk track: ${where}` },
         h('div.zone-head', {},
             h('span.zone-name', { text: 'Drunk' }),
             h('span.zone-count', { text: out ? 'In hospital' : `Takes ${ps.take_count} a turn` })),
@@ -917,24 +1065,48 @@ function drunkTrack(pid) {
 
 function specialsTray(pid, { interactive }) {
     const ps = gs().player_states[pid];
-    const rolling = interactive ? handItems().filter((it) => ui.staged[it.key]?.to === 'roll') : [];
-    const canReroll = interactive && !handItems().length && can('reroll_specials') && ps.special_ingredients.length > 0;
+    const incoming = interactive ? handItems().filter((it) => isSpecialToken(it) && ui.staged[it.key]) : [];
+    const leaving = new Set(incoming.map((it) => ui.staged[it.key].swap).filter(Boolean));
+    const arriving = incoming.map((it) => specialOf(it)).filter(Boolean);
     return h('div.specials', { role: 'group', 'aria-label': 'Specials' },
         h('div.zone-head', {},
             h('span.zone-name', { text: 'Specials' }),
-            canReroll ? h('span.zone-count', { text: 'Tap to pick for a re-roll' }) : null),
+            h('span.zone-count', { text: `${ps.special_ingredients.length} of ${MAX_SPECIALS}` })),
         h('div.specials-row', {},
-            ps.special_ingredients.map((s, i) => token(s, {
-                key: canReroll ? `sp-${i}` : undefined,
-                onclick: canReroll ? () => toggleReroll(i) : undefined,
-                selected: canReroll ? ui.reroll.has(i) : undefined,
-                label: canReroll ? `${SPECIALS[s]?.label}: ${ui.reroll.has(i) ? 'picked for re-roll' : 'tap to re-roll'}` : SPECIALS[s]?.label,
+            ps.special_ingredients.map((s) => token(s, {
+                state: leaving.has(s) ? 'ghost' : undefined,
+                label: leaving.has(s) ? `${SPECIALS[s]?.label}, going back` : SPECIALS[s]?.label,
             })),
-            rolling.map((it) => token('SPECIAL', { state: 'placed', label: 'Special die, rolled when you finish placing' })),
-            !ps.special_ingredients.length && !rolling.length ? h('span.zone-empty', { text: 'None yet' }) : null),
-        canReroll && ui.reroll.size
-            ? h('button.btn.go.tiny', { type: 'button', onclick: reroll, text: `Re-roll ${ui.reroll.size}${freeNote('reroll_specials')}`, 'data-k': 'reroll' })
-            : null);
+            arriving.map((s) => token(s, { state: 'placed', label: `${SPECIALS[s]?.label}, coming to your mat` })),
+            !ps.special_ingredients.length && !arriving.length ? h('span.zone-empty', { text: 'None yet' }) : null));
+}
+
+// Choices for the special token you're holding: which special ("choose any")
+// and, when you'd have more than two, which to give back.
+function specialChoices(it) {
+    const draft = ui.specialDraft[it.key] ?? {};
+    const atLimit = specialsAfterHand(it.key) >= MAX_SPECIALS;
+    if (it.face === 'any' && !draft.choice) {
+        const options = freeSpecialTypes(it.key);
+        return h('div.special-choice', { role: 'group', 'aria-label': 'Choose a special' },
+            h('p', { text: options.length ? 'Choose any special nobody holds:' : 'Every special is taken. Leave this one.' }),
+            h('div.special-options', {},
+                options.map((t) => h('button.btn.tiny', {
+                    type: 'button', onclick: () => settleSpecial(it.key, { choice: t }), 'data-k': `choose-${t}`,
+                }, token(t, { print: true }), h('span', { text: SPECIALS[t].label }))),
+                h('button.btn.tiny.quiet-dark', { type: 'button', onclick: () => settleSpecial(it.key, { leave: true }), text: 'Leave it', 'data-k': 'leave-special' })));
+    }
+    if (atLimit) {
+        const want = SPECIALS[draft.choice ?? it.face]?.label ?? 'it';
+        return h('div.special-choice', { role: 'group', 'aria-label': 'Swap or leave' },
+            h('p', { text: `You hold two specials already. Swap one back for ${want}, or leave it:` }),
+            h('div.special-options', {},
+                mine().special_ingredients.map((sp) => h('button.btn.tiny', {
+                    type: 'button', onclick: () => settleSpecial(it.key, { swap: sp }), 'data-k': `swap-${sp}`,
+                }, token(sp, { print: true }), h('span', { text: `Give back ${SPECIALS[sp].label}` }))),
+                h('button.btn.tiny.quiet-dark', { type: 'button', onclick: () => settleSpecial(it.key, { leave: true }), text: `Leave ${want}`, 'data-k': 'leave-special' })));
+    }
+    return null;
 }
 
 function hand() {
@@ -946,18 +1118,22 @@ function hand() {
             h('span.zone-count', { text: `${gs().ingredients_taken_this_turn + items.length} of ${mine().take_count} taken` })),
         h('div.hand-row', {},
             items.length
-                ? items.map((it) => token(it.name, {
+                ? items.map((it) => tableToken(it.name, it.face, {
                     key: `hand-${it.key}`,
                     state: ui.staged[it.key] ? 'ghost' : undefined,
                     selected: ui.selected === it.key,
-                    onclick: ui.staged[it.key]?.to === 'roll' ? undefined : () => selectInHand(it.key),
+                    onclick: () => selectInHand(it.key),
                     label: ui.staged[it.key]
-                        ? `${ING[it.name].label}, placed`
-                        : `${ING[it.name].label}${it.source === 'pending' ? ' from the bag' : ''}${ui.selected === it.key ? ', holding' : ', tap to hold'}`,
+                        ? `${tokenLabel(it.name, it.face)}, placed. Tap to change.`
+                        : `${tokenLabel(it.name, it.face)}${it.source === 'pending' ? ' from the bag' : ''}${ui.selected === it.key ? ', holding' : ', tap to hold'}`,
                 }))
                 : h('span.zone-empty', { text: 'Tap tokens on the display, or draw from the bag.' })),
+        (() => {
+            const held = items.find((it) => it.key === ui.selected);
+            return held && isSpecialToken(held) && !ui.staged[held.key] ? specialChoices(held) : null;
+        })(),
         items.some((it) => it.source === 'pending')
-            ? h('p.hand-note', { text: 'Bag draws can’t go back. Every one goes in a glass or your mouth.' }) : null,
+            ? h('p.hand-note', { text: 'Bag draws can’t go back. Ingredients go in a glass or your mouth; specials go on your mat.' }) : null,
         items.length
             ? h('button.btn.go', { type: 'button', disabled: !allPlaced, onclick: finishPlacing, text: 'Done placing', 'data-k': 'done-placing' })
             : null);
@@ -1003,40 +1179,131 @@ function mat(pid) {
 
 // ─── Menu and log ───────────────────────────────────────────────────────────
 
-let menuNode = null;
-function menu() {
-    if (menuNode) return menuNode;
-    const pairs = h('table.pairings', {},
-        h('caption', { text: 'What mixes with what' }),
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col', text: '' }), SPIRITS.map((s) => h('th', { scope: 'col' }, token(s))))),
-        h('tbody', {}, MIXERS.map((m) => h('tr', {},
-            h('th', { scope: 'row' }, token(m)),
-            SPIRITS.map((s) => h('td', { 'aria-label': `${ING[s].label} with ${ING[m].label}: ${PAIRINGS[s].includes(m) ? 'yes' : 'no'}` },
-                h('span', { cls: PAIRINGS[s].includes(m) ? 'yes' : 'no', text: PAIRINGS[s].includes(m) ? '✓' : '✕', 'aria-hidden': 'true' })))))));
-    menuNode = h('section.menu', { 'aria-label': 'Drinks menu' },
-        h('h2.menu-title', { text: 'Drinks menu' }),
-        h('ul.menu-simple', {},
-            h('li', {}, h('span', { text: 'One spirit and a mixer' }), h('b', { text: '1' })),
-            h('li', {}, h('span', { text: 'Two of a spirit and a mixer' }), h('b', { text: '3' })),
-            h('li', {}, h('span', { text: 'Tequila slammer: two tequila' }), h('b', { text: '3' })),
-            h('li', {}, h('span', { text: 'Any cocktail below' }), h('b', { text: '10' })),
-            h('li', {}, h('span', { text: 'Long Island Iced Tea' }), h('b', { text: '15' }))),
-        pairs,
-        h('p.menu-note', { text: 'One kind of mixer per drink, no more than two spirits. Cocktails must match exactly: specials come from your mat.' }),
-        h('ul.cocktails', {}, COCKTAILS.map((c) => h('li.cocktail', {},
-            h('span.cocktail-name', { text: c.name }),
-            h('span.cocktail-recipe', {}, c.cup.map((i) => token(i)), c.specials.map((s) => token(s))),
-            h('b.cocktail-points', { text: c.points })))));
-    return menuNode;
+// Who has a special, or where it's showing, for the menu.
+function specialWhere(sp) {
+    for (const [pid, ps] of Object.entries(gs().player_states)) {
+        if (ps.special_ingredients.includes(sp)) return pid === me.id ? 'yours' : `${seatName(pid)} has it`;
+    }
+    if ((gs().display_specials ?? []).includes(sp)) return 'on the tray';
+    return 'in the bag';
 }
 
+// How close one of your glasses is to a recipe: what still has to go in,
+// or null when the glass holds something the recipe doesn't want.
+function glassProgress(cup, recipe) {
+    const need = [...recipe];
+    for (const i of cup) {
+        const at = need.indexOf(i);
+        if (at === -1) return null;
+        need.splice(at, 1);
+    }
+    return need;
+}
+
+const listTokens = (names) => {
+    const counts = {};
+    for (const n of names) counts[n] = (counts[n] ?? 0) + 1;
+    return Object.entries(counts).map(([n, c]) => `${c} ${ING[n].label.replace(' water', '')}`).join(', ');
+};
+
+// The drinks menu, printed like a taverna menu. On your turn it reads your
+// glasses and specials: what each glass is close to, and which specials you
+// have or where they are.
+function menu() {
+    const started = game.status === 'STARTED' && isMember() && mine();
+    const cups = started ? mine().cups.map((c) => c.ingredients) : [];
+    const orders = (gs().card_rows.find((r) => r.position === 2)?.cards ?? []).filter((c) => c.card_type === 'order');
+    const wanted = (fn) => orders.find(fn);
+
+    // A glass is only "ready" when you also hold every special the recipe needs.
+    const glassNotes = (recipe, specials = []) => cups.map((cup, i) => {
+        const need = glassProgress(cup, recipe);
+        if (need === null || (!cup.length && need.length === recipe.length)) return null;
+        const missing = specials.filter((sp) => !mine().special_ingredients.includes(sp)).map((sp) => SPECIALS[sp].label);
+        if (need.length) return h('span.menu-glass', { text: `Glass ${i + 1}: add ${listTokens(need)}` });
+        if (missing.length) return h('span.menu-glass', { text: `Glass ${i + 1}: glass done, you need ${missing.join(' and ')}` });
+        return h('span.menu-glass.is-ready', { text: `Glass ${i + 1}: ready to sell` });
+    }).filter(Boolean);
+
+    const cocktails = COCKTAILS.map((c) => {
+        const order = wanted((o) => o.drink === 'cocktail' && o.cocktail === c.name);
+        const specialBits = c.specials.map((sp) => {
+            const where = started ? specialWhere(sp) : null;
+            return h('span.menu-special', { cls: where === 'yours' ? 'is-yours' : '' },
+                token(sp, { print: true }), `${SPECIALS[sp].label}${where ? ` (${where})` : ''}`);
+        });
+        return h('li.menu-item', { cls: order ? 'is-wanted' : '' },
+            h('div.menu-line', {},
+                h('span.menu-name', { text: c.name }),
+                order ? h('span.menu-wanted', { text: `Wanted +${order.bonus}` }) : null,
+                h('span.menu-dots', { 'aria-hidden': 'true' }),
+                h('b.menu-points', { text: c.points })),
+            h('div.menu-recipe', {},
+                h('span.menu-toks', { 'aria-label': listTokens(c.cup) }, c.cup.map((i) => token(i, { print: true }))),
+                specialBits),
+            started ? h('div.menu-glasses', {}, glassNotes(c.cup, c.specials)) : null);
+    });
+
+    const longDrinks = [];
+    for (const s of SPIRITS) {
+        for (const m of PAIRINGS[s]) {
+            const order = wanted((o) => o.drink === 'simple' && o.spirit_type === s && o.mixer_type === m);
+            const names = cups.map((cup, i) => (cup.length && servesOrder({ drink: 'simple', spirit_type: s, mixer_type: m }, cup)
+                ? `Glass ${i + 1}` : null)).filter(Boolean);
+            longDrinks.push(h('li.menu-long', { cls: order ? 'is-wanted' : '' },
+                h('span.menu-toks', {}, token(s, { print: true }), token(m, { print: true })),
+                h('span.menu-name', { text: `${ING[s].label} and ${ING[m].label.replace(' water', '')}` }),
+                order ? h('span.menu-wanted', { text: `Wanted +${order.bonus}` }) : null,
+                names.length ? h('span.menu-glass.is-ready', { text: `${names.join(' and ')}: ready` }) : null));
+        }
+    }
+    const slammerOrder = wanted((o) => o.drink === 'slammer');
+
+    return h('section.menu', { 'aria-label': 'Drinks menu' },
+        h('header.menu-head', {},
+            h('p.menu-house', { text: 'Taverna Corfu' }),
+            h('h2.menu-title', { text: 'Drinks' }),
+            h('p.menu-sub', { text: 'Prices in points. Orders on the table add their bonus.' })),
+        h('h3.menu-section', { text: 'Cocktails' }),
+        h('p.menu-note', { text: 'The glass must match exactly, and you need the specials on your mat.' }),
+        h('ul.menu-list', {}, cocktails),
+        h('h3.menu-section', { text: 'Long drinks' }),
+        h('p.menu-note', { text: 'One spirit and one kind of mixer: 1 point. Two of the same spirit: 3.' }),
+        h('ul.menu-longs', {}, longDrinks),
+        h('h3.menu-section', { text: 'Shots' }),
+        h('ul.menu-longs', {}, h('li.menu-long', { cls: slammerOrder ? 'is-wanted' : '' },
+            h('span.menu-toks', {}, token('TEQUILA', { print: true }), token('TEQUILA', { print: true })),
+            h('span.menu-name', { text: 'Tequila Slammer, 3 points' }),
+            slammerOrder ? h('span.menu-wanted', { text: `Wanted +${slammerOrder.bonus}` }) : null)));
+}
+
+const RECENT_MOVES = 8;
+
 function chalkboard() {
-    const recent = moves.slice(-14).reverse();
+    const all = moves.map((m, i) => ({ n: i + 1, text: describeMove(m, nameOf), mine: m.player_id === me.id })).reverse();
+    const shown = ui.historyOpen ? all : all.slice(0, RECENT_MOVES);
     return h('section.chalk', { 'aria-label': 'What happened' },
         h('h2.chalk-title', { text: 'What happened' }),
-        recent.length
-            ? h('ol.chalk-list', {}, recent.map((m) => h('li', { text: describeMove(m, nameOf) })))
-            : h('p.chalk-empty', { text: 'Nothing yet. First round’s on the house.' }));
+        shown.length
+            ? h('ol.chalk-list', { reversed: true, start: all.length }, shown.map((m) => h('li', { cls: m.mine ? 'is-mine' : '', value: m.n, text: m.text })))
+            : h('p.chalk-empty', { text: 'Nothing yet. First round’s on the house.' }),
+        all.length > RECENT_MOVES
+            ? h('button.btn.tiny.chalk-more', {
+                type: 'button',
+                'aria-expanded': String(ui.historyOpen),
+                onclick: () => { ui.historyOpen = !ui.historyOpen; render({ force: true }); },
+                text: ui.historyOpen ? 'Show the latest only' : `Show all ${all.length} moves`,
+                'data-k': 'history-toggle',
+            })
+            : null);
+}
+
+function rulebook() {
+    return h('section.rulebook', { 'aria-label': 'Rules' },
+        h('h2.rulebook-title', { text: 'How to play' }),
+        h('div.rulebook-pages', {}, RULES.map((part) => h('section.rule-part', {},
+            h('h3', { text: part.title }),
+            h('ul', {}, part.items.map((t) => h('li', { text: t })))))));
 }
 
 function housekeeping() {
@@ -1171,7 +1438,7 @@ async function renderLobby() {
 function render({ force = false } = {}) {
     if (!game) return;
     const signature = JSON.stringify([game.status, game.game_state, game.pending_undo, valid, moves.length,
-        ui.picks, ui.staged, ui.selected, [...ui.reroll], !!ui.prompt]);
+        ui.picks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt]);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
     const focusKey = document.activeElement?.getAttribute?.('data-k');
@@ -1193,7 +1460,7 @@ function render({ force = false } = {}) {
         around.length ? h('div.across', { 'aria-label': 'Other players' }, around.map(mat)) : null,
         h('div.middle', {}, renderMarket(), h('div.middle-side', {}, renderSupply(), renderScoreTrack())),
         isMember() && gs().player_states[me.id] ? mat(me.id) : null,
-        h('div.extras', {}, menu(), chalkboard()),
+        h('div.extras', {}, menu(), h('div.extras-side', {}, chalkboard(), rulebook())),
         housekeeping(),
     );
     ending();

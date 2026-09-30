@@ -44,8 +44,11 @@ def test_bar_lobby_start_lays_out_the_table(
     page.locator(".display .tok").first.wait_for(state="visible", timeout=10000)
     assert page.locator(".display .tok").count() == 5
     assert page.locator(".bag").is_visible()
+    # Every karaoke card, three orders and three ability cards
     assert page.locator(".market .card-row").count() == 3
-    assert page.locator(".market .row-cards .card").count() == 9
+    assert page.locator(".market .row-cards .card").count() == 11
+    assert page.locator(".market .row-cards .kind-karaoke").count() == 5
+    assert page.locator(".market .row-cards .kind-order").count() == 3
     # Both mats are on show, each with two glasses of five spaces
     assert page.locator(".mat").count() == 2
     assert page.locator(".mat.is-mine .glass").count() == 2
@@ -54,7 +57,7 @@ def test_bar_lobby_start_lays_out_the_table(
     assert page.locator(".mat.is-mine .bladder-slots .slot.is-empty").count() == 8
     assert page.locator(".mat.is-mine .loo-reserve .loo").count() == 4
     # The drinks menu and score track are always on the table
-    assert page.locator(".menu .cocktail").count() == 9
+    assert page.locator(".menu .menu-item").count() == 9
     assert page.locator(".score-track .score-cell").count() == 41
 
 
@@ -128,3 +131,20 @@ def test_home_choice_sends_game_page_to_bar(page, base_url, new_user, new_game):
     assert page.is_checked("#uiBar")
     page.goto(f"{base_url}/game?id={new_game}")
     page.wait_for_url(re.compile(r".*/bar\?id=.*"), timeout=10000)
+
+
+def test_bar_rules_and_actions_are_on_show(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """The rule book is on the table, and on your turn the action strip shows
+    your main action and the free ones."""
+    game = _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".rulebook").wait_for(state="visible", timeout=10000)
+    assert page.locator(".rulebook .rule-part").count() >= 6
+    assert "40" in page.locator(".rulebook").inner_text()
+    if game["game_state"]["player_turn"] == new_user["user"]["id"]:
+        strip = page.locator(".action-strip")
+        strip.wait_for(state="visible", timeout=10000)
+        assert "Main action" in strip.inner_text()
+        assert "Claim a card" in strip.inner_text()
