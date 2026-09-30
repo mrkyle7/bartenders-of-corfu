@@ -714,9 +714,9 @@ function turnbar() {
         } else if (takeUnderway()) {
             detail = `Take ${plural(left, 'more ingredient')}: tap tokens on the display or the specials tray, or draw from the bag.`;
         } else if (state.main_action_taken_this_turn) {
-            detail = 'Your main action is done. Use a free action, or end your turn.';
+            detail = 'Main action done. Use a free action or end your turn.';
         } else {
-            detail = `Main action: take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass or go for a wee.`;
+            detail = `Take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass or wee.`;
         }
     } else {
         headline = `${seatName(state.player_turn)} is playing`;
@@ -728,7 +728,7 @@ function turnbar() {
     kids.push(h('div.turn-words', {},
         h('p.turn-head', { text: headline }),
         detail ? h('p.turn-detail', { text: detail }) : null));
-    if (myTurn()) kids.push(actionStrip());
+    const strip = myTurn() ? actionStrip() : null;
 
     const buttons = [];
     if (myTurn() && valid.can_end_turn && !handItems().length) {
@@ -736,7 +736,7 @@ function turnbar() {
     }
     if (game.status !== 'NEW') {
         for (const [sheet, label] of [['menu', 'Drinks menu'], ['rules', 'Rules']]) {
-            buttons.push(h('button.btn.sheet-btn', {
+            buttons.push(h('button.btn.tiny.sheet-btn', {
                 type: 'button', text: label, 'data-k': `open-${sheet}`,
                 cls: ui.sheet === sheet ? 'is-open' : '',
                 'aria-expanded': String(ui.sheet === sheet), 'aria-controls': 'sheet',
@@ -745,6 +745,7 @@ function turnbar() {
         }
     }
     if (buttons.length) kids.push(h('div.turn-buttons', {}, buttons));
+    if (strip) kids.push(strip);
 
     const undo = game.pending_undo;
     if (undo && undo.status === 'pending') {
@@ -767,41 +768,29 @@ function turnbar() {
     bar.replaceChildren(...kids);
 }
 
-// What's left of your turn: the main action and each free action, and why a
-// free action can't be used right now.
+// The free actions you could use right now; nothing else (the line above
+// already says whether your main action is still to do).
 function actionStrip() {
     const state = gs();
     const ps = mine();
     const used = new Set(state.free_actions_used_this_turn ?? []);
     const open = new Set(valid.free_actions_left ?? []);
     const mainDone = state.main_action_taken_this_turn;
-    const tiles = [h('li.act', { cls: mainDone ? 'is-used' : 'is-open' },
-        h('span.act-kind', { text: 'Main action' }),
-        h('span.act-state', { text: mainDone ? 'Done' : takeUnderway() ? 'Taking now' : 'Still to do' }))];
     const cardFree = new Set(ps.cards.filter((c) => c.card_type === 'free_action').map((c) => c.free_action_type));
     const clearRowOf = { refresh_orders_row: 2, refresh_ability_row: 3 };
+    const tiles = [];
     for (const [type, label] of Object.entries(FREE_ACTIONS)) {
         const always = type === 'claim_card' || type in clearRowOf;
-        if (!always && !cardFree.has(type)) continue;
+        if ((!always && !cardFree.has(type)) || used.has(type)) continue;
         const row = clearRowOf[type];
-        let status;
-        let cls;
-        if (used.has(type)) {
-            status = 'Used';
-            cls = 'is-used';
-        } else if (row ? actionsOf('refresh_card_row').some((a) => a.params.row_position === row)
-            : open.has(type) || (!mainDone && can(type))) {
-            status = 'Free now';
-            cls = 'is-open';
-        } else {
-            const needs = { refresh_orders_row: 3, refresh_ability_row: 2 }[type];
-            status = type === 'claim_card' ? 'Nothing you can afford'
-                : needs && ps.drunk_level < needs ? `Needs drunk ${needs}` : 'Not now';
-            cls = 'is-off';
-        }
-        tiles.push(h('li.act', { cls }, h('span.act-kind', { text: `${label} (free)` }), h('span.act-state', { text: status })));
+        const usable = row
+            ? actionsOf('refresh_card_row').some((a) => a.params.row_position === row)
+            : open.has(type) || (!mainDone && can(type));
+        if (usable) tiles.push(h('li.act', { text: label }));
     }
-    return h('ul.action-strip', { 'aria-label': 'Your actions this turn' }, tiles);
+    if (!tiles.length) return null;
+    return h('ul.action-strip', { 'aria-label': 'Free actions you can use now' },
+        h('li.act-lead', { text: 'Free now:' }), tiles);
 }
 
 // ─── Cards ──────────────────────────────────────────────────────────────────
@@ -1069,10 +1058,12 @@ function glass(pid, cupIndex, { interactive }) {
     if (interactive && !handItems().length) {
         for (const a of actionsOf('sell_cup').filter((x) => x.params.cup_index === cupIndex && !x.params.additional_cups)) {
             const specials = a.params.declared_specials ?? [];
+            const name = drinkName(cup.ingredients, specials);
+            const order = a.params.order ? ` (+${a.params.order_bonus} order)` : '';
             buttons.push(h('button.btn.go.tiny', {
                 type: 'button', onclick: () => sell(a.params), 'data-k': `sell-${cupIndex}-${specials.join('-')}`,
-                'aria-label': `Sell glass ${cupIndex + 1} as ${drinkName(cup.ingredients, specials)} for ${plural(a.params.points, 'point')}`,
-            }, h('strong', { text: `Sell for ${a.params.points}${freeNote('sell_cup')}` }), h('span', { text: drinkName(cup.ingredients, specials) })));
+                'aria-label': `Sell glass ${cupIndex + 1} as ${name} for ${plural(a.params.points, 'point')}${a.params.order ? `, including +${a.params.order_bonus} for the ${a.params.order} order` : ''}`,
+            }, h('strong', { text: `Sell for ${a.params.points}${freeNote('sell_cup')}` }), h('span', { text: `${name}${order}` })));
         }
         if (actionsOf('drink_cup').some((a) => a.params.cup_index === cupIndex)) {
             buttons.push(h('button.btn.tiny', { type: 'button', onclick: () => drinkCup(cupIndex), text: 'Drink it', 'data-k': `drinkcup-${cupIndex}` }));
@@ -1092,7 +1083,12 @@ function sellBoth() {
     const cups = mine().cups;
     return h('div.sell-both', {}, options.map((a) => {
         const second = a.params.additional_cups[0];
-        const names = `${drinkName(cups[a.params.cup_index].ingredients, a.params.declared_specials ?? [])} and ${drinkName(cups[second.cup_index].ingredients, second.declared_specials ?? [])}`;
+        const orderFor = (ci) => (a.params.orders ?? []).find((o) => o.cup_index === ci);
+        const label = (ci, declared) => {
+            const o = orderFor(ci);
+            return `${drinkName(cups[ci].ingredients, declared ?? [])}${o ? ` (+${o.bonus} order)` : ''}`;
+        };
+        const names = `${label(a.params.cup_index, a.params.declared_specials)} and ${label(second.cup_index, second.declared_specials)}`;
         return h('button.btn.go.tiny', {
             type: 'button', onclick: () => sell(a.params), 'data-k': `sellboth-${JSON.stringify(a.params)}`,
             'aria-label': `Sell both glasses, ${names}, for ${plural(a.params.points, 'point')}`,
@@ -1430,21 +1426,69 @@ function closeSheet() {
     document.querySelector(`[data-k="open-${was}"]`)?.focus();
 }
 
-// Your glasses, kept in view at the top of the drinks menu.
+// Everyone's glasses, kept in view at the top of the drinks menu: yours
+// first (with what you've just placed), then the others in turn order.
 function sheetGlasses() {
-    if (!(game.status === 'STARTED' && isMember() && mine())) return null;
-    return h('div.sheet-glasses', { role: 'group', 'aria-label': 'Your glasses' },
-        mine().cups.map((cup, i) => {
-            const staged = myTurn() ? stagedTo('cup', i) : [];
-            const all = [...cup.ingredients, ...staged.map((it) => it.name)];
-            return h('div.sheet-glass', {},
-                h('span.sheet-glass-name', { text: `Glass ${i + 1}` }),
-                h('span.sheet-glass-toks', { 'aria-label': all.length ? all.map((n) => ING[n]?.label ?? n).join(', ') : 'Empty' },
-                    all.length
-                        ? [...cup.ingredients.map((n) => token(n, { print: true })),
-                            ...staged.map((it) => token(it.name, { print: true, state: 'placed' }))]
-                        : h('span.sheet-glass-empty', { text: 'Empty' })));
+    if (game.status !== 'STARTED') return null;
+    const seats = seatOrder();
+    const start = Math.max(0, seats.indexOf(me.id));
+    const order = [...seats.slice(start), ...seats.slice(0, start)];
+    const glassToks = (pid, cup, i) => {
+        const staged = pid === me.id && myTurn() ? stagedTo('cup', i) : [];
+        const all = [...cup.ingredients, ...staged.map((it) => it.name)];
+        return h('span.sheet-glass-toks', {
+            role: 'img',
+            'aria-label': `Glass ${i + 1}: ${all.length ? all.map((n) => ING[n]?.label ?? n).join(', ') : 'empty'}`,
+        },
+        all.length
+            ? [...cup.ingredients.map((n) => token(n, { print: true })),
+                ...staged.map((it) => token(it.name, { print: true, state: 'placed' }))]
+            : h('span.sheet-glass-empty', { text: 'Empty' }));
+    };
+    return h('div.sheet-glasses', { role: 'group', 'aria-label': 'Everyone\'s glasses' },
+        order.map((pid) => {
+            const ps = gs().player_states[pid];
+            return h('div.sheet-glass', { cls: pid === me.id ? 'is-mine' : '', style: { '--seat': seatColour(pid) } },
+                h('span.sheet-glass-name', {},
+                    h('span.pawn', { 'aria-hidden': 'true' }),
+                    h('span', { text: pid === me.id ? 'You' : seatName(pid) })),
+                h('span.sheet-glass-cups', {}, ps.cups.map((cup, i) => glassToks(pid, cup, i))));
         }));
+}
+
+// A strip of every player at a glance, in the header that scrolls away:
+// points, drunk level, bladder, songs, and whose turn it is.
+function renderOverview() {
+    const box = $('overview');
+    if (!box) return;
+    if (!game || game.status === 'NEW' || !gs()?.player_states) {
+        box.replaceChildren();
+        return;
+    }
+    const target = gs().score_to_win ?? 40;
+    box.replaceChildren(h('ol.overview-list', { 'aria-label': 'Players at a glance' },
+        seatOrder().map((pid) => {
+            const ps = gs().player_states[pid];
+            const turn = gs().player_turn === pid && !gs().winner;
+            const out = ps.status === 'hospitalised' ? 'Hospital' : ps.status === 'wet' ? 'Wet' : ps.status === 'quit' ? 'Left' : null;
+            const songs = ps.cards.filter((c) => c.card_type === 'karaoke').length;
+            return h('li.overview-player', {
+                cls: `${turn ? 'is-turn' : ''}${out ? ' is-out' : ''}${pid === me.id ? ' is-mine' : ''}`,
+                style: { '--seat': seatColour(pid) },
+                'aria-label': `${pid === me.id ? 'You' : seatName(pid)}: ${plural(ps.points, 'point')} of ${target}, `
+                    + `${out ?? `drunk ${ps.drunk_level}`}, bladder ${ps.bladder.length} of ${ps.bladder_capacity}`
+                    + `${songs ? `, ${plural(songs, 'song')}` : ''}${turn ? ', playing now' : ''}`,
+            },
+            h('span.pawn', { 'aria-hidden': 'true' }),
+            h('span.ov-name', { text: pid === me.id ? 'You' : seatName(pid), 'aria-hidden': 'true' }),
+            h('span.ov-stats', { 'aria-hidden': 'true' },
+                h('b', { text: `${ps.points}` }), ' pts',
+                h('span.ov-sep', { text: ' · ' }),
+                out ?? `drunk ${ps.drunk_level}`,
+                h('span.ov-sep', { text: ' · ' }),
+                `bladder ${ps.bladder.length}/${ps.bladder_capacity}`,
+                songs ? h('span', { text: ` · 🎤${songs}` }) : null));
+        })));
 }
 
 function renderSheet() {
@@ -1652,6 +1696,7 @@ function render({ force = false } = {}) {
     if (game.status === 'NEW') {
         turnbar();
         renderSheet();
+        renderOverview();
         renderLobby().then(() => restoreFocus(focusKey));
         return;
     }
@@ -1671,6 +1716,7 @@ function render({ force = false } = {}) {
         housekeeping(),
     ].filter(Boolean));
     renderSheet();
+    renderOverview();
     ending();
     restoreFocus(focusKey);
 }

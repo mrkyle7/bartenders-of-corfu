@@ -803,3 +803,28 @@ def test_a_store_card_pays_one_spirit_and_stores_the_rest():
     assert me.bladder == []
     assert me.cards[-1]["stored_spirits"] == ["GIN", "GIN"]
     assert len(new.bag_contents) == bag + 1
+
+
+def test_sell_actions_name_the_order_and_its_bonus():
+    from playtesting.valid_actions import get_valid_actions
+
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = [
+        _order("Vodka Tonic", "simple", 2, spirit_type="VODKA", mixer_type="TONIC")
+    ]
+    gs.order_deck = []
+    ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.TONIC])
+    ps.cups[1] = Cup(ingredients=[Ingredient.VODKA, Ingredient.TONIC])
+    sells = [
+        a.params for a in get_valid_actions(gs, pid) if a.action_type == "sell_cup"
+    ]
+    single = next(
+        p for p in sells if p["cup_index"] == 0 and "additional_cups" not in p
+    )
+    assert single["points"] == 3
+    assert (single["order"], single["order_bonus"]) == ("Vodka Tonic", 2)
+    both = next(p for p in sells if "additional_cups" in p)
+    # One order: only the first glass serves it
+    assert both["points"] == 4
+    assert both["orders"] == [{"cup_index": 0, "name": "Vodka Tonic", "bonus": 2}]
