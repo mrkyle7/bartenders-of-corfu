@@ -9,6 +9,7 @@ import { h, text, el, showError, clearError, showModalError, clearModalError,
          setButtonBusy, formatTime, flash, switchTab, openModal, closeModal } from './dom.js';
 import { detectBestDrink, getCocktailRecipes, getValidPairings, SPECIAL_TYPES, cocktailsForSpecial } from './drinks.js';
 import S from './state.js';
+import { inviteBox } from './invite.js';
 
 // ─────────────────────────────────────────────────────────────
 // Web Push subscription helper (shared with script.js)
@@ -564,6 +565,20 @@ function renderLobby(game) {
     });
 
     renderGameModes(game);
+
+    // Invite link — for anyone seated while there's a free stool
+    const inviteSection = el('gbInviteSection');
+    if (inviteSection) {
+        const isSeated = S.me && (game.players || []).includes(S.me.id);
+        const show = isSeated && (game.players || []).length < 4;
+        inviteSection.classList.toggle('hidden', !show);
+        if (show && !inviteSection.firstChild) {
+            inviteSection.appendChild(inviteBox(S.gameId, {
+                classes: { button: 'gb-action-btn' },
+                onCopied: (ok) => showToast(ok ? 'Invite link copied' : 'Press Ctrl/Cmd+C to copy'),
+            }));
+        }
+    }
 
     // Add Bot + Start Game buttons — host only; Join button for non-members
     const section = el('gbStartGameSection');

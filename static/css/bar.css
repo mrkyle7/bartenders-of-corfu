@@ -739,13 +739,11 @@ button.glass { cursor: pointer; }
 }
 button.mouth { cursor: pointer; }
 .mouth.is-target { border-color: var(--kumquat); border-style: solid; background: rgba(240, 138, 36, 0.14); }
-.lips {
-    width: 54px;
-    height: 24px;
-    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-    background: radial-gradient(ellipse at 50% 50%, #5a0f1c 0 22%, #d23a4f 24%);
-    box-shadow: 0 2px 0 #8c1f30;
-}
+.lips { display: block; width: 60px; height: 32px; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.35)); }
+.lips svg { display: block; width: 100%; height: 100%; }
+button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
+@keyframes lips-open { 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { button.mouth.is-target .lips { animation: none; } }
 .mouth-word { font-weight: 700; font-size: 13px; }
 .mouth-tokens { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 120px; }
 .mouth-note { font-size: 12px; text-align: center; }
@@ -979,6 +977,25 @@ button.mouth { cursor: pointer; }
 .house-rules legend { font: 700 15px var(--display); padding: 0 6px; }
 .rule { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
 .rule input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--kumquat); }
+
+/* Invite link: a read-only box and a Copy button. */
+.invite { display: grid; gap: 6px; width: 100%; text-align: left; }
+.invite-label { font: 700 15px var(--display); }
+.invite-row { display: flex; gap: 8px; }
+.invite-url {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    padding: 6px 10px;
+    border: 2px solid var(--line);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--whitewash);
+    font: 500 14px var(--ui);
+    text-overflow: ellipsis;
+}
+.invite-url:focus-visible { outline: 3px solid var(--kumquat); outline-offset: 1px; }
+.invite-copy { flex: none; }
 
 .empty-table { text-align: center; font: 700 20px var(--display); margin: 40px 0 16px; }
 

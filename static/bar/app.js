@@ -9,6 +9,7 @@ import {
     SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, orderRecipe,
     servesOrder,
 } from './data.js';
+import { inviteBox } from '/static/invite.js';
 
 const POLL_MS = 2000;
 const MAX_DRUNK = 5;
@@ -988,6 +989,16 @@ function sellBoth() {
     }));
 }
 
+// A pair of lips, parted into a grin: the spot you drop tokens to drink them.
+const LIPS_SVG = '<svg viewBox="0 0 64 34" aria-hidden="true">'
+    + '<path d="M5 15.5C15 15 24 14.5 32 15.5C40 14.5 49 15 59 15.5C51 22 43 23.5 32 23.5S13 22 5 15.5Z" fill="#3b0a13"/>'
+    + '<path d="M13 15.8C21 16.4 27 16 32 16.6C37 16 43 16.4 51 15.8C47 18.6 40 19.2 32 19.2S17 18.6 13 15.8Z" fill="#fbf3ea"/>'
+    + '<path d="M3 15.5C10 10 18 4.5 24.5 4.8C28 5 30.2 6.8 32 8.8C33.8 6.8 36 5 39.5 4.8C46 4.5 54 10 61 15.5C52 14.2 42 13.4 32 15C22 13.4 12 14.2 3 15.5Z" fill="#b8233a" stroke="#7a1022" stroke-width="1" stroke-linejoin="round"/>'
+    + '<path d="M5 15.5C13 22 22 23.5 32 23.5S51 22 59 15.5C57 24 46 31.5 32 31.5S7 24 5 15.5Z" fill="#d23249" stroke="#7a1022" stroke-width="1" stroke-linejoin="round"/>'
+    + '<path d="M21 26.5C26 28.4 38 28.4 43 26.5" fill="none" stroke="#ff9eab" stroke-width="2.2" stroke-linecap="round" opacity=".75"/>'
+    + '<path d="M17 9.6C19.5 8 22 7.4 24.5 7.6" fill="none" stroke="#e8687b" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>'
+    + '</svg>';
+
 function mouth() {
     const drinks = stagedTo('mouth');
     const placing = !!heldIngredient();
@@ -999,7 +1010,7 @@ function mouth() {
         'aria-label': placing ? 'Your mouth: tap to drink the token you are holding' : 'Your mouth',
         'data-k': placing ? 'mouth' : undefined,
     },
-    h('span.lips', { 'aria-hidden': 'true' }),
+    h('span.lips', { 'aria-hidden': 'true', svg: LIPS_SVG }),
     h('span.mouth-word', { text: 'Drink' }));
     return h('div.mouth-spot', {},
         node,
@@ -1362,6 +1373,16 @@ function ending() {
 
 let lobbyExtras = null;
 
+let invite = null; // built once so re-renders keep its state
+
+function inviteLink() {
+    invite ??= inviteBox(gameId, {
+        classes: { button: 'btn' },
+        onCopied: (ok) => toast(ok ? 'Invite link copied' : 'Press Ctrl+C (or Cmd+C) to copy the link', ok ? 'info' : 'error'),
+    });
+    return invite;
+}
+
 async function renderLobby() {
     const host = game.host === me.id;
     if (host && !lobbyExtras) {
@@ -1388,7 +1409,8 @@ async function renderLobby() {
         h('h2.lobby-title', { text: `${seatName(game.host)}'s table` }),
         h('p.lobby-sub', { text: `${plural(game.players.length, 'bartender')} of 4 seated. Two or more can play.` }),
         h('ol.seats', {}, seats),
-    ];
+        isMember() && game.players.length < 4 ? inviteLink() : null,
+    ].filter(Boolean);
     if (!isMember()) {
         parts.push(h('button.btn.go', {
             type: 'button', text: 'Take a seat',

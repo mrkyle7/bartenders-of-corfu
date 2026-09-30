@@ -6,6 +6,8 @@ and table views.
 
 import re
 
+import pytest
+
 from tests.ui.conftest import _api_get, _api_post
 
 
@@ -30,6 +32,19 @@ def test_bar_lobby_start_disabled_for_lone_host(page, base_url, new_user, new_ga
     assert new_user["username"] in lobby.inner_text()
     assert page.locator("#lobby .seat.is-open").count() == 3
     assert page.locator("#lobby button", has_text="Needs a second player").is_disabled()
+
+
+@pytest.mark.parametrize("view", ["bar", "play", "game"])
+def test_lobby_invite_link_copies(page, base_url, new_user, new_game, view):
+    """Every view's lobby offers the game's /game link to copy and share."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.goto(f"{base_url}/{view}?id={new_game}")
+    link = page.locator("#inviteLink")
+    link.wait_for(state="visible", timeout=10000)
+    assert link.input_value().endswith(f"/game?id={new_game}")
+    page.locator(".invite-copy").click()
+    page.locator(".invite-copy", has_text="Copied!").wait_for(timeout=5000)
+    assert page.evaluate("navigator.clipboard.readText()") == link.input_value()
 
 
 def test_bar_lobby_start_lays_out_the_table(
