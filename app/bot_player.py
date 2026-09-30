@@ -10,6 +10,7 @@ from uuid import UUID
 
 from app.db import db
 from app.game import Game, GameException
+from app.GameState import regular_in_bag
 
 # Importing ml registers the ml-backed bot strategies (mcts, lookahead) into
 # STRATEGY_CLASSES. This is intentionally a hard import with no try/except: if
@@ -274,7 +275,9 @@ def _execute_take(
             if remaining <= 0:
                 return
 
-            bag_count = min(remaining, len(gs.bag_contents))
+            # Specials that come out of the bag go to the specials display
+            # and don't count, so only spirits and mixers can be drawn.
+            bag_count = min(remaining, regular_in_bag(gs))
             if bag_count <= 0:
                 break  # bag empty — fall back to display via outer loop
 
@@ -301,7 +304,7 @@ def _execute_take(
         # via the remaining<=0 / no-display guards.
         game = db.get_game(game.id)
         gs = game.game_state
-        if not gs.open_display:
+        if not gs.open_display and not gs.specials_display:
             return
 
 

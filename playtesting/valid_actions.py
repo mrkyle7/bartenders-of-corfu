@@ -256,9 +256,7 @@ def _add_take_ingredients(
         return
 
     if not mid_batch:
-        available = (
-            regular_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
-        )
+        available = regular_in_bag(gs) + len(gs.open_display) + len(gs.specials_display)
         if available < take_count:
             return
 
@@ -282,14 +280,14 @@ def _add_sell_cup(ps: PlayerState, result: list[Action], gs: GameState | None = 
         # Try selling with no specials first
         pts = _full_sell_points(ps, cup_idx, [], gs)
         if pts is not None:
+            params = {"cup_index": cup_idx, "declared_specials": [], "points": pts}
+            order = _order_served(gs, ps, cup_idx, [])
+            if order is not None:
+                params["order"] = order.name
             result.append(
                 Action(
                     action_type="sell_cup",
-                    params={
-                        "cup_index": cup_idx,
-                        "declared_specials": [],
-                        "points": pts,
-                    },
+                    params=params,
                     description=f"Sell cup {cup_idx} for {pts}pts (no specials)",
                 )
             )

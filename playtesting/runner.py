@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from app import actions
-from app.GameState import GameState
+from app.GameState import GameState, regular_in_bag
 from app.game import GameException
 
 from playtesting.display import format_action, format_game_state
@@ -248,42 +248,52 @@ class GameRunner:
         4. Strategy assigns bag draws after seeing what was drawn
         5. Send pending assignments to complete the turn
         """
-        ps = gs.player_states[player_id]
-        take_count = ps.take_count
-        remaining = take_count - gs.ingredients_taken_this_turn
-
-        # Phase 1: display picks (strategy knows what's available)
-        display_assignments = strategy.choose_take_assignments(gs, player_id, remaining)
-
-        if display_assignments:
-            gs, payload = actions.take_ingredients(gs, player_id, display_assignments)
-            if payload.get("turn_complete", False):
-                return gs
-
-        # Phase 2: draw remaining from bag, let strategy see + assign
-        batch_limit = 10
-        while batch_limit > 0:
-            batch_limit -= 1
+        # The strategy may leave picks to the bag; if the bag runs out of
+        # spirits and mixers, go back to the displays for the rest.
+        for _ in range(3):
             ps = gs.player_states[player_id]
             remaining = ps.take_count - gs.ingredients_taken_this_turn
             if remaining <= 0:
-                break
-
-            # Draw from bag — reveals ingredients
-            bag_count = min(remaining, len(gs.bag_contents))
-            if bag_count <= 0:
-                break
-            gs, draw_payload = actions.draw_from_bag(gs, player_id, bag_count)
-
-            # Strategy sees drawn items and decides dispositions
-            drawn = gs.bag_draw_pending[:]
-            pending_assignments = strategy.choose_pending_assignments(
-                gs, player_id, drawn
-            )
-
-            gs, payload = actions.take_ingredients(gs, player_id, pending_assignments)
-            if payload.get("turn_complete", False):
                 return gs
+
+            # Phase 1: display picks (strategy knows what's available)
+            display_assignments = strategy.choose_take_assignments(
+                gs, player_id, remaining
+            )
+            if display_assignments:
+                gs, payload = actions.take_ingredients(
+                    gs, player_id, display_assignments
+                )
+                if payload.get("turn_complete", False):
+                    return gs
+
+            # Phase 2: draw remaining from bag, let strategy see + assign
+            batch_limit = 10
+            while batch_limit > 0:
+                batch_limit -= 1
+                ps = gs.player_states[player_id]
+                remaining = ps.take_count - gs.ingredients_taken_this_turn
+                if remaining <= 0:
+                    return gs
+
+                # Draw from bag — reveals ingredients (specials that come
+                # out go to the specials display and don't count)
+                bag_count = min(remaining, regular_in_bag(gs))
+                if bag_count <= 0:
+                    break
+                gs, draw_payload = actions.draw_from_bag(gs, player_id, bag_count)
+
+                # Strategy sees drawn items and decides dispositions
+                drawn = gs.bag_draw_pending[:]
+                pending_assignments = strategy.choose_pending_assignments(
+                    gs, player_id, drawn
+                )
+
+                gs, payload = actions.take_ingredients(
+                    gs, player_id, pending_assignments
+                )
+                if payload.get("turn_complete", False):
+                    return gs
 
         return gs
 
