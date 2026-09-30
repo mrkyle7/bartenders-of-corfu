@@ -715,6 +715,8 @@ function turnbar() {
             detail = `Take ${plural(left, 'more ingredient')}: tap tokens on the display or the specials tray, or draw from the bag.`;
         } else if (state.main_action_taken_this_turn) {
             detail = 'Main action done. Use a free action or end your turn.';
+        } else if ((state.free_actions_used_this_turn ?? []).includes('sell_cup')) {
+            detail = `Sold for free. Take ${plural(mine().take_count, 'ingredient')}, drink a glass or wee, or end your turn.`;
         } else {
             detail = `Take ${plural(mine().take_count, 'ingredient')}, sell, drink a glass or wee.`;
         }

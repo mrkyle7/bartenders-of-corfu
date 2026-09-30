@@ -97,6 +97,8 @@ variant FreeActionCard : Card {
     --   VODKA   → sell_cup          (Entrepreneur): selling is free, before or
     --                                after the main action, but still once a
     --                                turn: the main action can't be a sale.
+    --                                A sale made first may stand in for the
+    --                                main action: the player may end the turn.
     --   GIN     → go_for_a_wee      (Weak Bladder)
 }
 

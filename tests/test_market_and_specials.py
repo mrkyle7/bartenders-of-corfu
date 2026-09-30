@@ -882,3 +882,23 @@ def test_entrepreneur_sells_first_then_takes_any_other_main_action():
     gs, payload = go_for_a_wee(gs, pid)
     assert payload["is_free_action"] is False
     assert gs.player_turn != pid
+
+
+def test_entrepreneur_can_end_the_turn_after_selling_instead_of_a_main_action():
+    gs = _game()
+    pid, ps = _entrepreneur(gs)
+    assert not actions.can_end_turn(gs, ps)
+    gs, _ = sell_cup(gs, pid, 0, [])
+    assert gs.player_turn == pid
+    assert actions.can_end_turn(gs, gs.player_states[pid])
+    gs, payload = end_turn(gs, pid)
+    assert gs.player_turn != pid
+    assert payload["skipped_main_action"] is True
+
+
+def test_without_a_sale_the_turn_cannot_end_before_the_main_action():
+    gs = _game()
+    pid, ps = _entrepreneur(gs)
+    with pytest.raises(GameException) as exc:
+        end_turn(gs, pid)
+    assert exc.value.status_code == 409

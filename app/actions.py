@@ -220,6 +220,35 @@ def _usable_now(gs: GameState, ps: "PlayerState", action_type: str) -> bool:
     return True
 
 
+def _sold_instead_of_main(gs: GameState) -> bool:
+    """The Entrepreneur's free sale was made and no main action yet.
+
+    That sale can stand in for the main action: the player may take one as
+    well or end the turn there.
+    """
+    return "sell_cup" in gs.free_actions_used_this_turn and not (
+        gs.main_action_taken_this_turn
+    )
+
+
+def can_end_turn(gs: GameState, ps: "PlayerState") -> bool:
+    """Whether the player whose turn it is may end it now.
+
+    After the main action, only while a free action they could use is left
+    (otherwise the turn has already ended); or after the Entrepreneur's free
+    sale, in place of a main action.
+    """
+    if _sold_instead_of_main(gs):
+        return True
+    if not gs.main_action_taken_this_turn:
+        return False
+    return bool(
+        _available_free_actions(
+            gs, ps, gs.free_actions_used_this_turn, usable_only=True
+        )
+    )
+
+
 def _available_free_actions(
     gs: GameState, ps: "PlayerState", used: list[str], usable_only: bool = False
 ) -> set[str]:
@@ -1501,14 +1530,16 @@ def end_turn(
 ) -> tuple[GameState, dict]:
     """EndTurn — player explicitly ends their turn, forfeiting unused free actions.
 
-    Only available after the main action has been taken but free actions remain.
+    Available after the main action has been taken while free actions remain,
+    or after the Entrepreneur's free sale in place of a main action.
     """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)
     ps = gs.player_states[player_id]
     _require_active(ps)
 
-    if not gs.main_action_taken_this_turn:
+    skipped_main = _sold_instead_of_main(gs)
+    if not gs.main_action_taken_this_turn and not skipped_main:
         raise GameException(
             "You must take an action before ending your turn", status_code=409
         )
@@ -1516,7 +1547,7 @@ def end_turn(
     remaining_free = _available_free_actions(
         gs, ps, gs.free_actions_used_this_turn, usable_only=True
     )
-    if len(remaining_free) == 0:
+    if len(remaining_free) == 0 and not skipped_main:
         raise GameException(
             "Your turn is already complete — no free actions to forfeit",
             status_code=409,
@@ -1526,7 +1557,10 @@ def end_turn(
     _advance_turn(gs)
     _check_last_round_complete(gs)
 
-    payload = {"forfeited_free_actions": sorted(remaining_free)}
+    payload = {
+        "forfeited_free_actions": sorted(remaining_free),
+        "skipped_main_action": skipped_main,
+    }
     return gs, payload
 
 

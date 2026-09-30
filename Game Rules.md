@@ -49,7 +49,7 @@ On your turn you take **one main action**, and you may also take any **free acti
 - Whatever your free-action cards give you (see "Ability cards")
 - Pour or drink from a Store card (any number of times)
 
-Your turn ends once you've taken your main action and have no free action left that you could use. You can also end it yourself after your main action, giving up the free actions you haven't used.
+Your turn ends once you've taken your main action and have no free action left that you could use. You can also end it yourself after your main action, giving up the free actions you haven't used. With the Entrepreneur, a sale made first can stand in for your main action, so you can end your turn after it.
 
 ### Take ingredients
 
@@ -148,7 +148,7 @@ Which mixers go with which spirit:
 | Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |
 | Specialist (one per spirit) | 2 of that spirit, or 1 of its special (whisky: bitters, tequila: cointreau, vodka: vermouth, rum: sugar, gin: lemon) | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
 | Greedy Bartender | 3 rum | 2 | Take ingredients a second time each turn (free). |
-| Entrepreneur | 3 vodka | 2 | Selling is a free action, before or after your main action, but you still sell only once a turn. |
+| Entrepreneur | 3 vodka | 2 | Selling is a free action, before or after your main action, but you still sell only once a turn. If you sell first, you can take a main action too or end your turn there. |
 | Weak Bladder | 3 gin | 2 | A free wee each turn. |
 
 ## Cocktail menu
