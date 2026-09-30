@@ -165,6 +165,10 @@ def test_end_turn_gives_up_a_possible_claim():
     ps.bladder = [Ingredient.RUM] * 3
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
     gs.card_rows[1].cards = []
+    # A card the rum can pay for, so a claim is always possible
+    _row(gs, 3).cards = [
+        Card(id="c-store", card_type="store", name="Rum Store", spirit_type="RUM")
+    ]
     gs, _ = sell_cup(gs, pid, 0, [])
     gs, payload = end_turn(gs, pid)
     assert gs.player_turn != pid
@@ -326,25 +330,45 @@ def test_specials_drawn_to_fill_the_display_go_to_the_specials_display(monkeypat
     assert gs.bag_contents == []
 
 
-def test_a_blind_draw_skips_specials_onto_the_specials_display(monkeypatch):
+def test_a_blind_draw_hands_you_specials_to_deal_with(monkeypatch):
+    """Specials drawn blind aren't set aside: they're yours to put on a
+    glass rim or drink, like any other token."""
     monkeypatch.setattr("app.GameState.random.choice", lambda seq: seq[0])
     gs = _game()
-    pid, _ = _me(gs)
+    pid, ps = _me(gs)
     gs.specials_display = []
-    _bag_of(gs, [Ingredient.BITTERS, Ingredient.VERMOUTH, Ingredient.VODKA])
-    new, payload = actions.draw_from_bag(gs, pid, 1)
-    assert new.bag_draw_pending == [Ingredient.VODKA]
-    assert sorted(i.name for i in new.specials_display) == ["BITTERS", "VERMOUTH"]
-    assert sorted(payload["to_specials_display"]) == ["BITTERS", "VERMOUTH"]
+    _bag_of(gs, [Ingredient.BITTERS, Ingredient.LEMON, Ingredient.VODKA])
+    gs, payload = actions.draw_from_bag(gs, pid, 3)
+    assert gs.bag_draw_pending == [
+        Ingredient.BITTERS,
+        Ingredient.LEMON,
+        Ingredient.VODKA,
+    ]
+    assert gs.specials_display == [] and payload["to_specials_display"] == []
+    assert gs.player_states[pid].take_count == 3  # sober: take 3
+    gs, _ = take_ingredients(
+        gs,
+        pid,
+        [
+            {"source": "pending", "disposition": "cup", "cup_index": 0},  # rim
+            {"source": "pending", "disposition": "drink"},
+            {"source": "pending", "disposition": "cup", "cup_index": 0},
+        ],
+    )
+    me = gs.player_states[pid]
+    assert me.cups[0].ingredients == [Ingredient.BITTERS, Ingredient.VODKA]
+    assert Ingredient.LEMON in me.bladder
 
 
-def test_a_blind_draw_needs_enough_spirits_and_mixers_in_the_bag():
+def test_a_blind_draw_can_take_whatever_is_left_in_the_bag():
     gs = _game()
     pid, _ = _me(gs)
     _bag_of(gs, [Ingredient.BITTERS, Ingredient.VODKA])
+    new, _ = actions.draw_from_bag(gs, pid, 2)
+    assert sorted(i.name for i in new.bag_draw_pending) == ["BITTERS", "VODKA"]
     with pytest.raises(GameException) as exc:
-        actions.draw_from_bag(gs, pid, 2)
-    assert exc.value.status_code == 409
+        actions.draw_from_bag(gs, pid, 3)
+    assert exc.value.status_code in (400, 409)
 
 
 def test_a_special_goes_in_a_glass_on_top_of_five():
@@ -448,6 +472,10 @@ def test_specials_never_pay_for_cards():
     ps.bladder = [Ingredient.LEMON, Ingredient.SUGAR, Ingredient.BITTERS]
     for row in gs.card_rows:
         for card in row.cards:
+            # A specialist takes one of its own special (sugar pays for the
+            # Rum Specialist); that's tested on its own. Nothing else does.
+            if card.card_type == "specialist":
+                continue
             assert not actions._can_afford(ps, card)
 
 

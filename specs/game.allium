@@ -36,10 +36,11 @@ config {
 -- The bag holds players + 3 tokens of each spirit and each mixer, and
 -- config.specials_per_type tokens of each special (bitters, cointreau, lemon,
 -- sugar, vermouth), whatever the number of players.
--- A special that comes out of the bag goes to the specials display
--- (BoardState.specials_display) and the draw carries on: see DrawToken.
--- From there anyone may take it as part of TakeIngredients, into a cup or
--- to drink.
+-- A special that comes out while refilling the open display goes to the
+-- specials display (BoardState.specials_display) and the refill carries on:
+-- see DrawToken. From there anyone may take it as part of TakeIngredients,
+-- into a cup or to drink. A special drawn blind (DrawFromBag or a direct bag
+-- draw, see DrawBlind) is the drawing player's to deal with the same way.
 
 entity Ingredient {
     kind: Spirit | Mixer | Special
@@ -136,7 +137,7 @@ entity BoardState {
     player_turn: UUID                        -- whose turn it is
 
     -- Derived
-    drawable: bag_contents where kind != Special
+    drawable: bag_contents                   -- a blind draw can hand you anything
     available_ingredients: drawable + open_display + specials_display
 }
 
@@ -233,11 +234,21 @@ rule PlaceIngredientInCup {
     ensures: cup.ingredients = cup.ingredients + [ingredient]
 }
 
+rule DrawBlind {
+    -- One random draw from the bag for DrawFromBag or a direct bag draw.
+    -- Whatever comes out is the player's, specials included: it must go in
+    -- a cup (a special on the rim, up to config.max_cup_specials) or be
+    -- drunk, like any drawn token.
+    when: DrawBlind(board)
+    let token = random from board.bag_contents
+    ensures: board.bag_contents = board.bag_contents - [token]
+}
+
 rule DrawToken {
-    -- One random draw from the bag, for ReplenishDisplay, DrawFromBag or a
-    -- direct bag draw. A special that comes out goes to the specials display
-    -- and the draw carries on, so the result is always a spirit or mixer (or
-    -- a legacy die token), or nothing when the bag has none left.
+    -- One random draw from the bag for ReplenishDisplay. A special that
+    -- comes out goes to the specials display and the draw carries on, so
+    -- the result is always a spirit or mixer (or a legacy die token), or
+    -- nothing when the bag has none left.
     when: DrawToken(board)
     let token = random from board.bag_contents
     ensures: board.bag_contents = board.bag_contents - [token]

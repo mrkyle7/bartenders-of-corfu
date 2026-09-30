@@ -205,7 +205,8 @@ export const RULES = [
     {
         title: 'Specials',
         items: [
-            'There are two each of bitters, cointreau, lemon, sugar and vermouth in the bag. Whenever one comes out, it goes to the specials tray and the drawing carries on, so the display always shows five spirits and mixers and a blind draw never hands you a special.',
+            'There are two each of bitters, cointreau, lemon, sugar and vermouth in the bag. One that comes out while refilling the display goes to the specials tray and the drawing carries on, so the display always shows five spirits and mixers.',
+            'A special you draw blind from the bag is one of your ingredients like any other: put it on one of your glasses or drink it.',
             'Anyone can take specials from the tray as part of their take. A special goes straight into a glass, up to two per glass on top of its five spirits and mixers, or you drink it.',
             'A glass with a special in it only sells as the cocktail it makes. Drink one to stop others getting it: lemon and sugar sober you like a mixer, bitters, cointreau and vermouth get you drunk like a spirit.',
             'Specials never count toward a card, except that one pays for a specialist: bitters for whisky, cointreau for tequila, vermouth for vodka, sugar for rum, lemon for gin.',

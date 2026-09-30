@@ -65,7 +65,8 @@ Your turn ends once you've taken your main action and have no free action left t
 ### Specials
 
 - **In the bag like everything else.** There are two each of bitters, cointreau, lemon, sugar and vermouth.
-- **They go to the specials tray.** Whenever a special comes out of the bag, whether refilling the display or drawn blind, put it on the specials tray and keep drawing. The display always shows 5 spirits and mixers, and a blind draw never hands you a special.
+- **Refilling the display, they go to the specials tray.** When a special comes out while refilling the open display, put it on the specials tray and keep drawing, so the display always shows 5 spirits and mixers.
+- **Drawn blind, they're yours.** A special you draw blind from the bag counts as one of the ingredients you take, like a spirit or mixer: put it on one of your glasses or drink it.
 - **Anyone can take them.** Taking a special from the tray is one of the ingredients you take this turn. It goes straight into one of your glasses (up to 2 specials per glass, on top of its 5 spirits and mixers), or you drink it.
 - **Only for cocktails.** A glass with a special in it can only be sold as the cocktail it makes.
 - **Drinking one.** It goes into your bladder. Lemon and sugar sober you like a mixer; bitters, cointreau and vermouth get you drunk like a spirit. Why drink one? So nobody else gets it, or to pay for a specialist card.
