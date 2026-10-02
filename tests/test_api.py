@@ -33,11 +33,20 @@ class TestAPI(unittest.TestCase):
         self.assertIn("text/html", response.headers.get("content-type", ""))
         self.assertIn("Bartenders of Corfu", response.text)
 
-    def test_login_page_endpoint(self):
-        """Test the login page endpoint."""
-        response = self.client.get("/login")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("text/html", response.headers.get("content-type", ""))
+    def test_login_and_profile_pages_are_on_cheetahmoongames(self):
+        """Signing in and the account page live on cheetahmoongames.com."""
+        response = self.client.get("/login", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            response.headers["location"].startswith(
+                "https://cheetahmoongames.com/login?next="
+            )
+        )
+        response = self.client.get("/profile", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.headers["location"], "https://cheetahmoongames.com/profile"
+        )
 
     def test_old_game_pages_redirect_to_the_bar_top(self):
         """/game and /play (the old views) send links, invites included, to /bar."""

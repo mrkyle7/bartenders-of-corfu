@@ -38,17 +38,17 @@ def test_login_link_shown_unauthenticated(page, base_url):
     assert not page.locator("#logoutLink").is_visible()
 
 
-def test_create_game_redirects_to_login(page, base_url):
-    """Clicking Start without auth should redirect to /login."""
+def test_create_game_redirects_to_login(page, base_url, sign_in_page):
+    """Clicking Start without auth sends the player to sign in on cheetahmoongames.com."""
     page.goto(base_url)
     page.wait_for_load_state("networkidle")
     page.click("button[aria-label='Start new game']")
-    page.wait_for_url(f"{base_url}/login")
-    assert "/login" in page.url
+    page.wait_for_url(f"{sign_in_page}?**")
+    assert page.url.startswith(sign_in_page)
 
 
-def test_join_redirects_to_login(page, base_url, other_user_and_jwt):
-    """Unauthenticated visitor: clicking 'Login to Join' navigates to /login."""
+def test_join_redirects_to_login(page, base_url, other_user_and_jwt, sign_in_page):
+    """Unauthenticated visitor: clicking 'Login to Join' goes to sign in."""
     # Other user creates a game
     _api_post(base_url, "/v1/games", other_user_and_jwt["jwt"])
 
@@ -58,8 +58,8 @@ def test_join_redirects_to_login(page, base_url, other_user_and_jwt):
     btn = page.locator("button", has_text="Login to Join").first
     btn.wait_for(state="visible")
     btn.click()
-    page.wait_for_url(f"{base_url}/login")
-    assert "/login" in page.url
+    page.wait_for_url(f"{sign_in_page}?**")
+    assert page.url.startswith(sign_in_page)
 
 
 # ---------------------------------------------------------------------------
@@ -145,13 +145,12 @@ def test_full_game_shows_game_full_in_join_section(page, base_url, new_user):
         _api_post(base_url, f"/v1/games/{game_id}/join", filler_jwt)
 
     # Register and log in as a fresh user (not a member of the full game)
-    another = _unique("another")
-    page.goto(f"{base_url}/login")
-    page.fill("#registerForm input[name='username']", another)
-    page.fill("#registerForm input[name='email']", f"{another}@test.invalid")
-    page.fill("#registerForm input[name='password']", "Password1")
-    page.click("#registerForm button[type='submit']")
-    page.wait_for_url(base_url + "/", timeout=10000)
+    _, another_jwt = _api_register(base_url, _unique("another"))
+    page.context.clear_cookies()
+    page.context.add_cookies(
+        [{"name": "userjwt", "value": another_jwt, "url": base_url}]
+    )
+    page.goto(base_url)
     page.wait_for_load_state("networkidle")
 
     # The full game should appear in "Join a Game" showing "Game Full" with no join button

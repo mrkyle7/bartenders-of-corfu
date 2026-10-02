@@ -131,23 +131,29 @@ def _unique(prefix: str) -> str:
 
 @pytest.fixture
 def new_user(page, base_url):
-    """Register a fresh user via the login page form so the browser cookie
-    is definitely set (page.request.post does not reliably share cookies
-    with the browser context)."""
+    """Register a fresh user through the API and sign the browser in with
+    its cookie (signing in happens on cheetahmoongames.com, not here)."""
     username = _unique("u")
-    page.goto(f"{base_url}/login")
-    page.fill("#registerForm input[name='username']", username)
-    page.fill("#registerForm input[name='email']", f"{username}@test.invalid")
-    page.fill("#registerForm input[name='password']", "Password1")
-    page.click("#registerForm button[type='submit']")
-    page.wait_for_url(base_url + "/", timeout=10000)
-    # Extract the JWT from the cookie store for server-side API calls
-    cookies = page.context.cookies()
-    jwt = next((c["value"] for c in cookies if c["name"] == "userjwt"), "")
-    # Get user data from the API (we need the UUID)
-    resp = page.request.get(f"{base_url}/userDetails")
-    user_data = resp.json()
+    user, jwt = _api_register(base_url, username)
+    page.context.add_cookies([{"name": "userjwt", "value": jwt, "url": base_url}])
+    user_data = _api_get(base_url, "/userDetails", jwt)
     return {"user": user_data, "jwt": jwt, "username": username}
+
+
+def _stub_sign_in_page(page):
+    """Answer cheetahmoongames.com's sign-in page locally, so a redirect to it
+    can be seen without leaving the test machine."""
+    page.route(
+        "https://cheetahmoongames.com/**",
+        lambda route: route.fulfill(content_type="text/html", body="<p>Sign in</p>"),
+    )
+
+
+@pytest.fixture
+def sign_in_page(page):
+    """Where tests expect to be sent to sign in."""
+    _stub_sign_in_page(page)
+    return "https://cheetahmoongames.com/login"
 
 
 @pytest.fixture

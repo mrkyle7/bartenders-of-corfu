@@ -21,7 +21,7 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 
 ## Architecture
 - `/app` — FastAPI routes (`api.py`), business logic (`actions.py`, `gameManager.py`), domain models (`GameState.py`, `PlayerState.py`, `card.py`, `cocktails.py`)
-- `/static` — frontend assets. The game page is the bar top, `/bar` (`bar.html`, `bar/`, `css/bar.css`); old `/game` and `/play` links (the classic and table views, now removed) redirect to it. The bar top is the physical box on a table: every mat, card and token on show; you act by touching the piece. The drinks menu and rules open in a panel from the turn bar. Legality comes from `/valid-actions`.
+- `/static` — frontend assets. Signing in and the account page (email, password) are on cheetahmoongames.com: `/login` and `/profile` here only redirect there. The game page is the bar top, `/bar` (`bar.html`, `bar/`, `css/bar.css`); old `/game` and `/play` links (the classic and table views, now removed) redirect to it. The bar top is the physical box on a table: every mat, card and token on show; you act by touching the piece. The drinks menu and rules open in a panel from the turn bar. Legality comes from `/valid-actions`.
 - `/tests` — BDD tests (`features/*.feature` + `test_game_actions_bdd.py`), UI tests (`ui/`)
 - `/specs` — allium specs (source of truth for game rules, see below)
 
@@ -46,4 +46,4 @@ A task is complete when:
 ## Subagents
 - `spec-reader` — reads allium specs and returns a precise rule briefing; invoke before implementing any game logic to avoid misreading the spec
 - `bdd-test-writer` — writes BDD scenarios and step definitions matching project style; invoke when adding test coverage for new behaviour
-- `ui-developer` — builds and modifies UI components; enforces the board-game interaction model (clickable elements, state at a glance, guided turn flow), mobile/desktop layout, WCAG 2.1 AA, and the theming/contrast rules in `.claude/agents/ui-developer.md` — read that doc's "Theming and contrast" section before writing any CSS for `static/`. Two contrast contexts exist (light page chrome vs. dark `.gb-board-section`); the lobby panel lives on the dark board, so page-chrome tokens like `--theme-text-primary` cause dark-on-dark there.
+- `ui-developer` — builds and modifies UI components; enforces the board-game interaction model (clickable elements, state at a glance, guided turn flow), mobile/desktop layout, WCAG 2.1 AA, and the colour rules in `.claude/agents/ui-developer.md` ("Colours and contrast"): there are no colour themes, and the game and home pages share the bar top's tokens.

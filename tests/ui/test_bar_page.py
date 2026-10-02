@@ -16,11 +16,14 @@ def _started_game(base_url, new_user, new_game, other_user_and_jwt):
     return _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
 
 
-def test_bar_unauthenticated_redirected_to_login(page, base_url, other_user_and_jwt):
-    """Opening /bar without a session must bounce to the login page."""
+def test_bar_unauthenticated_redirected_to_login(
+    page, base_url, other_user_and_jwt, sign_in_page
+):
+    """Opening /bar without a session sends the player to sign in, and back."""
     game = _api_post(base_url, "/v1/games", other_user_and_jwt["jwt"])
     page.goto(f"{base_url}/bar?id={game['id']}")
-    page.wait_for_url(re.compile(r".*/login"), timeout=10000)
+    page.wait_for_url(f"{sign_in_page}?**", timeout=10000)
+    assert "bar%3Fid%3D" in page.url
 
 
 def test_bar_lobby_start_disabled_for_lone_host(page, base_url, new_user, new_game):

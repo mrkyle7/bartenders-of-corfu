@@ -27,7 +27,6 @@ class Db:
         "deactivated_by",
         "deleted_at",
         "logged_out_at",
-        "theme",
         "is_bot",
         "bot_strategy",
     )
@@ -49,7 +48,6 @@ class Db:
                 "deactivated_by": row.get("deactivated_by"),
                 "deleted_at": row.get("deleted_at"),
                 "logged_out_at": row.get("logged_out_at"),
-                "theme": row.get("theme", "taverna"),
                 "is_bot": row.get("is_bot", False),
                 "bot_strategy": row.get("bot_strategy"),
             }
@@ -296,15 +294,6 @@ class Db:
             .is_("used_at", "null")
             .execute()
         )
-
-    def update_theme(self, user_id: UUID, theme: str) -> bool:
-        response = (
-            self.supabase.table("users")
-            .update({"theme": theme})
-            .eq("id", str(user_id))
-            .execute()
-        )
-        return len(response.data) == 1
 
     def get_public_key(self, kid: str) -> bytes | None:
         response = (

@@ -37,7 +37,6 @@ class User:
         self.deactivated_by: Optional[UUID] = None
         self.deleted_at: Optional[str] = None
         self.logged_out_at: Optional[str] = None
-        self.theme: str = "taverna"
 
     @classmethod
     def new_bot(cls, username: str, strategy: str) -> "User":
@@ -57,7 +56,6 @@ class User:
         user.deactivated_by = None
         user.deleted_at = None
         user.logged_out_at = None
-        user.theme = "taverna"
         return user
 
     def _validate_name(self, name: str) -> str:
@@ -155,7 +153,6 @@ class User:
             "id": str(self.id),
             "username": self.username,
             "status": self.status,
-            "theme": self.theme,
             "is_bot": self.is_bot,
         }
         if self.is_bot and self.bot_strategy:
@@ -192,7 +189,6 @@ class User:
         )
         user.deleted_at = data.get("deleted_at")
         user.logged_out_at = data.get("logged_out_at")
-        user.theme = data.get("theme", "taverna")
 
         password_hash = data.get("password_hash")
         if password_hash:
