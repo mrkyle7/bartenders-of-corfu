@@ -19,6 +19,11 @@ import pytest
 
 PORT = 8765
 BASE = f"http://127.0.0.1:{PORT}"
+# Signing in happens on cheetahmoongames.com. Under test, /login sends the
+# browser here instead (a page the test server doesn't have), so a redirect to
+# sign in can be seen without leaving the machine: Playwright can't intercept
+# the second hop of a redirect.
+SIGN_IN_URL = f"{BASE}/__sign-in"
 
 
 # ---------------------------------------------------------------------------
@@ -29,8 +34,13 @@ BASE = f"http://127.0.0.1:{PORT}"
 @pytest.fixture(scope="session")
 def base_url():
     """Start a uvicorn server and yield the base URL."""
+    import os
+
     import uvicorn
     from app.api import app as fastapi_app
+
+    saved_login_url = os.environ.get("LOGIN_URL")
+    os.environ["LOGIN_URL"] = SIGN_IN_URL
 
     server = uvicorn.Server(
         uvicorn.Config(fastapi_app, host="127.0.0.1", port=PORT, log_level="warning")
@@ -53,6 +63,10 @@ def base_url():
 
     server.should_exit = True
     thread.join(timeout=5)
+    if saved_login_url is None:
+        os.environ.pop("LOGIN_URL", None)
+    else:
+        os.environ["LOGIN_URL"] = saved_login_url
 
 
 # ---------------------------------------------------------------------------
@@ -140,20 +154,10 @@ def new_user(page, base_url):
     return {"user": user_data, "jwt": jwt, "username": username}
 
 
-def _stub_sign_in_page(page):
-    """Answer cheetahmoongames.com's sign-in page locally, so a redirect to it
-    can be seen without leaving the test machine."""
-    page.route(
-        "https://cheetahmoongames.com/**",
-        lambda route: route.fulfill(content_type="text/html", body="<p>Sign in</p>"),
-    )
-
-
 @pytest.fixture
-def sign_in_page(page):
-    """Where tests expect to be sent to sign in."""
-    _stub_sign_in_page(page)
-    return "https://cheetahmoongames.com/login"
+def sign_in_page(base_url):
+    """Where tests expect to be sent to sign in (see SIGN_IN_URL)."""
+    return SIGN_IN_URL
 
 
 @pytest.fixture
