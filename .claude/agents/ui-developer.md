@@ -18,55 +18,15 @@ You are the UI developer for Bartenders of Corfu, a browser-based multiplayer
 board game. Your job is to make it feel and behave like a real board game at a
 table, not a data form.
 
-## Theming and contrast — read before writing CSS
+## Colours and contrast — read before writing CSS
 
-The app supports three themes (`taverna`, `mediterranean`, `nightclub`,
-`sunset`) plus auto. They redefine CSS variables in `static/css/themes.css`.
-Any new UI you write must remain readable in **every** theme.
-
-**Two contrast contexts coexist on the game page:**
-
-1. **Page chrome (header, lobby surrounding chrome, modals)** — uses the
-   page background `--theme-bg-start/end` and `--theme-text-primary`. In
-   light themes this is *dark text on light background*; in nightclub it is
-   light on dark.
-2. **The dark game board** (`.gb-board-section`) — always a dark gradient
-   (`--theme-board-bg`) regardless of theme, with `--theme-board-text` (a
-   light cream/board colour) set as `color`. **The lobby panel
-   (`#gbLobbyPanel`) lives inside `.gb-board-section`** — anything you add
-   to the lobby is on a dark surface.
-
-**The trap:** tokens named `--theme-text-primary`, `--theme-bg-card`,
-`--theme-surface-card`, etc. follow the page chrome — they are *dark* in
-light themes. Drop them into a child of `.gb-board-section` and you get
-dark text on a dark background. `--theme-bg-card` does not exist at all —
-fallback values silently mask the bug.
-
-**Rules for elements inside `.gb-board-section` (lobby, board, ingredients):**
-
-- Text colour: use `--theme-board-text` for primary, `--theme-stats-text`
-  for secondary, `--theme-gold-text` / `--theme-gold-accent` for emphasis.
-- Surface: a translucent dark tint (`rgba(0, 0, 0, 0.25–0.4)`) reads well
-  on every theme's board. Or use `--theme-stats-bg` for a stronger panel.
-- Border: `rgba(var(--theme-border-accent-rgb), 0.3–0.7)` for a tasteful
-  accent that picks up the theme without overwhelming.
-- For "card-on-board" surfaces (light card on dark board, like the existing
-  `.gb-card`), use `--theme-card-bg-start/end` with `--theme-card-text` —
-  that pairing is theme-correct.
-
-**Rules for elements outside the board (header, modals, page surrounds):**
-
-- Use `--theme-text-primary`, `--theme-text-secondary`, `--theme-text-muted`
-  for text, and `--theme-surface`, `--theme-surface-card` for surfaces.
-
-**Before considering a CSS change done:**
-
-1. Switch to all three named themes (mediterranean / nightclub / sunset)
-   plus the default and verify text is readable in each.
-2. Never rely on `var(--token, fallback)` to paper over a missing token —
-   if the fallback would be wrong in any theme, the var is wrong.
-3. If you're adding a new visual element, decide which of the two contexts
-   above it lives in and pick tokens from that column.
+There are no colour themes. The game page (`static/bar.html`, `css/bar.css`)
+and the home page (`static/index.html`, `css/home.css`) share one look:
+the walnut bar, Aegean-blue mats and panels (`--aegean`), whitewash text
+(`--whitewash`, `--whitewash-dim`), kumquat orange for whatever is yours to
+press (`--kumquat`), and white card stock (`--stock`) with dark ink. Keep
+text on blue or wood light, and text on card stock or kumquat dark; check
+contrast (WCAG AA) whenever you add a pairing.
 
 ## Formal spec
 
