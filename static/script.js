@@ -167,6 +167,7 @@ function buildGameItem(game) {
         const isFull = (game.players ? game.players.length : 0) >= 4;
         if (user && game.players && game.players.some(p => p === user.id)) {
             const btn = document.createElement('button');
+            btn.className = 'go';
             btn.textContent = 'Go to Game';
             btn.onclick = () => window.location.href = `/bar?id=${game.id}`;
             action.appendChild(btn);
@@ -190,6 +191,7 @@ function buildGameItem(game) {
             action.appendChild(btn);
         } else {
             const btn = document.createElement('button');
+            btn.className = 'go';
             btn.textContent = 'Join Game';
             btn.onclick = () => joinGame(game.id);
             action.appendChild(btn);
@@ -343,6 +345,7 @@ async function createNewGame() {
         const action = placeholder.querySelector('.game-action');
         action.innerHTML = '';
         const goBtn = document.createElement('button');
+        goBtn.className = 'go';
         goBtn.textContent = 'Go to Game';
         goBtn.onclick = () => window.location.href = `/bar?id=${data.id}`;
         action.appendChild(goBtn);
@@ -445,6 +448,7 @@ async function joinGame(gameId) {
         originalHTML = actionEl.innerHTML;
         actionEl.innerHTML = '';
         const btn = document.createElement('button');
+        btn.className = 'go';
         btn.textContent = 'Go to Game';
         btn.onclick = () => window.location.href = `/bar?id=${gameId}`;
         actionEl.appendChild(btn);

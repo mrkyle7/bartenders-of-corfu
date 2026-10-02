@@ -1,0 +1,291 @@
+/* The landing page, dressed like the bar top: a walnut bar, the wordmark
+   in Bitter, the game lists as Aegean-blue mats, and kumquat for the
+   things to press. Tokens match css/bar.css. */
+
+:root {
+    --wood: #3a2415;
+    --aegean: #1d4f7a;
+    --aegean-deep: #123754;
+    --aegean-ink: #0d2a42;
+    --whitewash: #eaf1f5;
+    --whitewash-dim: rgba(234, 241, 245, 0.72);
+    --line: rgba(234, 241, 245, 0.42);
+    --kumquat: #f08a24;
+    --kumquat-deep: #9a4f0c;
+    --kumquat-ink: #2a1404;
+    --danger: #c0392b;
+    --stock: #fdfdfb;
+
+    --display: "Bitter", "Rockwell", "Roboto Slab", Georgia, serif;
+    --ui: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    color: var(--whitewash);
+    font: 400 15px/1.45 var(--ui);
+    background-color: var(--wood);
+    background-image:
+        repeating-linear-gradient(90deg, transparent 0 238px, rgba(0, 0, 0, 0.38) 238px 240px),
+        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.07) 0 2px, transparent 2px 9px, rgba(255, 220, 180, 0.035) 9px 11px, transparent 11px 27px),
+        repeating-linear-gradient(90deg, transparent 0 61px, rgba(0, 0, 0, 0.09) 61px 64px, transparent 64px 131px),
+        linear-gradient(90deg, #3a2415, #4b2f1c 23%, #3d2616 47%, #4a2e1b 71%, #3a2415);
+}
+
+.hidden { display: none !important; }
+
+:focus-visible { outline: 3px solid var(--kumquat); outline-offset: 3px; }
+
+h1, h2, p { margin: 0; }
+
+a { color: var(--whitewash); text-underline-offset: 3px; }
+
+/* ─── Top line: back to the site, and your account ────────────────────── */
+
+.topline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    padding: 12px 16px;
+}
+
+.site-home { color: var(--whitewash-dim); font-weight: 600; }
+.site-home:hover { color: var(--whitewash); }
+
+.user-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    font-weight: 600;
+}
+.user-header a { color: var(--whitewash-dim); }
+.user-header a:hover { color: var(--whitewash); }
+#helloUser { color: var(--whitewash); }
+
+.notif-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--kumquat);
+    color: var(--kumquat-ink) !important;
+    box-shadow: 0 2px 0 var(--kumquat-deep);
+}
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--danger);
+    color: #fff;
+    font: 700 11px/18px var(--ui);
+    text-align: center;
+}
+
+/* ─── The sign over the bar ───────────────────────────────────────────── */
+
+main {
+    flex: 1;
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 4px 16px 40px;
+    display: grid;
+    gap: 22px;
+    align-content: start;
+}
+
+.sign {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    padding: 26px 22px 28px;
+    border-radius: 14px;
+    background: var(--aegean);
+    box-shadow: inset 0 0 0 5px var(--line), 0 14px 26px rgba(0, 0, 0, 0.5);
+    text-align: center;
+}
+
+.bartender-image {
+    display: block;
+    width: 132px;
+    height: 132px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 5px solid var(--stock);
+    box-shadow: 0 0 0 3px var(--kumquat), 0 8px 16px rgba(0, 0, 0, 0.45);
+}
+
+.sign-over { font: 700 13px/1 var(--ui); letter-spacing: 0.18em; text-transform: uppercase; color: var(--kumquat); }
+
+h1 {
+    font: 800 clamp(30px, 7vw, 46px)/1.05 var(--display);
+    letter-spacing: 0.01em;
+    text-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+}
+
+.sign-lead {
+    max-width: 52ch;
+    color: var(--whitewash-dim);
+    font: italic 500 16px/1.5 var(--display);
+}
+
+/* ─── Buttons, as on the bar top ──────────────────────────────────────── */
+
+main button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    margin: 0;
+    padding: 8px 16px;
+    border: 2px solid var(--aegean-ink);
+    border-radius: 6px;
+    background: var(--whitewash);
+    color: var(--aegean-ink);
+    font: 700 15px/1.15 var(--ui);
+    cursor: pointer;
+    box-shadow: 0 3px 0 var(--aegean-ink);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+main button:hover:not([disabled]) { background: #fff; }
+main button:active:not([disabled]) { transform: translateY(2px); box-shadow: 0 1px 0 var(--aegean-ink); }
+main button[disabled] { opacity: 0.6; cursor: progress; }
+
+.start-btn, .game-action button.go {
+    background: var(--kumquat);
+    color: var(--kumquat-ink);
+    border-color: var(--kumquat-deep);
+    box-shadow: 0 3px 0 var(--kumquat-deep);
+}
+.start-btn:hover:not([disabled]), .game-action button.go:hover:not([disabled]) { background: #ff9d3d; }
+.start-btn { min-height: 54px; padding: 10px 30px; font-size: 18px; }
+
+.game-action button.cancel-game { background: var(--danger); color: #fff; border-color: #7d1f15; box-shadow: 0 3px 0 #7d1f15; }
+.game-action button.cancel-game:hover:not([disabled]) { background: #d64534; }
+
+.error-msg {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border-left: 5px solid var(--danger);
+    background: var(--stock);
+    color: #1c1d22;
+    font-weight: 600;
+}
+
+/* ─── The game lists, as player mats ──────────────────────────────────── */
+
+.game-section {
+    padding: 16px 16px 18px;
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.08), transparent 55%),
+        var(--aegean);
+    box-shadow: inset 0 0 0 3px var(--aegean), inset 0 0 0 5px var(--line), 0 4px 0 var(--aegean-deep), 0 12px 22px rgba(0, 0, 0, 0.5);
+    border-top: 6px solid var(--kumquat);
+}
+#joinGamesSection { border-top-color: #3fae5a; }
+
+.game-section > h2 { font: 800 22px/1.15 var(--display); margin-bottom: 12px; }
+
+.status-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.filter-tab {
+    min-height: 36px !important;
+    padding: 5px 12px !important;
+    font-size: 13px !important;
+    background: transparent !important;
+    color: var(--whitewash) !important;
+    border-color: var(--line) !important;
+    box-shadow: none !important;
+}
+.filter-tab:hover { background: rgba(0, 0, 0, 0.25) !important; }
+.filter-tab.active { background: var(--whitewash) !important; color: var(--aegean-ink) !important; border-color: var(--whitewash) !important; }
+
+.game-section ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+
+.game-section li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1.5px dashed var(--line);
+    background: rgba(0, 0, 0, 0.18);
+}
+.game-section li:has(.game-turn.my-turn) { border: 2px solid var(--kumquat); background: rgba(240, 138, 36, 0.14); }
+
+.game-info { display: grid; gap: 2px; min-width: 0; text-align: left; }
+.game-title { font: 700 17px/1.2 var(--display); overflow-wrap: anywhere; }
+.game-players { color: var(--whitewash-dim); font-size: 14px; overflow-wrap: anywhere; }
+.game-status { color: var(--whitewash-dim); font-size: 13px; }
+.game-turn { font-size: 13px; font-weight: 700; color: var(--whitewash); }
+.game-turn.my-turn {
+    justify-self: start;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--kumquat);
+    color: var(--kumquat-ink);
+}
+
+.game-action { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.game-full-label { color: var(--whitewash-dim); font-weight: 600; font-size: 14px; }
+.cancel-confirm { font-weight: 700; }
+li:has(.cancel-confirm) .game-action { flex: 1 1 100%; justify-content: flex-start; }
+
+.game-section li.game-section-empty,
+.game-section li.loading-placeholder,
+.game-section li.load-more-item {
+    justify-content: center;
+    border-style: dashed;
+    background: transparent;
+    color: var(--whitewash-dim);
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    border: 2px solid var(--kumquat);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* ─── Footer ──────────────────────────────────────────────────────────── */
+
+footer { padding: 14px 16px 22px; text-align: center; font-size: 13px; color: var(--whitewash-dim); }
+footer a { color: var(--whitewash-dim); }
+footer a:hover { color: var(--whitewash); }
+
+/* ─── Phones ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+    .topline { flex-direction: column; align-items: center; text-align: center; }
+    .user-header { justify-content: center; }
+    .sign { padding: 22px 16px 24px; }
+    .bartender-image { width: 108px; height: 108px; }
+    .game-action { flex: 1 1 100%; justify-content: flex-start; }
+    .game-action button { flex: 1 1 auto; }
+}
