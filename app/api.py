@@ -1,5 +1,7 @@
+import asyncio
 import os
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import BackgroundTasks, FastAPI, Query, Request
@@ -27,7 +29,18 @@ _VALID_STATUSES = {"NEW", "STARTED", "ENDED"}
 setup_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Load (or make) the notification keys now rather than at the first
+    # notification, so a pair this server still has from Secret Manager is
+    # saved to the database straight away (app/push.py).
+    await asyncio.to_thread(push.get_keys)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 gameManager = GameManager()
 userManager = UserManager()
 jwt_handler = JWTHandler()
