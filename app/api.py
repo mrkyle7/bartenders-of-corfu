@@ -30,7 +30,6 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # Load (or make) the notification keys now rather than at the first
