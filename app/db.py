@@ -230,9 +230,7 @@ class Db:
     def get_user_by_email(self, email: str) -> User | None:
         """The active or deactivated account using ``email``, ignoring case."""
         # ilike without wildcards: escape the characters it treats specially.
-        pattern = (
-            email.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
+        pattern = email.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         response = (
             self.supabase.table("users")
             .select(",".join(self._USER_COLUMNS))
@@ -689,6 +687,28 @@ class Db:
         )
         return len(response.data) >= 1
 
+    def get_vapid_keys(self) -> dict | None:
+        """The key pair that signs push notifications, or None if there isn't one yet."""
+        response = (
+            self.supabase.table("vapid_keys")
+            .select("public_key, private_key")
+            .eq("id", 1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def save_vapid_keys(self, keys: dict) -> None:
+        """Save a key pair, unless one has been saved already."""
+        self.supabase.table("vapid_keys").upsert(
+            {
+                "id": 1,
+                "public_key": keys["public_key"],
+                "private_key": keys["private_key"],
+            },
+            on_conflict="id",
+            ignore_duplicates=True,
+        ).execute()
+
     def add_player_to_game(self, game_id: UUID, player_id: UUID) -> str:
         """Add a player to an existing game. Returns a text code: 'ok' | 'not_found' | 'not_new' | 'duplicate' | 'full'"""
         response = self.supabase.rpc(
@@ -709,7 +729,6 @@ class Db:
             },
         ).execute()
         return response.data
-
 
     # --- Bot policy persistence ---
 
