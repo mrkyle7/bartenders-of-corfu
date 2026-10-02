@@ -12,14 +12,21 @@ async function subscribeToPush() {
     if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
     try {
         const reg = await navigator.serviceWorker.ready;
-        const existing = await reg.pushManager.getSubscription();
-        if (existing) return;
         const resp = await fetch('/vapid-public-key');
         if (!resp.ok) return;
         const { public_key } = await resp.json();
+        const serverKey = _urlBase64ToUint8Array(public_key);
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+            // Still signed with the server's key: nothing to do. A subscription
+            // for an older key gets nothing any more, so make a new one.
+            const key = existing.options.applicationServerKey;
+            if (key && new Uint8Array(key).join() === serverKey.join()) return;
+            await existing.unsubscribe();
+        }
         const sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: _urlBase64ToUint8Array(public_key),
+            applicationServerKey: serverKey,
         });
         await fetch('/v1/push-subscriptions', {
             method: 'POST',

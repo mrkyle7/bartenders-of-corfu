@@ -68,13 +68,18 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
 
 | What | Where |
 |---|---|
-| VAPID key generation | `scripts/generate_vapid_keys.py` |
+| VAPID keys | Made by the server and kept in the database (`vapid_keys`): see below |
 | Server-side send | `app/push.py` |
 | Subscription storage | `supabase/migrations/20260509000001_push_subscriptions.sql` |
 | API endpoints | `POST /v1/push-subscriptions`, `DELETE /v1/push-subscriptions`, `GET /vapid-public-key` |
 | Service worker handler | `static/sw.js` — `push` event |
 | Browser subscription | `static/script.js` — `subscribeToPush()` |
-| Infrastructure | `terraform/bartenders.tf` in [mrkyle7/cheetahmoongames](https://github.com/mrkyle7/cheetahmoongames) — `vapid-private-key` and `vapid-public-key` secrets |
+
+## The keys
+
+The key pair that signs notifications lives in the database (`vapid_keys`, one row), so there are no secrets to set up. The first server that needs it makes it and saves it, and every later server uses the same pair (`get_keys()` in `app/push.py`). If the database can't be read, no notifications are sent and `/vapid-public-key` answers 503 until it can.
+
+The keys used to be the Secret Manager secrets `vapid-public-key` and `vapid-private-key`, read as `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. A server that finds no pair in the database saves those, if it has them, so devices that already had notifications keep getting them. After that the secrets can be removed from `terraform/bartenders.tf` in [mrkyle7/cheetahmoongames](https://github.com/mrkyle7/cheetahmoongames). This is the way ADDING_A_GAME.md there describes for every game's notifications.
 
 ## References
 
