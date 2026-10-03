@@ -105,15 +105,14 @@ const KIND_ICONS = {
 
 const AMBULANCE = '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 4h17v12H2z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M19 7h6l4 5v4H19z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M21 8.5h3.4l2.6 3.3H21z" fill="#bfe3f5"/><path d="M8.5 6.5h2v3h3v2h-3v3h-2v-3h-3v-2h3z" fill="#e0452b"/><path d="M2 13h27" stroke="#e0452b" stroke-width="1.2"/><circle cx="7" cy="16.5" r="2.3" fill="#2b2b2b"/><circle cx="24" cy="16.5" r="2.3" fill="#2b2b2b"/><rect x="11" y="2" width="3" height="2" fill="#2f8fdb"/></svg>';
 
-// The cup doublers, as they stand in a glass. The straw's top bends over a
-// ridged elbow; its shaft is CSS (.straw-shaft) so it reaches the bottom of
-// any size of glass.
-const BENDY_STRAW_TOP = '<svg viewBox="0 0 30 40" aria-hidden="true">'
-    + '<path d="M6 40V25Q6 14 15.5 9L27 1" fill="none" stroke="rgba(90,20,10,.45)" stroke-width="8.6"/>'
-    + '<path d="M6 40V25Q6 14 15.5 9L27 1" fill="none" stroke="#fff" stroke-width="7"/>'
-    + '<path d="M6 40V25Q6 14 15.5 9L27 1" fill="none" stroke="#e0452b" stroke-width="7" stroke-dasharray="4 4"/>'
-    + '<path d="M6 27Q6 14 16 8.3" fill="none" stroke="rgba(70,15,5,.35)" stroke-width="7.4" stroke-dasharray="1 1.5"/>'
-    + '<path d="M3.8 40V25Q3.8 12.6 14.3 7.1L25.6-.6" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1.2"/>'
+// The cup doublers, as they stand in a glass. The straw is a crazy straw:
+// clear pink tubing that loops twice above the glass. Its shaft is CSS
+// (.straw-shaft) so it reaches the bottom of any size of glass.
+const STRAW_PATH = 'M19 76V52A9 9 0 1 1 37 52A9 9 0 1 1 19 52V36A9 9 0 1 0 1 36A9 9 0 1 0 19 36V24C19 14 29 13 31 3';
+const BENDY_STRAW_TOP = '<svg viewBox="0 0 40 76" aria-hidden="true" fill="none" stroke-linecap="round">'
+    + `<path d="${STRAW_PATH}" stroke="#8a1450" stroke-width="6.4"/>`
+    + `<path d="${STRAW_PATH}" stroke="#ff4fa8" stroke-width="5"/>`
+    + `<path d="${STRAW_PATH}" stroke="#ffc2e0" stroke-width="1.6" stroke-opacity=".9"/>`
     + '</svg>';
 const UMBRELLA = '<svg viewBox="0 0 48 80" aria-hidden="true">'
     + '<path d="M24 5V80" stroke="#7a4a1c" stroke-width="2.6"/><path d="M24 5V80" stroke="#e2b07a" stroke-width="1.4"/>'
@@ -1084,7 +1083,7 @@ function renderScoreTrack() {
 
 // ─── Player mats ────────────────────────────────────────────────────────────
 
-const STRAW_EMBLEM = '<svg viewBox="0 0 24 24"><path d="M9 23V12Q9 7 13 4.5L19 1" fill="none" stroke="currentColor" stroke-width="3.4"/><path d="M9 14Q9 7.5 13.6 4.2" fill="none" style="stroke:var(--scene-top)" stroke-width="3.6" stroke-dasharray=".9 1.3"/></svg>';
+const STRAW_EMBLEM = '<svg viewBox="0 0 24 24"><path d="M11 24V15A4 4 0 1 1 19 15A4 4 0 1 1 11 15V9A4 4 0 1 0 3 9A4 4 0 1 0 11 9V5C11 2.5 14 2 15 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
 
 function emblemOf(card) {
     if (card.card_type === 'cup_doubler' && /straw/i.test(card.name)) return STRAW_EMBLEM;

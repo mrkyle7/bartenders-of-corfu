@@ -779,27 +779,30 @@ button.glass { cursor: pointer; }
 .straw {
     position: absolute;
     z-index: 0;
-    top: -36px;
+    top: -74px;
     bottom: 10px;
-    right: 16px;
-    width: 30px;
+    right: 4px;
+    width: 46px;
     display: flex;
     flex-direction: column;
-    transform: rotate(4deg);
+    transform: rotate(3deg);
     transform-origin: 50% 100%;
     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
     pointer-events: none;
 }
-.straw-top { display: block; height: 40px; flex: none; }
-.straw-top svg { display: block; width: 30px; height: 40px; }
+/* Room above the glasses for the straw's loops. */
+.bar-area:has(.straw) { padding-top: 28px; }
+.straw-top { display: block; height: 87px; flex: none; }
+.straw-top svg { display: block; width: 46px; height: 87px; }
+/* The shaft carries on from the SVG's: 5.75px of pink tube centred at
+   19/40 of the straw's width. */
 .straw-shaft {
     flex: 1;
-    width: 7px;
-    margin-left: 2.5px;
+    width: 5.75px;
+    margin-left: 19px;
+    margin-top: -1px;
     border-radius: 0 0 2px 2px;
-    background:
-        linear-gradient(90deg, rgba(90, 20, 10, 0.45) 0 0.8px, rgba(255, 255, 255, 0.6) 0.8px 2px, transparent 2px 5.6px, rgba(90, 20, 10, 0.25) 5.6px 6.2px, rgba(90, 20, 10, 0.45) 6.2px),
-        repeating-linear-gradient(180deg, #e0452b 0 4px, #fff 4px 8px);
+    background: linear-gradient(90deg, #8a1450 0 0.7px, #ff4fa8 0.7px 2px, #ffc2e0 2px 3.75px, #ff4fa8 3.75px 5px, #8a1450 5px);
     opacity: 0.75;
 }
 .umbrella {
