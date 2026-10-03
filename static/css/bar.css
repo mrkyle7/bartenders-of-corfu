@@ -772,17 +772,49 @@ button.glass { cursor: pointer; }
 .glass-label { font-size: 12px; font-weight: 600; color: var(--whitewash-dim); text-align: center; }
 .glass-actions { display: grid; gap: 6px; justify-items: stretch; width: 100%; }
 .glass-actions .btn { width: 100%; }
+/* Cup doublers stand in the glass, behind its tokens and the specials on
+   its rim: a bendy straw on the right, a paper umbrella on the left. */
+.glass-body > .slot, .glass-body > .token { position: relative; z-index: 1; }
+.glass-rim { position: relative; z-index: 2; }
 .straw {
     position: absolute;
-    top: -16px;
-    right: 2px;
-    width: 6px;
-    height: 44px;
-    transform: rotate(18deg);
-    border-radius: 3px;
-    background: repeating-linear-gradient(0deg, #fff 0 5px, #e0452b 5px 10px);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    z-index: 0;
+    top: -36px;
+    bottom: 10px;
+    right: 16px;
+    width: 30px;
+    display: flex;
+    flex-direction: column;
+    transform: rotate(4deg);
+    transform-origin: 50% 100%;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+    pointer-events: none;
 }
+.straw-top { display: block; height: 40px; flex: none; }
+.straw-top svg { display: block; width: 30px; height: 40px; }
+.straw-shaft {
+    flex: 1;
+    width: 7px;
+    margin-left: 2.5px;
+    border-radius: 0 0 2px 2px;
+    background:
+        linear-gradient(90deg, rgba(90, 20, 10, 0.45) 0 0.8px, rgba(255, 255, 255, 0.6) 0.8px 2px, transparent 2px 5.6px, rgba(90, 20, 10, 0.25) 5.6px 6.2px, rgba(90, 20, 10, 0.45) 6.2px),
+        repeating-linear-gradient(180deg, #e0452b 0 4px, #fff 4px 8px);
+    opacity: 0.75;
+}
+.umbrella {
+    position: absolute;
+    z-index: 0;
+    top: -50px;
+    left: -12px;
+    width: 58px;
+    height: 97px;
+    transform: rotate(-10deg);
+    transform-origin: 50% 100%;
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4));
+    pointer-events: none;
+}
+.umbrella svg { display: block; width: 100%; height: 100%; }
 
 /* Your mouth, while you're taking ingredients. */
 .mouth-spot { display: grid; justify-items: center; gap: 6px; min-width: 96px; }

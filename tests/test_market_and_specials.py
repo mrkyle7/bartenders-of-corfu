@@ -738,6 +738,22 @@ def test_claiming_leaves_the_cost_in_your_bladder():
     assert payload["cost"] == ["VODKA", "VODKA"]
 
 
+def test_a_cup_doubler_remembers_which_glass_it_is_on():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 1).cards = []
+    _ability(gs, Card(id="umb", card_type="cup_doubler", name="Cocktail Umbrella"))
+    ps.bladder = [Ingredient.RUM] * 3
+    new, _ = claim_card(gs, pid, "umb", cup_index=1, spirit_type="RUM")
+    me = new.player_states[pid]
+    assert me.cups[1].has_cup_doubler and not me.cups[0].has_cup_doubler
+    card = next(c for c in me.cards if c["id"] == "umb")
+    assert card["cup_index"] == 1
+    # It survives a save and load
+    again = GameState.from_dict(new.to_dict()).player_states[pid]
+    assert next(c for c in again.cards if c["id"] == "umb")["cup_index"] == 1
+
+
 @pytest.mark.parametrize(
     "spirit,special",
     [

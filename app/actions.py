@@ -1288,7 +1288,10 @@ def claim_card(
     elif card_type == "cup_doubler":
         cup = ps.cups[cup_index]
         cup.has_cup_doubler = True
-        ps.cards.append(target_card.to_dict())
+        # Which glass it sits on, so the table can draw it there
+        card_dict = target_card.to_dict()
+        card_dict["cup_index"] = cup_index
+        ps.cards.append(card_dict)
         ps.points += 2
 
     elif card_type == "specialist":
