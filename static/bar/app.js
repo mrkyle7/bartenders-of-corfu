@@ -419,6 +419,7 @@ function pickFromDisplay(slotIndex) {
     ui.picks.push(slotIndex);
     ui.selected = `d${slotIndex}`;
     render({ force: true });
+    showHand();
 }
 
 function pickFromSpecials(index) {
@@ -436,7 +437,32 @@ function pickFromSpecials(index) {
     ui.specialPicks.push(index);
     ui.selected = `s${index}`;
     render({ force: true });
+    showHand();
 }
+
+// Bring your hand and glasses into view once you're holding something, so
+// you can see where it goes: below the turn bar, and above the drinks menu
+// when that opens from the bottom of a phone.
+function showHand() {
+    const hand = document.querySelector('.mat.is-mine .mat-board');
+    if (!hand) return;
+    const r = hand.getBoundingClientRect();
+    const top = ($('turnbar')?.getBoundingClientRect().bottom ?? 0) + 8;
+    let bottom = window.innerHeight - 8;
+    const sheet = $('sheet');
+    if (!sheet.hidden) {
+        const s = sheet.getBoundingClientRect();
+        if (s.top > 0 && s.left <= r.left) bottom = Math.max(top + 120, s.top - 8);
+    }
+    const room = bottom - top;
+    let by = 0;
+    if (r.top < top) by = r.top - top;
+    else if (r.bottom > bottom) by = Math.min(r.top - top, r.bottom - bottom);
+    if (Math.abs(by) < 2) return;
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollBy({ top: room > 0 ? by : r.top - top, behavior: smooth ? 'smooth' : 'instant' });
+}
+
 
 function drawFromBag(count) {
     act(() => api.drawFromBag(gameId, count), {
@@ -1722,6 +1748,9 @@ function render({ force = false } = {}) {
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
     const focusKey = document.activeElement?.getAttribute?.('data-k');
+    // Redrawing removes the piece you just touched, and with it the focus;
+    // the browser then scrolls the page. Keep it where the player left it.
+    const scrollY = window.scrollY;
 
     if (game.status === 'NEW') {
         turnbar();
@@ -1761,6 +1790,7 @@ function render({ force = false } = {}) {
     renderOverview();
     ending();
     restoreFocus(focusKey);
+    if (Math.abs(window.scrollY - scrollY) > 1) window.scrollTo({ top: scrollY, behavior: 'instant' });
 }
 
 function restoreFocus(key) {
