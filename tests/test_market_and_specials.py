@@ -248,13 +248,13 @@ def test_a_drink_nobody_ordered_scores_as_usual():
 # ─── Clearing rows ───────────────────────────────────────────────────────────
 
 
-def test_clearing_orders_needs_drunk_three_and_is_free_once_a_turn():
+def test_clearing_orders_needs_drunk_two_and_is_free_once_a_turn():
     gs = _game()
     pid, ps = _me(gs)
-    ps.drunk_level = 2
+    ps.drunk_level = 1
     with pytest.raises(GameException):
         refresh_card_row(gs, pid, 2)
-    ps.drunk_level = 3
+    ps.drunk_level = 2
     before = [c.id for c in _row(gs, 2).cards]
     new, payload = refresh_card_row(gs, pid, 2)
     assert payload["is_free_action"] is True
@@ -717,7 +717,7 @@ def _ability(gs: GameState, card: Card) -> None:
     _row(gs, 3).cards = [card]
 
 
-def test_claiming_pays_the_cost_into_the_bag():
+def test_claiming_leaves_the_cost_in_your_bladder():
     gs = _game()
     pid, ps = _me(gs)
     _row(gs, 1).cards = []
@@ -733,9 +733,9 @@ def test_claiming_pays_the_cost_into_the_bag():
     ps.bladder = [Ingredient.VODKA, Ingredient.VODKA, Ingredient.SODA]
     bag = len(gs.bag_contents)
     new, payload = claim_card(gs, pid, "sp-vodka")
-    assert new.player_states[pid].bladder == [Ingredient.SODA]
-    assert len(new.bag_contents) == bag + 2
-    assert payload["paid"] == ["VODKA", "VODKA"]
+    assert new.player_states[pid].bladder == ps.bladder  # checked, not spent
+    assert len(new.bag_contents) == bag
+    assert payload["cost"] == ["VODKA", "VODKA"]
 
 
 @pytest.mark.parametrize(
@@ -759,8 +759,8 @@ def test_a_specialist_can_be_paid_with_its_special(spirit, special):
     ps.bladder = [Ingredient[special]]
     new, payload = claim_card(gs, pid, "sp")
     assert new.player_states[pid].points == 2
-    assert new.player_states[pid].bladder == []
-    assert payload["paid"] == [special]
+    assert new.player_states[pid].bladder == [Ingredient[special]]
+    assert payload["cost"] == [special]
 
 
 def test_a_specialist_paid_with_spirits_when_you_say_so():
@@ -773,8 +773,8 @@ def test_a_specialist_paid_with_spirits_when_you_say_so():
     )
     ps.bladder = [Ingredient.SUGAR, Ingredient.RUM, Ingredient.RUM]
     new, payload = claim_card(gs, pid, "sp", spirit_type="RUM")
-    assert payload["paid"] == ["RUM", "RUM"]
-    assert new.player_states[pid].bladder == [Ingredient.SUGAR]
+    assert payload["cost"] == ["RUM", "RUM"]
+    assert len(new.player_states[pid].bladder) == 3
 
 
 def test_the_wrong_special_does_not_pay_for_a_specialist():
@@ -789,7 +789,7 @@ def test_the_wrong_special_does_not_pay_for_a_specialist():
         claim_card(gs, pid, "sp")
 
 
-def test_karaoke_needs_drunk_three_and_takes_two_spirits():
+def test_karaoke_needs_drunk_three_and_two_spirits():
     gs = _game()
     pid, ps = _me(gs)
     card = next(c for c in _row(gs, 1).cards if c.spirit_type == "GIN")
@@ -800,10 +800,10 @@ def test_karaoke_needs_drunk_three_and_takes_two_spirits():
     ps.drunk_level = 3
     new, payload = claim_card(gs, pid, card.id)
     me = new.player_states[pid]
-    assert me.bladder == [Ingredient.GIN]
+    assert me.bladder == [Ingredient.GIN] * 3  # the cost stays
     assert me.karaoke_cards_claimed == 1
-    assert me.drunk_level == 3  # drunk is checked, not paid
-    assert payload["paid"] == ["GIN", "GIN"]
+    assert me.drunk_level == 3
+    assert payload["cost"] == ["GIN", "GIN"]
 
 
 def test_one_spirit_does_not_sing_a_song_however_drunk():
@@ -816,7 +816,7 @@ def test_one_spirit_does_not_sing_a_song_however_drunk():
         claim_card(gs, pid, card.id)
 
 
-def test_a_store_card_pays_one_spirit_and_stores_the_rest():
+def test_a_store_card_stores_all_of_its_spirit():
     gs = _game()
     pid, ps = _me(gs)
     _row(gs, 1).cards = []
@@ -829,8 +829,8 @@ def test_a_store_card_pays_one_spirit_and_stores_the_rest():
     new, _ = claim_card(gs, pid, "st")
     me = new.player_states[pid]
     assert me.bladder == []
-    assert me.cards[-1]["stored_spirits"] == ["GIN", "GIN"]
-    assert len(new.bag_contents) == bag + 1
+    assert me.cards[-1]["stored_spirits"] == ["GIN", "GIN", "GIN"]
+    assert len(new.bag_contents) == bag
 
 
 def test_sell_actions_name_the_order_and_its_bonus():
