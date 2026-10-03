@@ -1238,3 +1238,23 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     *, *::before, *::after { transition: none !important; animation: none !important; }
     .tok.is-selected, .card.is-claimable { transform: none; }
 }
+
+/* Since your last turn: each other player's turn, in their seat colour, then
+   what changed on the table. Until your first move, each mat repeats its
+   own changes in a strip under its name. */
+.recap { display: grid; gap: 14px; }
+.recap-lead { margin: 0; color: var(--whitewash-dim); font-size: 15px; }
+.recap-turn { border-left: 5px solid var(--seat, var(--line)); padding: 4px 0 4px 12px; }
+.recap-who { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font: 800 17px/1.2 var(--display); }
+.recap-who .pawn { width: 10px; height: 14px; margin-top: 5px; }
+.recap-who .pawn::before { width: 7px; height: 7px; top: -5px; }
+.recap-lines, .recap-changes ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 15px; line-height: 1.4; }
+.recap-changes { padding: 10px 12px; border-radius: 8px; background: rgba(0, 0, 0, 0.25); }
+.recap-changes h3 { margin: 0 0 6px; font: 800 16px/1.2 var(--display); color: var(--kumquat); }
+.recap-go { justify-self: start; }
+.mat-recap {
+    margin: 6px 0 0; padding: 5px 10px; border-radius: 6px;
+    background: rgba(0, 0, 0, 0.32); border: 1px dashed var(--kumquat);
+    font-size: 14px; line-height: 1.35; overflow-wrap: anywhere;
+}
+.mat-recap-tag { font-weight: 800; color: #ffd19a; text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }

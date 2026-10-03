@@ -253,6 +253,52 @@ def _take_blind(base_url, game_id, player, disposition):
         _api_post(base_url, f"/v1/games/{game_id}/actions/end-turn", player["jwt"])
 
 
+def test_bar_recap_says_what_happened_since_your_turn(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """As your turn starts, a panel says what the others did since your last
+    one and what it changed; their mats say so too until you move. It opens
+    once a turn, and the turn bar opens it again. Your first turn, with
+    nobody gone before you, has nothing to tell."""
+    game = _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    me = new_user["user"]["id"]
+    other = other_user_and_jwt
+    sheet = page.locator("#sheet")
+    if game["game_state"]["player_turn"] == me:
+        page.goto(f"{base_url}/bar?id={new_game}")
+        page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+        page.wait_for_timeout(500)
+        assert sheet.is_hidden()
+        assert page.locator('[data-k="open-recap"]').count() == 0
+        _take_blind(base_url, new_game, new_user, "cup")
+    _take_blind(base_url, new_game, other, "drink")
+    state = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
+    assert state["game_state"]["player_turn"] == me
+
+    page.goto(f"{base_url}/bar?id={new_game}")
+    sheet.locator(".recap").wait_for(state="visible", timeout=10000)
+    text = sheet.inner_text()
+    assert f"{other['username']}’s turn" in text
+    assert "drank" in text
+    assert "What changed" in text
+    page.locator('[data-k="recap-close"]').click()
+    sheet.wait_for(state="hidden", timeout=5000)
+    note = page.locator(".mat.is-theirs .mat-recap")
+    assert note.is_visible()
+    assert "drunk" in note.inner_text() or "bladder" in note.inner_text()
+
+    page.locator('[data-k="open-recap"]').click()
+    sheet.locator(".recap").wait_for(state="visible", timeout=5000)
+    page.keyboard.press("Escape")
+    sheet.wait_for(state="hidden", timeout=5000)
+    # Seen this turn: it doesn't open again by itself
+    page.reload()
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+    page.wait_for_timeout(1000)
+    assert sheet.is_hidden()
+    assert page.locator('[data-k="open-recap"]').is_visible()
+
+
 def test_bar_picking_up_keeps_the_page_still_and_your_hand_in_view(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
