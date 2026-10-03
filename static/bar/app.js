@@ -1140,6 +1140,23 @@ function doublerPicture(card, cupIndex) {
     h('span.straw-shaft'));
 }
 
+// The two glass pictures (static/bar/img/glass-N.webp): their size, where
+// the circles drawn on them are (centres, in % of the picture; base spaces
+// fill bottom-left, bottom-right, middle-left, middle-right, top) and how
+// much of the picture the handle takes beside the glass's body.
+const GLASS_ART = [
+    {
+        src: '/static/bar/img/glass-1.webp', w: 314, h: 505, bodyLeft: 26.8, bodyRight: 0.6,
+        specials: [[47.74, 22.89], [79.86, 22.78]],
+        base: [[46.78, 84.67], [78.49, 84.59], [47.99, 66.08], [79.41, 66.09], [62.94, 46.37]],
+    },
+    {
+        src: '/static/bar/img/glass-2.webp', w: 313, h: 503, bodyLeft: 1, bodyRight: 28.8,
+        specials: [[20.76, 23.61], [53.65, 23.29]],
+        base: [[21.55, 84.25], [53.77, 84.55], [20.86, 66.17], [53.65, 66.14], [36.61, 46.37]],
+    },
+];
+
 function glass(pid, cupIndex, { interactive }) {
     const ps = gs().player_states[pid];
     const cup = ps.cups[cupIndex];
@@ -1163,21 +1180,30 @@ function glass(pid, cupIndex, { interactive }) {
         ...cup.ingredients.filter(isSpecial).map((name) => token(name)),
         ...incoming.filter((it) => isSpecial(it.name)).map(staged),
     ];
-    const layers = Array.from({ length: CUP_SIZE }, (_, i) => slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'));
+    // Each space sits over one of the circles drawn on the glass.
+    const art = GLASS_ART[cupIndex];
+    const placed = (node, [x, y]) => { node.style.left = `${x}%`; node.style.top = `${y}%`; return node; };
+    const layers = Array.from({ length: CUP_SIZE }, (_, i) => placed(slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'), art.base[i]));
     const specialSpaces = h('span.glass-specials', {},
-        h('span.glass-specials-label', { text: 'Specials only', 'aria-hidden': 'true' }),
-        h('span.glass-specials-slots', {},
-            Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty'))));
+        h('span.glass-specials-label', { text: 'Specials only' }),
+        Array.from({ length: GLASS_SPECIALS }, (_, i) => placed(slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty'), art.specials[i])));
 
     const vessel = h(room ? 'button.glass' : 'div.glass', {
-        cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''} handle-${cupIndex === 0 ? 'left' : 'right'}`,
+        cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''}`,
         type: room ? 'button' : undefined,
         onclick: room ? () => placeSelected('cup', cupIndex) : undefined,
         'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? `, scores double (${doublersOn(ps, cupIndex).map((c) => c.name).join(' and ')})` : ''}${room ? '. Tap to put the token here.' : ''}`,
         'data-k': room ? `glass-${cupIndex}` : undefined,
     },
-    h('span.glass-handle', { 'aria-hidden': 'true' }),
-    h('span.glass-body', {}, ...doublersOn(ps, cupIndex).map((c) => doublerPicture(c, cupIndex)), layers, specialSpaces),
+    h('span.glass-body', {
+        style: {
+            '--art': `url("${GLASS_ART[cupIndex].src}")`,
+            '--art-ratio': `${GLASS_ART[cupIndex].w} / ${GLASS_ART[cupIndex].h}`,
+            '--art-w': String(GLASS_ART[cupIndex].w),
+            '--body-left': `${GLASS_ART[cupIndex].bodyLeft}%`,
+            '--body-right': `${GLASS_ART[cupIndex].bodyRight}%`,
+        },
+    }, ...doublersOn(ps, cupIndex).map((c) => doublerPicture(c, cupIndex)), layers, specialSpaces),
     h('span.glass-foot', { 'aria-hidden': 'true' }));
 
     const buttons = [];
