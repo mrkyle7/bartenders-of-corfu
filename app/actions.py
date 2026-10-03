@@ -57,7 +57,7 @@ KARAOKE_CARDS_TO_WIN = 3
 MAX_DRUNK_LEVEL = 5
 # Clearing the orders row is your main action and needs drunk 3+; swiping the
 # ability row is a free action once a turn and needs drunk 2+.
-MIN_DRUNK_TO_REFRESH = 3
+MIN_DRUNK_TO_REFRESH = 2
 MIN_DRUNK_TO_SWIPE = 2
 # Karaoke: sing when you're drunk enough, with 2 of the song's spirit drunk
 MIN_DRUNK_TO_SING = 3
@@ -597,10 +597,11 @@ def _rotate_row(gs: GameState, row: CardRow) -> int:
 def card_payment(
     ps: PlayerState, card: Card, pay_with: str | None = None
 ) -> list[Ingredient] | None:
-    """The bladder ingredients that pay for a card, or None if it can't be paid.
+    """The bladder ingredients that meet a card's cost, or None if they don't.
 
-    Claiming a karaoke or ability card takes its cost out of the bladder and
-    back into the bag. A karaoke song also needs drunk 3+ (checked, not paid). ``pay_with`` picks how to pay where there's a choice:
+    The cost is only checked: claiming leaves it in the bladder. A karaoke
+    song also needs drunk 3+. ``pay_with`` picks what meets the cost where
+    there's a choice:
     the spirit for a cup doubler (any spirit with three will do without it),
     and for a specialist either its spirit (two) or its special (one; the
     special is used by default when held).
@@ -616,7 +617,6 @@ def card_payment(
 
     ct = card.card_type
     if ct == "karaoke":
-        # Drunk level is checked, not paid; the two spirits are paid
         if ps.drunk_level < MIN_DRUNK_TO_SING:
             return None
         return take(card.spirit_type, KARAOKE_SPIRITS)
@@ -649,13 +649,6 @@ def card_payment(
 def _can_afford(ps: PlayerState, card: Card, spirit_type: str | None = None) -> bool:
     """Whether the player's bladder can pay for the card (see card_payment)."""
     return card_payment(ps, card, spirit_type) is not None
-
-
-def _pay_for_card(gs: GameState, ps: PlayerState, paid: list[Ingredient]) -> None:
-    """Move a card's cost out of the bladder and into the bag."""
-    for ing in paid:
-        ps.bladder.remove(ing)
-        gs.bag_contents.append(ing)
 
 
 # ─── Turn actions ─────────────────────────────────────────────────────────────
@@ -1232,7 +1225,7 @@ def claim_card(
     if CLAIM_CARD in gs.free_actions_used_this_turn:
         raise GameException("You've already claimed a card this turn", status_code=409)
 
-    # Per-type checks, then the cost: it comes out of the bladder into the bag
+    # Per-type checks, then the cost: checked against the bladder, which keeps it
     if card_type == "cup_doubler":
         if spirit_type is None:
             raise GameException(
@@ -1268,19 +1261,18 @@ def claim_card(
             f"Your bladder doesn't hold what {target_card.name} costs",
             status_code=400,
         )
-    _pay_for_card(gs, ps, paid)
 
     # Remove card from row
     target_row.cards.remove(target_card)
 
-    # Per-type effects (the cost has been paid into the bag)
+    # Per-type effects (the cost stays in the bladder)
     if card_type == "karaoke":
         ps.points += 5
         ps.karaoke_cards_claimed += 1
         ps.cards.append(target_card.to_dict())
 
     elif card_type == "store":
-        # Effect: the rest of that spirit in the bladder moves onto the card
+        # Effect: all of that spirit in the bladder moves onto the card
         spirit_ing = _spirit_ingredient(target_card.spirit_type)
         transferred = [i for i in ps.bladder if i == spirit_ing]
         ps.bladder = [i for i in ps.bladder if i != spirit_ing]
@@ -1317,7 +1309,7 @@ def claim_card(
         "card_id": card_id,
         "card_name": target_card.name,
         "card_type": card_type,
-        "paid": [i.name for i in paid],
+        "cost": [i.name for i in paid],
         "is_karaoke": target_card.is_karaoke,
         "row_position": target_row.position,
         "is_free_action": is_free,

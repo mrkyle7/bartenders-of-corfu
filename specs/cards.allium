@@ -37,7 +37,7 @@ variant KaraokeCard : Card {
     spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
     name: String
     -- cost: 2 bladder spirits of this card's spirit_type (stored spirits don't count),
-    --   and drunk_level >= config.min_drunk_to_sing (checked, not paid)
+    --   and drunk_level >= config.min_drunk_to_sing (both only checked)
     -- worth 5 points when claimed; counts toward win condition
 }
 
@@ -47,8 +47,8 @@ variant StoreCard : Card {
     stored_spirits: List<game/Spirit>
     -- cost: 1 bladder spirit of this card's spirit_type
     -- worth 1 point when claimed
-    -- on claim: the cost spirit goes into the bag; every other spirit of
-    --   spirit_type in the bladder moves onto this card
+    -- on claim: every spirit of spirit_type in the bladder (the cost
+    --   included) moves onto this card
     -- stored spirits may be poured into a cup or drunk at any time on the
     --   owner's turn (free actions). Drinking raises drunk level as normal
     -- stored spirits are consumed when spent (not reusable)
@@ -161,7 +161,7 @@ default FreeActionCard weak_bladder     = { spirit_type: GIN,   name: "Weak Blad
 config {
     karaoke_card_points:    Integer = 5
     min_drunk_to_sing:      Integer = 3    -- drunk level needed to claim a karaoke card
-    karaoke_spirits:        Integer = 2    -- spirits of the song's type paid to claim it
+    karaoke_spirits:        Integer = 2    -- spirits of the song's type needed to claim it
     store_card_points:      Integer = 1
     refresher_card_points:  Integer = 1
     cup_doubler_card_points: Integer = 2
@@ -252,7 +252,7 @@ rule ClaimCard {
     requires: "claim_card" not in free_actions_used_this_turn
     requires: card in row 1 or row 3            -- orders can't be claimed
     requires card.kind = Karaoke:
-        player.drunk_level >= config.min_drunk_to_sing          -- checked, not paid
+        player.drunk_level >= config.min_drunk_to_sing
         and player.bladder where spirit_type = card.spirit_type has count >= config.karaoke_spirits
     requires card.kind = Store:
         player.bladder where spirit_type = card.spirit_type has count >= 1
@@ -266,17 +266,13 @@ rule ClaimCard {
         or player.bladder contains specialist_special(card.spirit_type)
     requires card.kind = FreeAction:
         player.bladder where spirit_type = card.spirit_type has count >= 3
-    -- The cost is paid: exactly the cost's ingredients leave the bladder and
-    -- go back into the bag.
-    let paid = the cost's ingredients (for a Specialist: 1 special or 2 spirits,
-               the special by default when held)
-    ensures: player.bladder = player.bladder - paid
-    ensures: board.bag_contents = board.bag_contents + paid
+    -- The cost is only checked: its ingredients stay in the bladder and the
+    -- bag is unchanged.
     if card.kind = Karaoke:
         ensures: player.points = player.points + config.karaoke_card_points
         ensures: player.karaoke_cards_claimed = player.karaoke_cards_claimed + 1
     if card.kind = Store:
-        let transferred = (player.bladder - paid) where spirit_type = card.spirit_type
+        let transferred = player.bladder where spirit_type = card.spirit_type
         ensures: player.bladder = player.bladder - transferred
         ensures: card.stored_spirits = transferred
         ensures: player.points = player.points + config.store_card_points
@@ -348,7 +344,7 @@ rule ApplyDrunkModifier {
 -- A turn is one main action (TakeIngredients, SellCup, DrinkCup, GoForAWee)
 -- plus free actions, each at most once per turn:
 --   claim_card           — always available (ClaimCard)
---   refresh_orders_row   — always available at drunk 3+ (clearing row 2)
+--   refresh_orders_row   — always available at drunk 2+ (clearing row 2)
 --   refresh_ability_row  — always available at drunk 2+ (swiping row 3)
 --   take_ingredients / sell_cup / go_for_a_wee — granted by FreeActionCards
 -- DrinkStoredSpirit and UseStoredSpirit are free and unlimited.
@@ -368,7 +364,7 @@ rule FreeActionTurnLogic {
     -- After the action: the turn advances when main_action_taken is true AND no
     -- unused free action could be used right now. claim_card counts only while
     -- the player can afford a card in row 1 or row 3; refresh_orders_row only
-    -- at drunk 3+ with orders to clear; refresh_ability_row only at drunk 2+
+    -- at drunk 2+ with orders to clear; refresh_ability_row only at drunk 2+
     -- with ability cards to swipe. Card-granted free actions count
     -- while unused.
     requires: true  -- applied inline in each action handler
@@ -402,8 +398,8 @@ guarantee: row 2 holds only order cards; row 3 holds only ability cards
 guarantee: cleared cards go to the bottom of their own deck; nothing is discarded for good
 guarantee: order cards are never claimed; a sale serves at most one order per cup
 guarantee: order bonuses are never doubled and never get the specialist bonus
-guarantee: claiming a card moves exactly its cost from the bladder into the bag
-guarantee: stored spirits never count toward a card cost; specials only pay for a specialist
+guarantee: claiming a card checks its cost against the bladder and leaves the bladder unchanged (a Store then moves its spirit onto the card)
+guarantee: stored spirits never count toward a card cost; specials only meet a specialist's cost
 guarantee: the Store card effect (transferring spirits to stored_spirits) is not a cost consumption
 guarantee: ClaimCard for a CupDoubler card requires a cup parameter; invalid without one
 guarantee: cup.has_cup_doubler is set at claim time and never cleared; persists through sell/refill cycles
