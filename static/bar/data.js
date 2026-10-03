@@ -313,6 +313,7 @@ export function describeMove(move, nameOf) {
         case 'refresh_card_row':
             return a.row_position === 2 ? `${who} cleared the orders` : a.row_position === 3 ? `${who} swiped the ability cards` : `${who} cleared card row ${a.row_position}`;
         case 'end_turn': return `${who} ended their turn`;
+        case 'skip_turn': return `${who} had nothing they could do and passed`;
         case 'quit_game': return `${who} left the bar`;
         case 'cancel_game': return 'The game was called off';
         case 'undo': return `${who} took back the last turn`;

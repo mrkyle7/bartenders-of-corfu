@@ -229,3 +229,103 @@ def test_bar_players_can_leave_a_game_with_people(
     state = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
     me = new_user["user"]["id"]
     assert state["game_state"]["player_states"][me]["status"] == "quit"
+
+
+def _take_blind(base_url, game_id, player, disposition):
+    """Take a full turn's ingredients blind from the bag and end the turn."""
+    gs = _api_get(base_url, f"/v1/games/{game_id}", player["jwt"])["game_state"]
+    take = gs["player_states"][player["user"]["id"]]["take_count"]
+    assignments = [
+        {"source": "bag", "disposition": disposition, "cup_index": i % 2}
+        if disposition == "cup"
+        else {"source": "bag", "disposition": disposition}
+        for i in range(take)
+    ]
+    _api_post(
+        base_url,
+        f"/v1/games/{game_id}/actions/take-ingredients",
+        player["jwt"],
+        {"assignments": assignments},
+    )
+    # A free action it opened up (drunk enough to clear a row) holds the turn
+    gs = _api_get(base_url, f"/v1/games/{game_id}", player["jwt"])["game_state"]
+    if gs["player_turn"] == player["user"]["id"]:
+        _api_post(base_url, f"/v1/games/{game_id}/actions/end-turn", player["jwt"])
+
+
+def test_bar_recap_says_what_happened_since_your_turn(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """As your turn starts, a panel says what the others did since your last
+    one and what it changed; their mats say so too until you move. It opens
+    once a turn, and the turn bar opens it again. Your first turn, with
+    nobody gone before you, has nothing to tell."""
+    game = _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    me = new_user["user"]["id"]
+    other = other_user_and_jwt
+    sheet = page.locator("#sheet")
+    if game["game_state"]["player_turn"] == me:
+        page.goto(f"{base_url}/bar?id={new_game}")
+        page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+        page.wait_for_timeout(500)
+        assert sheet.is_hidden()
+        assert page.locator('[data-k="open-recap"]').count() == 0
+        _take_blind(base_url, new_game, new_user, "cup")
+    _take_blind(base_url, new_game, other, "drink")
+    state = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])
+    assert state["game_state"]["player_turn"] == me
+
+    page.goto(f"{base_url}/bar?id={new_game}")
+    sheet.locator(".recap").wait_for(state="visible", timeout=10000)
+    text = sheet.inner_text()
+    assert f"{other['username']}’s turn" in text
+    assert "drank" in text
+    assert "What changed" in text
+    page.locator('[data-k="recap-close"]').click()
+    sheet.wait_for(state="hidden", timeout=5000)
+    note = page.locator(".mat.is-theirs .mat-recap")
+    assert note.is_visible()
+    assert "drunk" in note.inner_text() or "bladder" in note.inner_text()
+
+    page.locator('[data-k="open-recap"]').click()
+    sheet.locator(".recap").wait_for(state="visible", timeout=5000)
+    page.keyboard.press("Escape")
+    sheet.wait_for(state="hidden", timeout=5000)
+    # Seen this turn: it doesn't open again by itself
+    page.reload()
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+    page.wait_for_timeout(1000)
+    assert sheet.is_hidden()
+    assert page.locator('[data-k="open-recap"]').is_visible()
+
+
+def test_bar_picking_up_keeps_the_page_still_and_your_hand_in_view(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """With the drinks menu open, picking a token off the display brings your
+    hand into view, and putting it back doesn't throw the page around."""
+    game = _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    if game["game_state"]["player_turn"] != new_user["user"]["id"]:
+        _take_blind(base_url, new_game, other_user_and_jwt, "cup")
+    page.set_viewport_size({"width": 1440, "height": 800})
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+    if page.locator("#sheet").is_visible():
+        page.locator('[data-k="sheet-close"]').click()
+    page.locator('[data-k="open-menu"]').click()
+    display = game["game_state"]["open_display"]
+    slot = next(i for i, name in enumerate(display) if name != "SPECIAL")
+    token = page.locator(f'[data-k="disp-{slot}"]')
+    token.scroll_into_view_if_needed()
+    box = token.bounding_box()
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.locator(".hand .tok").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(800)  # the scroll to your hand is smooth
+    hand = page.locator(".mat.is-mine .hand").bounding_box()
+    assert 0 <= hand["y"] < 800
+    # Touch it in your hand: the page stays put
+    before = page.evaluate("window.scrollY")
+    held = page.locator(".hand .tok").first.bounding_box()
+    page.mouse.click(held["x"] + held["width"] / 2, held["y"] + held["height"] / 2)
+    page.wait_for_timeout(500)
+    assert abs(page.evaluate("window.scrollY") - before) <= 2

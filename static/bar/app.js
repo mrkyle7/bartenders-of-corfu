@@ -40,7 +40,7 @@ const ui = {
     selected: null, // hand key being placed
     prompt: null, // { text, choices: [{ label, onclick, kind }] }
     historyOpen: false, // show every move, not just the latest
-    sheet: null, // 'menu' | 'rules': the panel opened from the turn bar
+    sheet: null, // 'menu' | 'rules' | 'recap': the panel opened from the turn bar
     leaving: null, // 'cancel' | 'quit': asking to call the game off or leave it
 };
 
@@ -215,6 +215,7 @@ async function refresh() {
     if (g.status !== 'NEW' && (before !== JSON.stringify(g.game_state) + g.status || !moves.length)) {
         await loadMoves(true);
     }
+    await loadRecap();
     render();
 }
 
@@ -419,6 +420,7 @@ function pickFromDisplay(slotIndex) {
     ui.picks.push(slotIndex);
     ui.selected = `d${slotIndex}`;
     render({ force: true });
+    showHand();
 }
 
 function pickFromSpecials(index) {
@@ -436,6 +438,30 @@ function pickFromSpecials(index) {
     ui.specialPicks.push(index);
     ui.selected = `s${index}`;
     render({ force: true });
+    showHand();
+}
+
+// Bring your hand and glasses into view once you're holding something, so
+// you can see where it goes: below the turn bar, and above the drinks menu
+// when that opens from the bottom of a phone.
+function showHand() {
+    const hand = document.querySelector('.mat.is-mine .mat-board');
+    if (!hand) return;
+    const r = hand.getBoundingClientRect();
+    const top = ($('turnbar')?.getBoundingClientRect().bottom ?? 0) + 8;
+    let bottom = window.innerHeight - 8;
+    const sheet = $('sheet');
+    if (!sheet.hidden) {
+        const s = sheet.getBoundingClientRect();
+        if (s.top > 0 && s.left <= r.left) bottom = Math.max(top + 120, s.top - 8);
+    }
+    const room = bottom - top;
+    let by = 0;
+    if (r.top < top) by = r.top - top;
+    else if (r.bottom > bottom) by = Math.min(r.top - top, r.bottom - bottom);
+    if (Math.abs(by) < 2) return;
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollBy({ top: room > 0 ? by : r.top - top, behavior: smooth ? 'smooth' : 'instant' });
 }
 
 function drawFromBag(count) {
@@ -765,7 +791,9 @@ function turnbar() {
         buttons.push(h('button.btn.go', { type: 'button', onclick: endTurn, text: 'End turn', 'data-k': 'end-turn' }));
     }
     if (game.status !== 'NEW') {
-        for (const [sheet, label] of [['menu', 'Drinks menu'], ['rules', 'Rules']]) {
+        const sheets = [['menu', 'Drinks menu'], ['rules', 'Rules']];
+        if (hasRecap()) sheets.unshift(['recap', 'Since your last turn']);
+        for (const [sheet, label] of sheets) {
             buttons.push(h('button.btn.tiny.sheet-btn', {
                 type: 'button', text: label, 'data-k': `open-${sheet}`,
                 cls: ui.sheet === sheet ? 'is-open' : '',
@@ -1309,6 +1337,7 @@ function mat(pid) {
         status ? h('span.mat-status', { text: status }) : null,
         h('span.mat-songs', { text: songs ? `${songs} of 3 songs` : '' }),
         h('span.mat-points', {}, h('strong', { text: ps.points }), ' points')),
+    matRecap(pid),
     h('div.mat-board', {},
         taking ? hand() : null,
         h('div.bar-area', {},
@@ -1438,6 +1467,137 @@ function menu() {
             slammerOrder ? h('span.menu-wanted', { text: `Wanted +${slammerOrder.bonus}` }) : null)));
 }
 
+// ─── Since your last turn ───────────────────────────────────────────────────
+// As your turn starts, a panel says what everyone else did since your last
+// one: each of their turns, from the move log, and what that changed on the
+// table, from the state as your last turn ended and as this one began. It
+// opens by itself once a turn; "Since your last turn" in the turn bar opens it
+// again. Until you make your first move, each mat says what changed on it.
+
+let recap = null; // { turn, turns: [{ pid, lines }], changes: [text], mats: { pid: [text] } }
+let recapFor = null; // the turn a recap is loading or loaded for
+
+async function loadRecap() {
+    if (game.status !== 'STARTED' || gs().winner || !isMember() || !myTurn()) return;
+    const turn = gs().turn_number;
+    if (recapFor === turn) return;
+    recapFor = turn;
+    // From the turn after your last one up to this one
+    let last = -1;
+    for (const m of moves) if (m.player_id === me.id && m.turn_number < turn) last = Math.max(last, m.turn_number);
+    const from = last + 1;
+    const theirs = moves.filter((m) => m.turn_number >= from && m.turn_number < turn && m.player_id !== me.id);
+    let before = null;
+    let after = null;
+    if (theirs.length) {
+        try {
+            [before, after] = (await Promise.all([api.stateAtTurn(gameId, from), api.stateAtTurn(gameId, turn)]))
+                .map((r) => r.game_state);
+        } catch {
+            // The turns alone still tell the story.
+        }
+    }
+    if (recapFor !== turn) return;
+    recap = buildRecap(turn, theirs, before, after);
+    if (recap.turns.length && !recapSeen(turn)) {
+        markRecapSeen(turn);
+        ui.sheet = 'recap';
+    }
+}
+
+const recapKey = () => `bar-recap-${gameId}`;
+function recapSeen(turn) {
+    try { return localStorage.getItem(recapKey()) === String(turn); } catch { return false; }
+}
+function markRecapSeen(turn) {
+    try { localStorage.setItem(recapKey(), String(turn)); } catch { /* shown again next time */ }
+}
+
+const hasRecap = () => !!recap && recap.turn === gs()?.turn_number && recap.turns.length > 0 && myTurn();
+
+// The mats keep their notes until you make your first move this turn.
+function recapMarks() {
+    if (!hasRecap()) return false;
+    return !moves.some((m) => m.player_id === me.id && m.turn_number === recap.turn);
+}
+
+function buildRecap(turn, theirs, before, after) {
+    const turns = [];
+    for (const m of theirs) {
+        if (m.action?.type === 'end_turn') continue;
+        let t = turns[turns.length - 1];
+        if (!t || t.turnNumber !== m.turn_number || t.pid !== m.player_id) {
+            t = { turnNumber: m.turn_number, pid: m.player_id, lines: [] };
+            turns.push(t);
+        }
+        t.lines.push(describeMove(m, nameOf));
+    }
+    // A turn that only ended still happened
+    for (const m of theirs) {
+        if (!turns.some((t) => t.turnNumber === m.turn_number && t.pid === m.player_id)) {
+            turns.push({ turnNumber: m.turn_number, pid: m.player_id, lines: [`${nameOf(m.player_id)} ended their turn`] });
+        }
+    }
+    turns.sort((a, b) => a.turnNumber - b.turnNumber);
+    const changes = [];
+    const mats = {};
+    if (before && after) {
+        for (const pid of after.turn_order ?? []) {
+            if (pid === me.id) continue;
+            const b = before.player_states?.[pid];
+            const a = after.player_states?.[pid];
+            if (!a || !b) continue;
+            const notes = [];
+            const name = seatName(pid);
+            if (a.points !== b.points) notes.push(`${a.points > b.points ? '+' : ''}${plural(a.points - b.points, 'point')}`);
+            const newCards = (a.cards ?? []).filter((c) => !(b.cards ?? []).some((o) => o.id === c.id));
+            for (const c of newCards) notes.push(`claimed ${c.name || 'a card'}`);
+            if (a.drunk_level !== b.drunk_level) {
+                notes.push(a.drunk_level > b.drunk_level ? `drunk ${a.drunk_level} (+${a.drunk_level - b.drunk_level})` : `sobered up to ${a.drunk_level}`);
+            }
+            const fill = (a.bladder ?? []).length;
+            const was = (b.bladder ?? []).length;
+            if (fill !== was) notes.push(fill < was ? `bladder down to ${fill} of ${a.bladder_capacity}` : `bladder ${fill} of ${a.bladder_capacity} (+${fill - was})`);
+            if (a.status !== b.status) {
+                notes.push(a.status === 'hospitalised' ? 'went to hospital: out of the game'
+                    : a.status === 'wet' ? 'wet themselves: out of the game'
+                        : a.status === 'quit' ? 'left the game' : `now ${a.status}`);
+            }
+            if (notes.length) {
+                mats[pid] = notes;
+                changes.push(`${name}: ${notes.join(', ')}`);
+            }
+        }
+        for (const [position, what] of [[2, 'orders'], [3, 'ability cards']]) {
+            const row = (state) => (state.card_rows ?? []).find((r) => r.position === position)?.cards ?? [];
+            const fresh = row(after).filter((c) => !row(before).some((o) => o.id === c.id));
+            if (fresh.length) changes.push(`New ${what}: ${fresh.map((c) => c.name || 'a card').join(', ')}`);
+        }
+        if (!before.last_round && after.last_round) changes.push('The last round has started: everyone gets one more turn.');
+    }
+    return { turn, turns, changes, mats };
+}
+
+function recapSheet() {
+    const r = recap;
+    if (!r || !hasRecap()) return h('p.recap-lead', { text: 'Nothing new since your last turn.' });
+    return h('section.recap', { 'aria-label': 'Since your last turn' },
+        h('p.recap-lead', { text: 'Since your last turn:' }),
+        r.turns.map((t) => h('section.recap-turn', { style: { '--seat': seatColour(t.pid) } },
+            h('h3.recap-who', {}, h('span.pawn', { 'aria-hidden': 'true' }), h('span', { text: `${seatName(t.pid)}’s turn` })),
+            h('ul.recap-lines', {}, t.lines.map((line) => h('li', { text: line }))))),
+        r.changes.length ? h('section.recap-changes', {},
+            h('h3', { text: 'What changed' }),
+            h('ul', {}, r.changes.map((c) => h('li', { text: c })))) : null,
+        h('button.btn.go.recap-go', { type: 'button', onclick: closeSheet, text: 'Back to the bar', 'data-k': 'recap-close' }));
+}
+
+function matRecap(pid) {
+    if (pid === me.id || !recapMarks() || !recap.mats[pid]) return null;
+    return h('p.mat-recap', { 'aria-label': `Since your last turn, ${seatName(pid)}: ${recap.mats[pid].join(', ')}` },
+        h('span.mat-recap-tag', { text: 'Since your turn' }), ' ', recap.mats[pid].join(' · '));
+}
+
 // ─── The drinks menu and rules panel ────────────────────────────────────────
 
 function toggleSheet(which) {
@@ -1531,18 +1691,21 @@ function renderSheet() {
         return;
     }
     const isMenu = ui.sheet === 'menu';
+    const isRecap = ui.sheet === 'recap';
     const scroll = box.querySelector('.sheet-body')?.scrollTop ?? 0;
+    const [label, title, what] = isMenu ? ['Drinks menu', 'Drinks menu', 'drinks menu']
+        : isRecap ? ['Since your last turn', 'Your turn', 'summary'] : ['Rules', 'How to play', 'rules'];
     box.hidden = false;
-    box.setAttribute('aria-label', isMenu ? 'Drinks menu' : 'Rules');
+    box.setAttribute('aria-label', label);
     box.replaceChildren(...[
         h('div.sheet-head', {},
-            h('h2.sheet-title', { text: isMenu ? 'Drinks menu' : 'How to play' }),
+            h('h2.sheet-title', { text: title }),
             h('button.btn.tiny.sheet-close', {
                 type: 'button', text: 'Close', onclick: closeSheet, 'data-k': 'sheet-close',
-                'aria-label': `Close the ${isMenu ? 'drinks menu' : 'rules'}`,
+                'aria-label': `Close the ${what}`,
             })),
         isMenu ? sheetGlasses() : null,
-        h('div.sheet-body', {}, isMenu ? menu() : rulebook()),
+        h('div.sheet-body', {}, isMenu ? menu() : isRecap ? recapSheet() : rulebook()),
     ].filter(Boolean));
     box.querySelector('.sheet-body').scrollTop = scroll;
 }
@@ -1718,10 +1881,13 @@ async function renderLobby() {
 function render({ force = false } = {}) {
     if (!game) return;
     const signature = JSON.stringify([game.status, game.game_state, game.pending_undo, valid, moves.length,
-        ui.picks, ui.specialPicks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt, ui.sheet, ui.leaving]);
+        ui.picks, ui.specialPicks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt, ui.sheet, ui.leaving, recap?.turn, recapMarks()]);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
     const focusKey = document.activeElement?.getAttribute?.('data-k');
+    // Redrawing removes the piece you just touched, and with it the focus;
+    // the browser then scrolls the page. Keep it where the player left it.
+    const scrollY = window.scrollY;
 
     if (game.status === 'NEW') {
         turnbar();
@@ -1761,6 +1927,7 @@ function render({ force = false } = {}) {
     renderOverview();
     ending();
     restoreFocus(focusKey);
+    if (Math.abs(window.scrollY - scrollY) > 1) window.scrollTo({ top: scrollY, behavior: 'instant' });
 }
 
 function restoreFocus(key) {
