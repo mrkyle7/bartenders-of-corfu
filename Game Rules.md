@@ -57,7 +57,7 @@ Your turn ends once you've taken your main action and have no free action left t
 - Take exactly **3 ingredients plus your drunk level**. At drunk 2 you take 5.
 - Take them from the open display, the specials tray, blind from the bag, or any mix, in any order.
 - You can take several at once, but decide where every ingredient in your hand goes before taking more:
-  - **Into a glass.** Each glass holds at most 5 spirits and mixers, plus up to 2 specials on the rim.
+  - **Into a glass.** Each glass holds at most 5 spirits and mixers, plus up to 2 specials in the specials spaces at its top.
   - **Drink it.** It goes into your bladder (see "Having a drink").
 - Nothing goes back in the bag. A blind draw can hand you anything, specials included, and it's yours to pour or drink.
 - You can't pour if the bag, the display and the specials tray together hold fewer than you need.

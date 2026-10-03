@@ -106,13 +106,13 @@ const KIND_ICONS = {
 const AMBULANCE = '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 4h17v12H2z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M19 7h6l4 5v4H19z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M21 8.5h3.4l2.6 3.3H21z" fill="#bfe3f5"/><path d="M8.5 6.5h2v3h3v2h-3v3h-2v-3h-3v-2h3z" fill="#e0452b"/><path d="M2 13h27" stroke="#e0452b" stroke-width="1.2"/><circle cx="7" cy="16.5" r="2.3" fill="#2b2b2b"/><circle cx="24" cy="16.5" r="2.3" fill="#2b2b2b"/><rect x="11" y="2" width="3" height="2" fill="#2f8fdb"/></svg>';
 
 // The cup doublers, as they stand in a glass. The straw is a crazy straw:
-// clear pink tubing that loops twice above the glass. Its shaft is CSS
+// clear green tubing that zigzags above the glass. Its shaft is CSS
 // (.straw-shaft) so it reaches the bottom of any size of glass.
-const STRAW_PATH = 'M19 76V52A9 9 0 1 1 37 52A9 9 0 1 1 19 52V36A9 9 0 1 0 1 36A9 9 0 1 0 19 36V24C19 14 29 13 31 3';
-const BENDY_STRAW_TOP = '<svg viewBox="0 0 40 76" aria-hidden="true" fill="none" stroke-linecap="round">'
-    + `<path d="${STRAW_PATH}" stroke="#8a1450" stroke-width="6.4"/>`
-    + `<path d="${STRAW_PATH}" stroke="#ff4fa8" stroke-width="5"/>`
-    + `<path d="${STRAW_PATH}" stroke="#ffc2e0" stroke-width="1.6" stroke-opacity=".9"/>`
+const STRAW_PATH = 'M20 80V58L7 51L33 43L7 35L33 27L20 20V9L28 2';
+const BENDY_STRAW_TOP = '<svg viewBox="0 0 40 80" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">'
+    + `<path d="${STRAW_PATH}" stroke="#1d6b30" stroke-width="6.4"/>`
+    + `<path d="${STRAW_PATH}" stroke="#4fd16a" stroke-width="5"/>`
+    + `<path d="${STRAW_PATH}" stroke="#c9f7d1" stroke-width="1.6" stroke-opacity=".9"/>`
     + '</svg>';
 const UMBRELLA = '<svg viewBox="0 0 48 80" aria-hidden="true">'
     + '<path d="M24 5V80" stroke="#7a4a1c" stroke-width="2.6"/><path d="M24 5V80" stroke="#e2b07a" stroke-width="1.4"/>'
@@ -1083,7 +1083,7 @@ function renderScoreTrack() {
 
 // ─── Player mats ────────────────────────────────────────────────────────────
 
-const STRAW_EMBLEM = '<svg viewBox="0 0 24 24"><path d="M11 24V15A4 4 0 1 1 19 15A4 4 0 1 1 11 15V9A4 4 0 1 0 3 9A4 4 0 1 0 11 9V5C11 2.5 14 2 15 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+const STRAW_EMBLEM = '<svg viewBox="0 0 24 24"><path d="M12 24V17L4 13L20 9L4 5L12 2.5L16 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function emblemOf(card) {
     if (card.card_type === 'cup_doubler' && /straw/i.test(card.name)) return STRAW_EMBLEM;
@@ -1121,7 +1121,8 @@ function glass(pid, cupIndex, { interactive }) {
         label: `${ING[it.name].label} going into glass ${cupIndex + 1}. Tap to pick it back up.`,
         onclick: () => selectInHand(it.key),
     });
-    // Spirits and mixers fill the glass; specials sit on the rim.
+    // Spirits and mixers fill the glass; specials have their own two
+    // spaces at the top of it.
     const contents = [
         ...cup.ingredients.filter((n) => !isSpecial(n)).map((name) => token(name)),
         ...incoming.filter((it) => !isSpecial(it.name)).map(staged),
@@ -1131,11 +1132,10 @@ function glass(pid, cupIndex, { interactive }) {
         ...incoming.filter((it) => isSpecial(it.name)).map(staged),
     ];
     const layers = Array.from({ length: CUP_SIZE }, (_, i) => slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'));
-    const showRim = garnish.length || (placing && isSpecial(held.name));
-    // The rim always takes its space, so glasses line up whether or not
-    // they have specials on top; its slots show only when in use.
-    const rim = h('span.glass-rim', { 'aria-hidden': 'true', cls: showRim ? '' : 'is-unused' },
-        Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty')));
+    const specialSpaces = h('span.glass-specials', {},
+        h('span.glass-specials-label', { text: 'Specials only', 'aria-hidden': 'true' }),
+        h('span.glass-specials-slots', {},
+            Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty'))));
 
     const vessel = h(room ? 'button.glass' : 'div.glass', {
         cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''}`,
@@ -1144,8 +1144,7 @@ function glass(pid, cupIndex, { interactive }) {
         'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? `, scores double (${doublersOn(ps, cupIndex).map((c) => c.name).join(' and ')})` : ''}${room ? '. Tap to put the token here.' : ''}`,
         'data-k': room ? `glass-${cupIndex}` : undefined,
     },
-    rim,
-    h('span.glass-body', {}, ...doublersOn(ps, cupIndex).map(doublerPicture), layers),
+    h('span.glass-body', {}, ...doublersOn(ps, cupIndex).map(doublerPicture), layers, specialSpaces),
     h('span.glass-foot', { 'aria-hidden': 'true' }));
 
     const buttons = [];

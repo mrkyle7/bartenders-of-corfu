@@ -763,23 +763,36 @@ button.glass { cursor: pointer; }
     background: rgba(255, 255, 255, 0.08);
 }
 .glass-foot { width: calc(var(--t) * 2 + 26px); height: 6px; margin-top: -1px; border-radius: 3px; background: rgba(234, 241, 245, 0.55); }
-/* Specials sit on the rim, on top of the five spirits and mixers. */
-.glass-rim { display: flex; gap: 3px; justify-content: center; margin-bottom: 4px; }
-.glass-rim .slot.is-empty { border-color: rgba(214, 190, 240, 0.7); }
-.glass-rim.is-unused { visibility: hidden; }
+/* Specials have their own two spaces at the top of the glass, above the
+   five spirits and mixers (the glass fills bottom-up, so this comes last). */
+.glass-specials {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 100%;
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    margin-bottom: 4px;
+    padding: 3px 0 4px;
+    border: 1.5px dashed rgba(206, 168, 245, 0.85);
+    border-radius: 8px;
+    background: rgba(123, 63, 190, 0.28);
+}
+.glass-specials-label { font: 800 9px/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: #e6d2fb; }
+.glass-specials-slots { display: flex; gap: 3px; justify-content: center; }
+.glass-specials .slot.is-empty { border-color: rgba(214, 190, 240, 0.8); background: rgba(123, 63, 190, 0.3); }
 .glass.is-target .glass-body { border-color: var(--kumquat); box-shadow: 0 0 0 3px rgba(240, 138, 36, 0.4), inset 0 0 14px rgba(240, 138, 36, 0.35); }
 .glass.is-target:hover .glass-body { background: rgba(240, 138, 36, 0.2); }
 .glass-label { font-size: 12px; font-weight: 600; color: var(--whitewash-dim); text-align: center; }
 .glass-actions { display: grid; gap: 6px; justify-items: stretch; width: 100%; }
 .glass-actions .btn { width: 100%; }
-/* Cup doublers stand in the glass, behind its tokens and the specials on
-   its rim: a bendy straw on the right, a paper umbrella on the left. */
+/* Cup doublers stand in the glass, behind its tokens: a crazy straw on
+   the right, a paper umbrella on the left. */
 .glass-body > .slot, .glass-body > .token { position: relative; z-index: 1; }
-.glass-rim { position: relative; z-index: 2; }
 .straw {
     position: absolute;
     z-index: 0;
-    top: -74px;
+    top: -70px;
     bottom: 10px;
     right: 4px;
     width: 46px;
@@ -790,19 +803,20 @@ button.glass { cursor: pointer; }
     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
     pointer-events: none;
 }
-/* Room above the glasses for the straw's loops. */
-.bar-area:has(.straw) { padding-top: 28px; }
-.straw-top { display: block; height: 87px; flex: none; }
-.straw-top svg { display: block; width: 46px; height: 87px; }
-/* The shaft carries on from the SVG's: 5.75px of pink tube centred at
-   19/40 of the straw's width. */
+/* Room above the glasses for what stands in them. */
+.bar-area:has(.umbrella) { padding-top: 54px; }
+.bar-area:has(.straw) { padding-top: 78px; }
+.straw-top { display: block; height: 92px; flex: none; }
+.straw-top svg { display: block; width: 46px; height: 92px; }
+/* The shaft carries on from the SVG's: 5.75px of green tube centred at
+   20/40 of the straw's width. */
 .straw-shaft {
     flex: 1;
     width: 5.75px;
-    margin-left: 19px;
+    margin-left: 20.1px;
     margin-top: -1px;
     border-radius: 0 0 2px 2px;
-    background: linear-gradient(90deg, #8a1450 0 0.7px, #ff4fa8 0.7px 2px, #ffc2e0 2px 3.75px, #ff4fa8 3.75px 5px, #8a1450 5px);
+    background: linear-gradient(90deg, #1d6b30 0 0.7px, #4fd16a 0.7px 2px, #c9f7d1 2px 3.75px, #4fd16a 3.75px 5px, #1d6b30 5px);
     opacity: 0.75;
 }
 .umbrella {
