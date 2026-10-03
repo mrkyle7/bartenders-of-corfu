@@ -29,7 +29,7 @@ export const ING = {
 export const isSpecial = (name) => !!ING[name]?.special;
 // Drunk, these specials count like a spirit; lemon and sugar like a mixer.
 export const BOOZY = ['BITTERS', 'COINTREAU', 'VERMOUTH'];
-// One of these pays for the specialist card of that spirit.
+// One of these meets the cost of the specialist card of that spirit.
 export const SPECIALIST_SPECIAL = { WHISKEY: 'BITTERS', TEQUILA: 'COINTREAU', VODKA: 'VERMOUTH', RUM: 'SUGAR', GIN: 'LEMON' };
 // Max specials that sit in one glass, on top of its five spirits and mixers.
 export const GLASS_SPECIALS = 2;
@@ -136,7 +136,7 @@ export function cardText(card) {
         case 'store': return `Keeps your ${spirit} out of your bladder. Pour it or drink it whenever you like.`;
         case 'refresher': return `Every ${mixer} you drink sobers you up by one, even with spirits.`;
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
-        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Pay 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'}.`;
+        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Needs 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'} in your bladder.`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
         case 'order':
             if (card.drink === 'simple') return `Serve a ${card.name}, single or double, for +${card.bonus} on top.`;
@@ -184,7 +184,7 @@ export const RULES = [
         title: 'How the night goes',
         items: [
             'Pour and serve: take ingredients into your two glasses and sell the drinks you make for points. Cocktails are worth the most, and punters’ orders pay a bonus on top.',
-            'Drink on the job: whatever you don’t pour, you drink. It goes into your bladder, and your bladder is what you spend to claim cards that help you.',
+            'Drink on the job: whatever you don’t pour, you drink. It goes into your bladder, and what’s in your bladder lets you claim cards that help you.',
             'Stay on your feet: every spirit you drink makes you drunker, and your bladder only holds so much. Too drunk and it’s hospital; too full and you’ve wet yourself. Either way, you’re out.',
             'Win by reaching the points target first, singing three karaoke songs, or being the last bartender standing (see Winning, at the end).',
         ],
@@ -202,7 +202,7 @@ export const RULES = [
         title: 'Your turn',
         items: [
             'One main action: pour (take ingredients), serve (sell one or both glasses), drink a glass, or go for a wee.',
-            'Free actions, each once a turn, before or after: claim a card, swipe the ability cards (drunk 2 or more), clear the orders (drunk 3 or more), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
+            'Free actions, each once a turn, before or after: claim a card, swipe the ability cards or clear the orders (drunk 2 or more each), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
             'Your turn ends when your main action is done and nothing free is left that you could use. You can end it early after your main action.',
         ],
     },
@@ -212,7 +212,7 @@ export const RULES = [
         items: [
             'Take exactly 3 plus your drunk level, from the display, the specials tray, blind from the bag, or any mix.',
             'Put each one in a glass or drink it before you take more. A glass holds five spirits and mixers, plus two specials on the rim. Nothing goes back, and a blind draw can hand you anything, specials included.',
-            'Specials are for cocktails: a glass with one in it only sells as the cocktail it makes. You might drink one so a rival can’t have it, or to pay for a specialist.',
+            'Specials are for cocktails: a glass with one in it only sells as the cocktail it makes. You might drink one so a rival can’t have it, or to claim a specialist with it.',
         ],
     },
     {
@@ -231,7 +231,7 @@ export const RULES = [
             'Drink ingredients as you take them, or a whole glass as your main action. Everything you drink goes into your bladder.',
             'After each action: +1 drunk for every spirit, bitters, cointreau or vermouth you drank. If you drank none of those, you sober up 1 for each mixer, lemon or sugar instead.',
             'The drunk track: 0 Sober, 1 Merry, 2 Tipsy, 3 Squiffy, 4 Sozzled, 5 Legless. Above 5 it’s hospital, and you’re out of the game.',
-            'Being drunk has its uses: you take more ingredients each turn, can swipe the ability cards at drunk 2, and clear the orders or sing karaoke at drunk 3.',
+            'Being drunk has its uses: you take more ingredients each turn, can swipe the ability cards or clear the orders at drunk 2, and sing karaoke at drunk 3.',
         ],
     },
     {
@@ -245,13 +245,13 @@ export const RULES = [
     },
     {
         title: 'Cards',
-        lead: 'What you’ve drunk pays for them.',
+        lead: 'What you’ve drunk earns them.',
         items: [
-            'Claim a card (free, once a turn) if your bladder holds its cost. Those ingredients leave your bladder and go back in the bag. Stored spirits and specials don’t count, except that one special pays for its specialist.',
-            'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more (checked, not paid). Sing three and you win.',
+            'Claim a card (free, once a turn) if your bladder holds its cost. The cost is only checked: it stays in your bladder. Stored spirits and specials don’t count, except that one special meets the cost of its specialist.',
+            'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more. Sing three and you win.',
             'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), and free-action cards that make taking, selling or weeing free. The card says what it does.',
             'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',
-            'Swiping the abilities (drunk 2 or more) or clearing the orders (drunk 3 or more) is free, once a turn each: all three go under their deck and three new ones are dealt. The karaoke row is never cleared.',
+            'Swiping the abilities or clearing the orders (drunk 2 or more) is free, once a turn each: all three go under their deck and three new ones are dealt. The karaoke row is never cleared.',
         ],
     },
     {

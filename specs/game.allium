@@ -24,7 +24,7 @@ config {
     -- Points that start the last round, by player count: 40 / 35 / 30 for 2 / 3 / 4
     score_to_win: Integer = 40            -- two players; see score_to_win_for
     karaoke_cards_to_win: Integer = 3     -- claiming this many karaoke cards = instant win
-    min_drunk_to_refresh: Integer = 3     -- drunk level required to clear the orders row
+    min_drunk_to_refresh: Integer = 2     -- drunk level required to clear the orders row
     min_drunk_to_swipe: Integer = 2       -- drunk level required to swipe the ability row
     max_specials_per_player: Integer = 2  -- games with special dice only (see LegacySpecials)
     karaoke_card_total: Integer = 5       -- total karaoke cards in the game
@@ -680,7 +680,7 @@ surface PlayerTurn {
     guarantee: a cup never holds more than config.max_cup_ingredients spirits and mixers, or config.max_cup_specials specials
     guarantee: drunk_level never goes below 0
     guarantee: bladder_capacity never goes below config.min_bladder_capacity
-    guarantee: a special never counts toward a card's cost, except one pays for its specialist (see cards.allium)
+    guarantee: a special never counts toward a card's cost, except one meets the cost of its specialist (see cards.allium)
     guarantee: TakeIngredients is unavailable when the bag's spirits and mixers, the display and the specials display together hold fewer than take_count ingredients
     guarantee: a player may not cast a VoteOnUndoTurn vote if they already voted on the same request
     guarantee: the proposer of an UndoRequest is already recorded as agree and cannot vote again

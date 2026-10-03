@@ -5,7 +5,7 @@ You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails t
 ## How the night goes
 
 - **Pour and serve.** Take ingredients into your two glasses and sell the drinks you make for points. Cocktails are worth the most; punters' orders pay a bonus on top.
-- **Drink on the job.** Anything you don't pour, you drink. It goes into your bladder, and your bladder is what you spend to claim cards that help you.
+- **Drink on the job.** Anything you don't pour, you drink. It goes into your bladder, and what's in your bladder lets you claim cards that help you.
 - **Stay on your feet.** Every spirit you drink makes you drunker, and your bladder only holds so much. Too drunk and it's hospital; too full and you've wet yourself. Either way, you're out.
 - **Three ways to win:** reach the points target first (40 with 2 players, 35 with 3, 30 with 4), sing three karaoke songs, or be the last bartender standing. The details are under "Winning", at the end.
 
@@ -44,7 +44,7 @@ Each turn you take **one main action**, and any **free actions** you have, befor
 
 - Claim a card
 - Swipe the ability row (drunk 2 or more)
-- Clear the orders row (drunk 3 or more)
+- Clear the orders row (drunk 2 or more)
 - Whatever your free-action cards give you (see "Cards")
 - Pour or drink from a Store card (any number of times)
 
@@ -63,7 +63,7 @@ Your turn ends once you've taken your main action and have no free action left t
 - You can't pour if the bag, the display and the specials tray together hold fewer than you need.
 - When you've taken them all, your drunk level changes once for everything you drank, and the display is refilled from the bag.
 
-**Specials** (bitters, cointreau, lemon, sugar, vermouth) are for cocktails. A glass with a special in it can only be sold as the cocktail it makes. You might drink one instead, so a rival doesn't get it or to pay for a specialist card.
+**Specials** (bitters, cointreau, lemon, sugar, vermouth) are for cocktails. A glass with a special in it can only be sold as the cocktail it makes. You might drink one instead, so a rival doesn't get it or to claim a specialist card with it.
 
 ## Serving: sell your glasses
 
@@ -108,7 +108,7 @@ A served order goes to the bottom of the order deck and the next one is dealt. E
 - You drink ingredients as you take them, or drink a whole glass as your main action. **Everything you drink goes into your bladder.**
 - **Getting drunker:** each spirit, bitters, cointreau or vermouth drunk in the action raises your drunk level by 1. If you drank **none of those**, you sober up by 1 per mixer, lemon or sugar instead (never below sober).
 - **The drunk track:** 0 Sober, 1 Merry, 2 Tipsy, 3 Squiffy, 4 Sozzled, 5 Legless.
-- **Being drunk has its uses:** you take 3 ingredients plus your drunk level each turn, you can swipe the ability cards at drunk 2 or more, and clear the orders or sing karaoke at drunk 3 or more.
+- **Being drunk has its uses:** you take 3 ingredients plus your drunk level each turn, you can swipe the ability cards or clear the orders at drunk 2 or more, and sing karaoke at drunk 3 or more.
 - **Hospital:** above drunk 5 you're out of the game.
 
 ## Nipping to the loo
@@ -122,25 +122,25 @@ A served order goes to the bottom of the order deck and the next one is dealt. E
 
 ## Cards
 
-*What you've drunk pays for them: the ingredients leave your bladder and go back in the bag.*
+*What you've drunk earns them: show the cost in your bladder and the card is yours. The ingredients stay where they are.*
 
 **Claiming a card** (free action, once a turn):
 
-- Take a karaoke card or an ability card if your bladder holds its cost. The cost is paid: those ingredients go back into the bag. Stored spirits don't count.
-- A karaoke song also needs you to be **drunk 3 or more**. Your drunk level is only checked, not paid.
+- Take a karaoke card or an ability card if your bladder holds its cost. The cost is only checked: those ingredients stay in your bladder. Stored spirits don't count.
+- A karaoke song also needs you to be **drunk 3 or more**.
 - Karaoke cards aren't replaced. A claimed ability card is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
 - Orders can't be claimed: you serve them by selling the drink.
 
 **Clearing the rows** (free actions, once a turn each):
 
 - **Swipe the ability row** (drunk 2 or more): put all three cards on the bottom of the ability deck and deal three new ones.
-- **Clear the orders row** (drunk 3 or more): put all three orders on the bottom of the order deck and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
+- **Clear the orders row** (drunk 2 or more): put all three orders on the bottom of the order deck and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
 - The karaoke row is never cleared.
 
 | Card | Cost (in your bladder) | Points | What it does |
 |---|---|---|---|
 | Karaoke (one per spirit) | 2 of that spirit, and drunk 3 or more | 5 | Get up and sing! Claim three and you win. |
-| Store (one per spirit) | 1 of that spirit | 1 | The rest of that spirit in your bladder moves onto the card. Pour stored spirits into a glass or drink them whenever you like on your turn (free); a wee doesn't flush them. |
+| Store (one per spirit) | 1 of that spirit | 1 | All of that spirit in your bladder moves onto the card. Pour stored spirits into a glass or drink them whenever you like on your turn (free); a wee doesn't flush them. |
 | Refresher (one per mixer) | 2 of that mixer | 1 | That mixer always sobers you up by 1, even when you drink spirits with it. |
 | Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |
 | Specialist (one per spirit) | 2 of that spirit, or 1 of its special (whisky: bitters, tequila: cointreau, vodka: vermouth, rum: sugar, gin: lemon) | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
@@ -150,7 +150,7 @@ A served order goes to the bottom of the order deck and the next one is dealt. E
 
 **Free-action cards** (Greedy Bartender, Entrepreneur, Weak Bladder) all work the same way. With the card, that action is a free action: do it before or after your main action, but still only once a turn, so your main action can't be the same thing again. If you do it first, you can take a different main action too, or end your turn there.
 
-Specials never count toward a card's cost, except that one pays for the specialist of its spirit.
+Specials never count toward a card's cost, except that one meets the cost of the specialist of its spirit.
 
 ## Winning
 

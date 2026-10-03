@@ -624,9 +624,12 @@ function claim(card) {
     });
     const back = { label: 'Leave it', onclick: () => { ui.prompt = null; render({ force: true }); } };
     if (card.card_type === 'cup_doubler') {
-        ask(`${card.name}: which glass does it go on, and which three spirits pay for it? They go from your bladder into the bag.`, [
-            ...options.map((a) => ({
-                label: `Glass ${a.params.cup_index + 1}, paid with ${ING[a.params.spirit_type]?.label ?? a.params.spirit_type}`,
+        // Any spirit with three in your bladder meets the cost; only the glass matters
+        const byGlass = new Map();
+        for (const a of options) if (!byGlass.has(a.params.cup_index)) byGlass.set(a.params.cup_index, a);
+        ask(`${card.name}: which glass does it go on for good? Your bladder keeps what you've drunk.`, [
+            ...[...byGlass.values()].map((a) => ({
+                label: `Glass ${a.params.cup_index + 1}`,
                 onclick: () => send(a.params),
                 kind: 'go',
             })),
@@ -635,22 +638,9 @@ function claim(card) {
         return;
     }
     const free = isFree('claim_card') ? ' It doesn’t use your action.' : '';
-    if (card.card_type === 'specialist') {
-        ask(`Claim ${card.name} for ${plural(points, 'point')}? What you pay with goes from your bladder into the bag.${free}`, [
-            ...options.map((a) => {
-                const pay = a.params.spirit_type;
-                const what = pay === card.spirit_type ? `2 ${ING[pay].label}` : `1 ${ING[pay]?.label ?? pay}`;
-                return { label: `Pay ${what}`, onclick: () => send(a.params), kind: 'go' };
-            }),
-            back,
-        ]);
-        return;
-    }
-    const cost = cardCost(card);
-    const paying = `${cost.length} ${ING[cost[0]]?.label ?? ''}`.trim();
     const extra = card.card_type === 'store'
-        ? ` One ${ING[card.spirit_type].label} goes into the bag and the rest in your bladder moves onto the card.`
-        : ` ${paying} goes from your bladder into the bag.`;
+        ? ` All the ${ING[card.spirit_type].label} in your bladder moves onto the card.`
+        : ' Your bladder keeps what you\u2019ve drunk.';
     ask(`Claim ${card.name} for ${plural(points, 'point')}?${extra}${free}`, [
         { label: 'Claim it', onclick: () => send(options[0].params), kind: 'go' },
         back,
@@ -864,7 +854,7 @@ function costHave(card, ps) {
     if (!ps) return Infinity;
     const have = bladderCounts(ps);
     if (card.card_type === 'cup_doubler') return Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
-    // One of its special pays for a specialist in full
+    // One of its special meets a specialist's whole cost
     if (card.card_type === 'specialist' && have[SPECIALIST_SPECIAL[card.spirit_type]]) return cardCost(card).length;
     return have[cardCost(card)[0]] ?? 0;
 }
@@ -970,7 +960,7 @@ function renderMarket() {
             tag('Karaoke stage', 'Sing at drunk 3+ with 2 of the song’s spirit. Three songs wins.'),
             h('div.row-cards', {}, cells(1, 5))),
         h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
-            tag('Orders', 'Sell what they want for the bonus. Clear at drunk 3+ (free).', 2, 'Clear (free)'),
+            tag('Orders', 'Sell what they want for the bonus. Clear at drunk 2+ (free).', 2, 'Clear (free)'),
             h('div.row-cards', {}, cells(2, 3)),
             cardBack(state.order_deck_size ?? 0, `Order deck, ${plural(state.order_deck_size ?? 0, 'order')}`, 'Orders')),
         h('div.card-row', { 'aria-label': 'Ability cards', role: 'group' },
