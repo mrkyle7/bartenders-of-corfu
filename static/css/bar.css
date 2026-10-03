@@ -735,9 +735,9 @@ button.card { cursor: pointer; }
     color: inherit;
 }
 button.glass { cursor: pointer; }
-/* A glass mug, drawn (static/bar/img/glass-N.png) with its handle on the
+/* A glass mug, drawn (static/bar/img/glass-N.webp) with its handle on the
    outside and circles for its spaces; the spaces sit over the circles.
-   The picture's circles are 92px across; tokens in the glass shrink a
+   The picture's circles are 94px across; tokens in the glass shrink a
    little (to 0.85 of a table token) to sit in them. */
 .glass-spot { --gt: var(--t); }
 .glass-body {

@@ -1140,20 +1140,20 @@ function doublerPicture(card, cupIndex) {
     h('span.straw-shaft'));
 }
 
-// The two glass pictures (static/bar/img/glass-N.png): their size, where
+// The two glass pictures (static/bar/img/glass-N.webp): their size, where
 // the circles drawn on them are (centres, in % of the picture; base spaces
 // fill bottom-left, bottom-right, middle-left, middle-right, top) and how
 // much of the picture the handle takes beside the glass's body.
 const GLASS_ART = [
     {
-        src: '/static/bar/img/glass-1.png', w: 305, h: 490, bodyLeft: 26.89, bodyRight: 0.98,
-        specials: [[47.54, 23.88], [78.69, 23.88]],
-        base: [[46.56, 85.71], [77.7, 85.71], [48.2, 66.33], [78.69, 66.33], [62.62, 45.31]],
+        src: '/static/bar/img/glass-1.webp', w: 314, h: 505, bodyLeft: 26.8, bodyRight: 0.6,
+        specials: [[47.74, 22.89], [79.86, 22.78]],
+        base: [[46.78, 84.67], [78.49, 84.59], [47.99, 66.08], [79.41, 66.09], [62.94, 46.37]],
     },
     {
-        src: '/static/bar/img/glass-2.png', w: 304, h: 490, bodyLeft: 0.99, bodyRight: 26.64,
-        specials: [[21.05, 23.88], [53.95, 23.88]],
-        base: [[20.39, 86.12], [52.96, 86.33], [21.38, 66.53], [55.59, 65.71], [36.84, 45.31]],
+        src: '/static/bar/img/glass-2.webp', w: 313, h: 503, bodyLeft: 1, bodyRight: 28.8,
+        specials: [[20.76, 23.61], [53.65, 23.29]],
+        base: [[21.55, 84.25], [53.77, 84.55], [20.86, 66.17], [53.65, 66.14], [36.61, 46.37]],
     },
 ];
 
