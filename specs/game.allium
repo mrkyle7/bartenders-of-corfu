@@ -237,7 +237,7 @@ rule PlaceIngredientInCup {
 rule DrawBlind {
     -- One random draw from the bag for DrawFromBag or a direct bag draw.
     -- Whatever comes out is the player's, specials included: it must go in
-    -- a cup (a special on the rim, up to config.max_cup_specials) or be
+    -- a cup (a special in its specials spaces, up to config.max_cup_specials) or be
     -- drunk, like any drawn token.
     when: DrawBlind(board)
     let token = random from board.bag_contents

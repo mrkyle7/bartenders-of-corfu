@@ -69,10 +69,12 @@ def test_bar_lobby_start_lays_out_the_table(
     assert page.locator(".mat").count() == 2
     assert page.locator(".mat.is-mine .glass").count() == 2
     glass = page.locator(".mat.is-mine .glass").first
-    assert glass.locator(".glass-body .slot").count() == 5
-    # The rim keeps its two special slots' space but hides them until used
-    assert glass.locator(".glass-rim.is-unused .slot").count() == 2
-    assert not glass.locator(".glass-rim").is_visible()
+    assert glass.locator(".glass-body > .slot").count() == 5
+    # Two spaces at the top, always on show, marked for specials only
+    specials = glass.locator(".glass-specials")
+    assert specials.is_visible()
+    assert specials.locator(".slot.is-empty").count() == 2
+    assert "specials only" in specials.inner_text().lower()
     # A fresh bladder: eight open spaces, four toilet tokens in reserve
     assert page.locator(".mat.is-mine .bladder-slots .slot.is-empty").count() == 8
     assert page.locator(".mat.is-mine .loo-reserve .loo").count() == 4

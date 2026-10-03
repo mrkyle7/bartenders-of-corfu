@@ -211,7 +211,7 @@ export const RULES = [
         lead: 'The punters are waiting. Grab what you need, and whatever doesn’t fit in a glass goes down the hatch.',
         items: [
             'Take exactly 3 plus your drunk level, from the display, the specials tray, blind from the bag, or any mix.',
-            'Put each one in a glass or drink it before you take more. A glass holds five spirits and mixers, plus two specials on the rim. Nothing goes back, and a blind draw can hand you anything, specials included.',
+            'Put each one in a glass or drink it before you take more. A glass holds five spirits and mixers, plus two specials in the specials spaces at its top. Nothing goes back, and a blind draw can hand you anything, specials included.',
             'Specials are for cocktails: a glass with one in it only sells as the cocktail it makes. You might drink one so a rival can’t have it, or to claim a specialist with it.',
         ],
     },
