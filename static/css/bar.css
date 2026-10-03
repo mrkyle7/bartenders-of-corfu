@@ -786,8 +786,8 @@ button.glass { cursor: pointer; }
 .glass-label { font-size: 12px; font-weight: 600; color: var(--whitewash-dim); text-align: center; }
 .glass-actions { display: grid; gap: 6px; justify-items: stretch; width: 100%; }
 .glass-actions .btn { width: 100%; }
-/* Cup doublers stand in the glass, behind its tokens: a crazy straw on
-   the right, a paper umbrella on the left. */
+/* Cup doublers stand in the glass, behind its tokens: a straw on the
+   right, a paper umbrella on the left. */
 .glass-body > .slot, .glass-body > .token { position: relative; z-index: 1; }
 .straw {
     position: absolute;
@@ -808,16 +808,21 @@ button.glass { cursor: pointer; }
 .bar-area:has(.straw) { padding-top: 78px; }
 .straw-top { display: block; height: 92px; flex: none; }
 .straw-top svg { display: block; width: 46px; height: 92px; }
-/* The shaft carries on from the SVG's: 5.75px of green tube centred at
-   20/40 of the straw's width. */
+/* The shaft carries on from the SVG's: 5.75px of tube centred at 20/40 of
+   the straw's width, in the straw's colours. */
 .straw-shaft {
     flex: 1;
     width: 5.75px;
     margin-left: 20.1px;
     margin-top: -1px;
     border-radius: 0 0 2px 2px;
-    background: linear-gradient(90deg, #1d6b30 0 0.7px, #4fd16a 0.7px 2px, #c9f7d1 2px 3.75px, #4fd16a 3.75px 5px, #1d6b30 5px);
+    background: linear-gradient(90deg, var(--straw-dark) 0 0.7px, var(--straw) 0.7px 2px, var(--straw-hi) 2px 3.75px, var(--straw) 3.75px 5px, var(--straw-dark) 5px);
     opacity: 0.75;
+}
+.straw.is-bendy .straw-shaft {
+    background:
+        linear-gradient(90deg, var(--straw-dark) 0 0.7px, transparent 0.7px 2px, var(--straw-hi) 2px 3.75px, transparent 3.75px 5px, var(--straw-dark) 5px),
+        repeating-linear-gradient(180deg, var(--straw) 0 4.6px, #fff 4.6px 9.2px);
 }
 .umbrella {
     position: absolute;

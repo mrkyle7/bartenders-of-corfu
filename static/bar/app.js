@@ -105,15 +105,42 @@ const KIND_ICONS = {
 
 const AMBULANCE = '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 4h17v12H2z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M19 7h6l4 5v4H19z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M21 8.5h3.4l2.6 3.3H21z" fill="#bfe3f5"/><path d="M8.5 6.5h2v3h3v2h-3v3h-2v-3h-3v-2h3z" fill="#e0452b"/><path d="M2 13h27" stroke="#e0452b" stroke-width="1.2"/><circle cx="7" cy="16.5" r="2.3" fill="#2b2b2b"/><circle cx="24" cy="16.5" r="2.3" fill="#2b2b2b"/><rect x="11" y="2" width="3" height="2" fill="#2f8fdb"/></svg>';
 
-// The cup doublers, as they stand in a glass. The straw is a crazy straw:
-// clear green tubing that zigzags above the glass. Its shaft is CSS
-// (.straw-shaft) so it reaches the bottom of any size of glass.
-const STRAW_PATH = 'M20 80V58L7 51L33 43L7 35L33 27L20 20V9L28 2';
-const BENDY_STRAW_TOP = '<svg viewBox="0 0 40 80" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">'
-    + `<path d="${STRAW_PATH}" stroke="#1d6b30" stroke-width="6.4"/>`
-    + `<path d="${STRAW_PATH}" stroke="#4fd16a" stroke-width="5"/>`
-    + `<path d="${STRAW_PATH}" stroke="#c9f7d1" stroke-width="1.6" stroke-opacity=".9"/>`
-    + '</svg>';
+// The cup doublers, as they stand in a glass. Each straw is one of a few
+// crazy straws in one of a few colours, picked at random but the same
+// every time for that card in that game. They're drawn in a 40×80 box
+// with the tube coming up out of the glass at x = 20; the shaft below is
+// CSS (.straw-shaft) so it reaches the bottom of any size of glass.
+const STRAW_SHAPES = {
+    bendy: { d: 'M20 80V38Q20 24 30 18L38 12', ridges: 'M20 40Q20 24 31 17.4', striped: true },
+    wavy: { d: 'M20 80V62C20 56 8 58 8 52S32 48 32 42S8 38 8 32S20 28 20 22V11Q20 4 27 2' },
+    heart: { d: 'M20 80V42C9 34 3 28 4.5 20C6 11 16 10 20 18C24 10 34 11 35.5 20C37 28 31 34 20 42M20 18V8Q20 3 26 1' },
+};
+const STRAW_COLOURS = [
+    { tube: '#4fd16a', dark: '#1d6b30', hi: '#c9f7d1' },
+    { tube: '#4aa8ff', dark: '#154f8a', hi: '#cfe8ff' },
+    { tube: '#ff9a2e', dark: '#8a4a00', hi: '#ffe0b8' },
+    { tube: '#ffd84a', dark: '#8a6d00', hi: '#fff4c2' },
+    { tube: '#b07cff', dark: '#4b2a8a', hi: '#e9dcff' },
+    { tube: '#ff5a5a', dark: '#8a1c1c', hi: '#ffd0d0' },
+];
+
+function strawLook(seed) {
+    let n = 0;
+    for (const ch of seed) n = (Math.imul(n, 31) + ch.charCodeAt(0)) >>> 0;
+    const shapes = Object.keys(STRAW_SHAPES);
+    return { shape: shapes[n % shapes.length], colour: STRAW_COLOURS[(n >>> 4) % STRAW_COLOURS.length] };
+}
+
+function strawTop({ shape, colour }) {
+    const { d, ridges, striped } = STRAW_SHAPES[shape];
+    const path = (stroke, width, extra = '') => `<path d="${d}" stroke="${stroke}" stroke-width="${width}"${extra}/>`;
+    return '<svg viewBox="0 0 40 80" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">'
+        + path(colour.dark, 6.4)
+        + (striped ? path('#fff', 5) + path(colour.tube, 5, ' stroke-dasharray="4 4" stroke-linecap="butt"') : path(colour.tube, 5))
+        + (ridges ? `<path d="${ridges}" stroke="rgba(0,0,0,.28)" stroke-width="5.4" stroke-dasharray="1 1.5" stroke-linecap="butt"/>` : '')
+        + path(colour.hi, 1.6, ' stroke-opacity=".9"')
+        + '</svg>';
+}
 const UMBRELLA = '<svg viewBox="0 0 48 80" aria-hidden="true">'
     + '<path d="M24 5V80" stroke="#7a4a1c" stroke-width="2.6"/><path d="M24 5V80" stroke="#e2b07a" stroke-width="1.4"/>'
     + '<g stroke="rgba(70,10,30,.45)" stroke-width=".8" stroke-linejoin="round">'
@@ -1083,7 +1110,7 @@ function renderScoreTrack() {
 
 // ─── Player mats ────────────────────────────────────────────────────────────
 
-const STRAW_EMBLEM = '<svg viewBox="0 0 24 24"><path d="M12 24V17L4 13L20 9L4 5L12 2.5L16 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const STRAW_EMBLEM = '<svg viewBox="0 0 24 24"><path d="M10 24V11Q10 5 15.5 2.5L21 0" fill="none" stroke="currentColor" stroke-width="3.4"/><path d="M10 12Q10 5 16 2.2" fill="none" style="stroke:var(--scene-top)" stroke-width="3.6" stroke-dasharray=".9 1.3"/></svg>';
 
 function emblemOf(card) {
     if (card.card_type === 'cup_doubler' && /straw/i.test(card.name)) return STRAW_EMBLEM;
@@ -1101,11 +1128,16 @@ function doublersOn(ps, cupIndex) {
     return unplaced.length ? unplaced.slice(0, 1) : [{ name: 'Bendy Straw' }];
 }
 
-function doublerPicture(card) {
+function doublerPicture(card, cupIndex) {
     if (/umbrella/i.test(card.name)) return h('span.umbrella', { svg: UMBRELLA, 'aria-hidden': 'true' });
-    return h('span.straw', { 'aria-hidden': 'true' },
-        h('span.straw-top', { svg: BENDY_STRAW_TOP }),
-        h('span.straw-shaft'));
+    const look = strawLook(`${gameId}:${card.id ?? cupIndex}`);
+    return h('span.straw', {
+        'aria-hidden': 'true',
+        cls: `is-${look.shape}`,
+        style: { '--straw': look.colour.tube, '--straw-dark': look.colour.dark, '--straw-hi': look.colour.hi },
+    },
+    h('span.straw-top', { svg: strawTop(look) }),
+    h('span.straw-shaft'));
 }
 
 function glass(pid, cupIndex, { interactive }) {
@@ -1144,7 +1176,7 @@ function glass(pid, cupIndex, { interactive }) {
         'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? `, scores double (${doublersOn(ps, cupIndex).map((c) => c.name).join(' and ')})` : ''}${room ? '. Tap to put the token here.' : ''}`,
         'data-k': room ? `glass-${cupIndex}` : undefined,
     },
-    h('span.glass-body', {}, ...doublersOn(ps, cupIndex).map(doublerPicture), layers, specialSpaces),
+    h('span.glass-body', {}, ...doublersOn(ps, cupIndex).map((c) => doublerPicture(c, cupIndex)), layers, specialSpaces),
     h('span.glass-foot', { 'aria-hidden': 'true' }));
 
     const buttons = [];
