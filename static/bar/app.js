@@ -1170,12 +1170,13 @@ function glass(pid, cupIndex, { interactive }) {
             Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty'))));
 
     const vessel = h(room ? 'button.glass' : 'div.glass', {
-        cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''}`,
+        cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''} handle-${cupIndex === 0 ? 'left' : 'right'}`,
         type: room ? 'button' : undefined,
         onclick: room ? () => placeSelected('cup', cupIndex) : undefined,
         'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? `, scores double (${doublersOn(ps, cupIndex).map((c) => c.name).join(' and ')})` : ''}${room ? '. Tap to put the token here.' : ''}`,
         'data-k': room ? `glass-${cupIndex}` : undefined,
     },
+    h('span.glass-handle', { 'aria-hidden': 'true' }),
     h('span.glass-body', {}, ...doublersOn(ps, cupIndex).map((c) => doublerPicture(c, cupIndex)), layers, specialSpaces),
     h('span.glass-foot', { 'aria-hidden': 'true' }));
 

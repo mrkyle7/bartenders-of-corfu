@@ -724,7 +724,7 @@ button.card { cursor: pointer; }
 .zone-warn { margin-top: 6px; color: #ffd0c9; font-weight: 700; }
 
 /* Glasses: tokens stack from the bottom up. */
-.glass-spot { display: grid; justify-items: center; gap: 6px; max-width: 170px; }
+.glass-spot { display: grid; justify-items: center; gap: 6px; max-width: 200px; }
 .glass {
     position: relative;
     display: grid;
@@ -735,34 +735,59 @@ button.card { cursor: pointer; }
     color: inherit;
 }
 button.glass { cursor: pointer; }
+/* A heavy glass mug: thick clear walls, a thick base, a rim and a handle
+   on the outside (glass 1's on the left, glass 2's on the right). */
 .glass-body {
     position: relative;
+    z-index: 1;
     /* five tokens fill it two to a row, from the bottom up */
     display: flex;
     flex-flow: row wrap-reverse;
     justify-content: center;
     align-content: flex-start;
     gap: 3px;
-    width: calc(var(--t) * 2 + 17px);
-    padding: 12px 5px 8px;
-    border: 2px solid rgba(234, 241, 245, 0.75);
+    width: calc(var(--t) * 2 + 22px);
+    padding: 12px 5px 12px;
+    border: 3px solid rgba(225, 240, 248, 0.8);
     border-top-width: 0;
-    border-radius: 3px 3px 16px 16px;
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05) 35%, rgba(255, 255, 255, 0.04) 70%, rgba(255, 255, 255, 0.16));
-    box-shadow: inset 0 -6px 0 rgba(255, 255, 255, 0.12);
+    border-bottom-width: 5px;
+    border-radius: 4px 4px 14px 14px;
+    background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.26) 0 7%, rgba(255, 255, 255, 0.06) 14%, rgba(255, 255, 255, 0.03) 62%, rgba(255, 255, 255, 0.14) 84%, rgba(255, 255, 255, 0.22)),
+        linear-gradient(180deg, rgba(160, 205, 235, 0.10), rgba(160, 205, 235, 0.22));
+    box-shadow:
+        inset 4px 0 0 rgba(255, 255, 255, 0.10),
+        inset -4px 0 0 rgba(255, 255, 255, 0.07),
+        inset 0 -9px 0 rgba(255, 255, 255, 0.16),
+        0 6px 10px rgba(0, 0, 0, 0.28);
 }
 .glass-body::before {
     content: "";
     position: absolute;
-    top: -6px;
-    left: -2px;
-    right: -2px;
-    height: 11px;
-    border: 2px solid rgba(234, 241, 245, 0.75);
+    top: -7px;
+    left: -3px;
+    right: -3px;
+    height: 13px;
+    border: 3px solid rgba(225, 240, 248, 0.85);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.07);
 }
-.glass-foot { width: calc(var(--t) * 2 + 26px); height: 6px; margin-top: -1px; border-radius: 3px; background: rgba(234, 241, 245, 0.55); }
+.glass-handle {
+    position: absolute;
+    top: 16%;
+    height: 50%;
+    width: calc(var(--t) * 0.5);
+    border: 6px solid rgba(225, 240, 248, 0.6);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.15);
+    pointer-events: none;
+}
+.glass.handle-left .glass-handle { right: calc(100% - 6px); border-right: 0; border-radius: 22px 0 0 22px; }
+.glass.handle-right .glass-handle { left: calc(100% - 6px); border-left: 0; border-radius: 0 22px 22px 0; }
+/* Room beside each glass for its handle. */
+.glass-spot:has(.handle-left) { padding-left: calc(var(--t) * 0.5 - 4px); }
+.glass-spot:has(.handle-right) { padding-right: calc(var(--t) * 0.5 - 4px); }
+/* A soft shadow under the mug instead of a saucer. */
+.glass-foot { width: calc(var(--t) * 2 + 24px); height: 8px; margin-top: -3px; border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.35), transparent); }
 /* Specials have their own two spaces at the top of the glass, above the
    five spirits and mixers (the glass fills bottom-up, so this comes last). */
 .glass-specials {
@@ -771,19 +796,28 @@ button.glass { cursor: pointer; }
     flex: 0 0 100%;
     display: grid;
     justify-items: center;
-    gap: 2px;
-    margin-bottom: 4px;
-    padding: 3px 0 4px;
-    border: 1.5px dashed rgba(206, 168, 245, 0.85);
-    border-radius: 8px;
-    background: rgba(123, 63, 190, 0.28);
+    gap: 3px;
+    margin-bottom: 6px;
+    padding: 4px 0 5px;
+    border: 1.5px dashed rgba(243, 230, 196, 0.6);
+    border-radius: 6px;
+    background: rgba(12, 32, 66, 0.55);
 }
-.glass-specials-label { font: 800 9px/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: #e6d2fb; }
+.glass-specials-label { font: 700 10px/1 var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: #f3e6c4; }
 .glass-specials-slots { display: flex; gap: 3px; justify-content: center; }
-.glass-specials .slot.is-empty { border-color: rgba(214, 190, 240, 0.8); background: rgba(123, 63, 190, 0.3); }
+.glass-specials .slot.is-empty { border-color: rgba(243, 230, 196, 0.55); }
 .glass.is-target .glass-body { border-color: var(--kumquat); box-shadow: 0 0 0 3px rgba(240, 138, 36, 0.4), inset 0 0 14px rgba(240, 138, 36, 0.35); }
 .glass.is-target:hover .glass-body { background: rgba(240, 138, 36, 0.2); }
-.glass-label { font-size: 12px; font-weight: 600; color: var(--whitewash-dim); text-align: center; }
+/* The glass's name on a parchment tag. */
+.glass-label {
+    padding: 3px 10px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #f6ecd2, #e9d9b2);
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35);
+    color: #3a2a14;
+    font: 600 13px/1.2 var(--display);
+    text-align: center;
+}
 .glass-actions { display: grid; gap: 6px; justify-items: stretch; width: 100%; }
 .glass-actions .btn { width: 100%; }
 /* Cup doublers stand in the glass, behind its tokens: a straw on the
@@ -1284,7 +1318,7 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     .mat { padding: 10px; }
     .mat-cards .card { --cw: 150px; }
     .is-theirs .mat-cards .card { --cw: 110px; }
-    .glass-spot { max-width: 130px; }
+    .glass-spot { max-width: 160px; }
     .chalk, .rulebook { padding: 14px; }
 }
 
