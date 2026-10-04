@@ -28,6 +28,12 @@ press (`--kumquat`), and white card stock (`--stock`) with dark ink. Keep
 text on blue or wood light, and text on card stock or kumquat dark; check
 contrast (WCAG AA) whenever you add a pairing.
 
+Painted art lives in `static/bar/img/` (WebP): the walnut table tile, the
+mat texture, the score-track frame, the menu sprig, the bag, the glass mugs,
+and one scene per card in `cards/` (picked by `cardArt()` in `bar/app.js`).
+It is decorative (`aria-hidden`); every fact on it is also in the HTML. Make
+new art with the `nano-banana-ui` skill so it matches.
+
 ## Formal spec
 
 Read `specs/ui-frontend.allium` before starting any task. The surfaces defined
