@@ -93,15 +93,6 @@ const SPECIAL_ICONS = {
     vermouth: '<svg viewBox="0 0 24 24"><path d="M4 4h16l-8 9z" fill="#e8c9d6" stroke="#6d3a50" stroke-width="1.3"/><path d="M12 13v7M8 21h8" stroke="#6d3a50" stroke-width="1.5"/><circle cx="14" cy="7" r="1.6" fill="#5f8d2d"/></svg>',
 };
 
-const KIND_ICONS = {
-    karaoke: '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 10a6 6 0 0 0 12 0M12 16v5M8 21h8" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
-    store: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="7" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 5v14c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5M5 10c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
-    refresher: '<svg viewBox="0 0 24 24"><path d="M12 2v20M3.5 7l17 10M20.5 7l-17 10" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>',
-    cup_doubler: '<svg viewBox="0 0 24 24"><path d="M2 11a10 7 0 0 1 20 0z" fill="currentColor"/><path d="M12 11v9a2 2 0 0 1-4 0" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
-    specialist: '<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" fill="currentColor"/></svg>',
-    free_action: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/></svg>',
-    order: '<svg viewBox="0 0 24 24"><path d="M5 2h14v19l-2.3-1.6L14.3 21 12 19.4 9.7 21l-2.4-1.6L5 21z" fill="currentColor"/><path d="M8 7h8M8 10.5h8M8 14h5" style="stroke:var(--scene-bottom)" stroke-width="1.5"/></svg>',
-};
 
 const AMBULANCE = '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 4h17v12H2z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M19 7h6l4 5v4H19z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M21 8.5h3.4l2.6 3.3H21z" fill="#bfe3f5"/><path d="M8.5 6.5h2v3h3v2h-3v3h-2v-3h-3v-2h3z" fill="#e0452b"/><path d="M2 13h27" stroke="#e0452b" stroke-width="1.2"/><circle cx="7" cy="16.5" r="2.3" fill="#2b2b2b"/><circle cx="24" cy="16.5" r="2.3" fill="#2b2b2b"/><rect x="11" y="2" width="3" height="2" fill="#2f8fdb"/></svg>';
 
@@ -920,6 +911,16 @@ const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.6l3 6.6
 // The token a card is about, drawn big in its art: the spirit or mixer.
 const cardSubject = (card) => card.spirit_type ?? card.mixer_type ?? null;
 
+// Each card's painted scene (static/bar/img/cards): one per kind, and the
+// doublers and free-action cards each have their own.
+const FREE_ACTION_ART = { Entrepreneur: 'entrepreneur', 'Greedy Bartender': 'greedy', 'Weak Bladder': 'weak-bladder' };
+
+function cardArt(card) {
+    if (card.card_type === 'cup_doubler') return /umbrella/i.test(card.name) ? 'doubler-umbrella' : 'doubler-straw';
+    if (card.card_type === 'free_action') return FREE_ACTION_ART[card.name] ?? 'entrepreneur';
+    return ['karaoke', 'store', 'refresher', 'specialist', 'order'].includes(card.card_type) ? card.card_type : 'order';
+}
+
 // A card laid out like the printed ones: Greek-key border, art panel with the
 // cost badge and points star, name ribbon, kind, and the rule in a frame.
 function cardFace(card, { claimable, owner, index, compact } = {}) {
@@ -943,9 +944,7 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
         role: claimable ? undefined : 'group',
         'data-k': claimable ? `card-${card.id}` : undefined,
     },
-    h('span.card-art', { 'aria-hidden': 'true' },
-        h('span.card-lights'),
-        h('span.card-emblem', { svg: emblemOf(card) }),
+    h('span.card-art', { 'aria-hidden': 'true', style: { '--art': `url("/static/bar/img/cards/${cardArt(card)}.webp")` } },
         subject ? h('span.card-subject', {}, token(subject, { print: true })) : null,
         h('span.card-costbadge', { cls: `${ps && short ? 'is-short' : ''}${isOrder ? ' is-order' : ''}` },
             h('span.card-costtoks', {},
@@ -1055,7 +1054,6 @@ function renderSupply() {
 
     const bag = h('div.bag-wrap', {},
         h('div.bag', { role: 'img', 'aria-label': `The bag, ${plural(state.bag_contents.length, 'ingredient')} inside` },
-            h('span.bag-neck', { 'aria-hidden': 'true' }),
             h('span.bag-body', {}, h('span.bag-count', { text: state.bag_contents.length }), h('span.bag-word', { text: 'in the bag' }))),
         maxDraw > 0
             ? h('div.draws', { role: 'group', 'aria-label': 'Draw blind from the bag' },
@@ -1109,13 +1107,6 @@ function renderScoreTrack() {
 }
 
 // ─── Player mats ────────────────────────────────────────────────────────────
-
-const STRAW_EMBLEM = '<svg viewBox="0 0 24 24"><path d="M10 24V11Q10 5 15.5 2.5L21 0" fill="none" stroke="currentColor" stroke-width="3.4"/><path d="M10 12Q10 5 16 2.2" fill="none" style="stroke:var(--scene-top)" stroke-width="3.6" stroke-dasharray=".9 1.3"/></svg>';
-
-function emblemOf(card) {
-    if (card.card_type === 'cup_doubler' && /straw/i.test(card.name)) return STRAW_EMBLEM;
-    return KIND_ICONS[card.card_type] ?? '';
-}
 
 // The cup doubler cards on a glass. Games from before cards remembered
 // their glass just know the glass is doubled: they get a straw.

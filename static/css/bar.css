@@ -37,11 +37,12 @@ body {
     color: var(--whitewash);
     font: 400 15px/1.45 var(--ui);
     background-color: var(--wood);
+    /* Painted walnut planks (a mirrored tile, so it repeats without seams),
+       dimmed a touch so the whitewash text keeps its contrast. */
     background-image:
-        repeating-linear-gradient(90deg, transparent 0 238px, rgba(0, 0, 0, 0.38) 238px 240px),
-        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.07) 0 2px, transparent 2px 9px, rgba(255, 220, 180, 0.035) 9px 11px, transparent 11px 27px),
-        repeating-linear-gradient(90deg, transparent 0 61px, rgba(0, 0, 0, 0.09) 61px 64px, transparent 64px 131px),
-        linear-gradient(90deg, #3a2415, #4b2f1c 23%, #3d2616 47%, #4a2e1b 71%, #3a2415);
+        linear-gradient(rgba(36, 22, 12, 0.35), rgba(36, 22, 12, 0.35)),
+        url("/static/bar/img/table.webp");
+    background-size: auto, 960px;
 }
 
 [hidden] { display: none !important; }
@@ -395,33 +396,12 @@ button.tok { cursor: pointer; }
     height: calc(var(--cw) * 0.7);
     border-radius: 0.3em;
     overflow: hidden;
+    /* The card's painted scene; the gradient shows while it loads. */
     background:
-        radial-gradient(ellipse 60% 45% at 50% 100%, rgba(255, 226, 150, 0.38), transparent 70%),
+        var(--art, none) center / cover no-repeat,
         linear-gradient(var(--scene-top), var(--scene-bottom));
     box-shadow: inset 0 0 0 0.1em #5d4527;
 }
-/* A string of café lights across the top of the scene. */
-.card-lights {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 3.4em;
-    height: 1em;
-    border-top: 0.06em solid rgba(20, 12, 4, 0.7);
-    border-radius: 50% 50% 0 0 / 0.5em 0.5em 0 0;
-    background: radial-gradient(circle at 50% 45%, #fff2c0 0 0.12em, rgba(255, 205, 110, 0.55) 0.2em, transparent 0.36em) 0.3em 0 / 1.05em 0.8em repeat-x;
-}
-.card-emblem {
-    position: absolute;
-    left: 50%;
-    top: 62%;
-    width: 38%;
-    height: 38%;
-    transform: translate(-50%, -50%);
-    color: var(--emblem);
-    filter: drop-shadow(0 0.15em 0.2em rgba(0, 0, 0, 0.55));
-}
-.card-emblem svg { width: 100%; height: 100%; display: block; }
 .card-subject { position: absolute; right: 0.4em; bottom: 1.2em; --tp: 2.5em; }
 .card-subject .tok { margin-bottom: 0; }
 
@@ -571,31 +551,17 @@ button.card { cursor: pointer; }
 
 .bag-wrap { display: grid; justify-items: center; gap: 8px; }
 .bag { position: relative; display: grid; justify-items: center; width: 128px; }
-.bag-neck {
-    width: 58px;
-    height: 26px;
-    margin-bottom: -8px;
-    z-index: 1;
-    border-radius: 40% 40% 12px 12px;
-    background:
-        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 3px, transparent 3px 8px),
-        #8d6a40;
-    box-shadow: 0 5px 0 -1px #b3261e, 0 2px 4px rgba(0, 0, 0, 0.4);
-}
 .bag-body {
     display: grid;
     place-items: center;
     align-content: center;
     width: 128px;
-    height: 112px;
-    border-radius: 42% 42% 46% 46% / 30% 30% 62% 62%;
-    background:
-        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 4px),
-        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 4px),
-        radial-gradient(circle at 35% 30%, #a8844f, #7a5a33 70%);
-    box-shadow: inset -8px -10px 18px rgba(0, 0, 0, 0.35), 0 8px 14px rgba(0, 0, 0, 0.45);
-    color: #fff6e6;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    height: 160px;
+    /* The count sits on the plain linen below the blue stripes. */
+    padding-top: 64px;
+    background: url("/static/bar/img/bag.webp") center bottom / contain no-repeat;
+    filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45));
+    color: #2a1a0c;
 }
 .bag-count { font: 800 30px/1 var(--display); }
 .bag-word { font-size: 12px; font-weight: 600; }
@@ -635,11 +601,11 @@ button.card { cursor: pointer; }
     flex-wrap: wrap;
     gap: 3px;
     margin: 0;
-    padding: 10px;
+    padding: 6px;
     list-style: none;
-    background: var(--whitewash);
-    border-radius: 8px;
-    box-shadow: inset 0 0 0 2px var(--aegean), 0 5px 10px rgba(0, 0, 0, 0.4);
+    border: 18px solid var(--aegean);
+    border-image: url("/static/bar/img/score-frame.webp") 70 fill / 18px round;
+    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.4);
 }
 .score-cell {
     position: relative;
@@ -674,6 +640,7 @@ button.card { cursor: pointer; }
     border-radius: 12px;
     background:
         radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.08), transparent 55%),
+        url("/static/bar/img/mat.webp") 0 0 / 384px,
         var(--aegean);
     box-shadow:
         inset 0 0 0 3px var(--aegean),
@@ -945,6 +912,13 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     --tp: 22px;
 }
 .menu-head { text-align: center; margin-bottom: 8px; }
+.menu-head::before {
+    content: "";
+    display: block;
+    height: 52px;
+    margin: -6px auto 4px;
+    background: url("/static/bar/img/menu-sprig.webp") center / contain no-repeat;
+}
 .menu-house { font: 700 13px/1.2 var(--display); color: #9a4f0c; letter-spacing: 0.04em; }
 .menu-title { font: 800 34px/1 var(--display); color: var(--aegean); margin: 2px 0 4px; }
 .menu-sub { font-size: 13px; color: #4c6273; }
