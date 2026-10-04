@@ -452,13 +452,16 @@ button.tok { cursor: pointer; }
 .card-ribbon {
     position: relative;
     margin: -0.75em -0.95em 0;
-    padding: 0.42em 1.5em 0.5em;
+    padding: 0.5em 1.25em 0.55em;
     background: url("/static/bar/img/card-ribbon.webp") center / 100% 100% no-repeat;
     filter: drop-shadow(0 0.1em 0.12em rgba(0, 0, 0, 0.35));
 }
+/* Names stay on one line, shrinking to fit, so every ribbon in a row is
+   the same height and the titles line up. */
 .card-name {
     display: block;
-    font: 800 1em/1.05 var(--display);
+    white-space: nowrap;
+    font: 800 min(1em, calc(var(--cw) * 1.06 / var(--len, 10)))/1.05 var(--display);
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: #1e1810;
@@ -566,15 +569,21 @@ button.card { cursor: pointer; }
 .display .slot.is-lifted { border: 2px dashed rgba(13, 42, 66, 0.55); }
 
 /* Specials that came out of the bag wait on their own small tray. */
-.specials-tray {
-    flex: 1 1 260px;
-    padding: 22px 64px 22px;
+.specials-tray { flex: 1 1 260px; }
+.specials-tray .zone-head { padding: 0 6px; }
+/* The tokens wait on an olive-wood board. */
+.specials-tray-row {
+    padding: 18px 56px;
     background: url("/static/bar/img/specials-tray.webp") center / 100% 100% no-repeat;
     filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45));
-    color: #2a1404;
 }
-.specials-tray .zone-count, .specials-tray .zone-empty { color: #4a2a10; }
-.specials-tray-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: var(--ts); }
+.specials-tray .zone-empty {
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(250, 243, 225, 0.85);
+    color: #3a2410;
+}
+.specials-tray-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: calc(var(--ts) + 36px); }
 .specials-tray .slot.is-lifted { border: 2px dashed rgba(74, 42, 16, 0.6); }
 
 /* ─── Score track ─────────────────────────────────────────────────────── */
@@ -704,16 +713,30 @@ button.glass { cursor: pointer; }
     z-index: 1;
     transform: translate(-50%, -50%);
 }
-/* The picture draws the empty spaces. */
-.glass-body .slot.is-empty { border: 0; background: none; }
+/* Empty spaces: a clear ring over each circle in the picture — solid for
+   spirits and mixers, dashed for the two specials spaces. */
+.glass-body .slot.is-empty {
+    border: 2px solid rgba(234, 241, 245, 0.75);
+    background: rgba(13, 42, 66, 0.22);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.glass-specials .slot.is-empty { border-style: dashed; }
 /* A soft shadow under the mug. */
 .glass-foot { width: 70%; height: 10px; margin-top: -6px; border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.35), transparent); }
-/* The picture also shows the specials spaces and their "Specials only"
-   label; this layer just holds the two special slots over it. */
+/* The picture shows the specials band; this layer holds its two spaces and
+   prints the "Specials only" label over it. */
 .glass-specials { position: absolute; inset: 0; z-index: 1; }
 .glass-specials-label {
-    position: absolute; width: 1px; height: 1px; overflow: hidden;
-    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+    position: absolute;
+    transform: translate(-50%, -50%);
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(234, 241, 245, 0.88);
+    color: var(--aegean-ink);
+    font: 800 calc(var(--gt) * 0.19)/1.2 var(--ui);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 .glass.is-target .glass-body { filter: drop-shadow(0 0 3px var(--kumquat)) drop-shadow(0 0 8px rgba(240, 138, 36, 0.7)); }
 .glass.is-target:hover .glass-body { filter: drop-shadow(0 0 4px var(--kumquat)) drop-shadow(0 0 14px rgba(240, 138, 36, 0.9)); }

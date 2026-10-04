@@ -955,7 +955,7 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
             h('span.card-star-shape', { svg: STAR }),
             h('span.card-star-num', { text: isOrder ? `+${card.bonus}` : kind.points }),
             h('span.card-star-cap', { text: isOrder ? 'Bonus' : 'Points' }))),
-    h('span.card-ribbon', {}, h('span.card-name', { text: card.name })),
+    h('span.card-ribbon', {}, h('span.card-name', { text: card.name, style: { '--len': String(card.name.length) } })),
     h('span.card-kind', { text: kind.label }),
     compact ? null : h('span.card-rule', {}, h('span', { text: cardText(card) })));
 
@@ -1139,11 +1139,13 @@ const GLASS_ART = [
     {
         src: '/static/bar/img/glass-1.webp', w: 314, h: 505, bodyLeft: 26.8, bodyRight: 0.6,
         specials: [[47.74, 22.89], [79.86, 22.78]],
+        label: [63.8, 11.6],
         base: [[46.78, 84.67], [78.49, 84.59], [47.99, 66.08], [79.41, 66.09], [62.94, 46.37]],
     },
     {
         src: '/static/bar/img/glass-2.webp', w: 313, h: 503, bodyLeft: 1, bodyRight: 28.8,
         specials: [[20.76, 23.61], [53.65, 23.29]],
+        label: [37.2, 11.9],
         base: [[21.55, 84.25], [53.77, 84.55], [20.86, 66.17], [53.65, 66.14], [36.61, 46.37]],
     },
 ];
@@ -1176,7 +1178,7 @@ function glass(pid, cupIndex, { interactive }) {
     const placed = (node, [x, y]) => { node.style.left = `${x}%`; node.style.top = `${y}%`; return node; };
     const layers = Array.from({ length: CUP_SIZE }, (_, i) => placed(slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'), art.base[i]));
     const specialSpaces = h('span.glass-specials', {},
-        h('span.glass-specials-label', { text: 'Specials only' }),
+        placed(h('span.glass-specials-label', { text: 'Specials only' }), art.label),
         Array.from({ length: GLASS_SPECIALS }, (_, i) => placed(slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty'), art.specials[i])));
 
     const vessel = h(room ? 'button.glass' : 'div.glass', {
