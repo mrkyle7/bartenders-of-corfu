@@ -28,11 +28,15 @@ press (`--kumquat`), and white card stock (`--stock`) with dark ink. Keep
 text on blue or wood light, and text on card stock or kumquat dark; check
 contrast (WCAG AA) whenever you add a pairing.
 
-Painted art lives in `static/bar/img/` (WebP): the walnut table tile, the
-mat texture, the score-track frame, the menu sprig, the bag, the glass mugs,
-and one scene per card in `cards/` (picked by `cardArt()` in `bar/app.js`).
-It is decorative (`aria-hidden`); every fact on it is also in the HTML. Make
-new art with the `nano-banana-ui` skill so it matches.
+Painted art lives in `static/bar/img/` (WebP): the walnut table tile; the
+player board (`mat-frame` edge as a 9-slice, `mat-centre` under it) with
+`token-space` wells for empty bladder spaces; the `drunk-band` the drunk
+steps are cut from; the card stock (`card-frame`, `card-ribbon`,
+`card-rule`); the score-track frame; the specials tray; the menu sprig; the
+bag; the glass mugs (their circles line up with `GLASS_ART` in `bar/app.js`
+— repaint with `-i` on the old picture and keep its alpha); and one scene
+per card in `cards/` (picked by `cardArt()`). It is decorative
+(`aria-hidden`); every fact on it is also in the HTML. Make new art with the `nano-banana-ui` skill so it matches.
 
 ## Formal spec
 

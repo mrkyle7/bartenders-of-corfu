@@ -367,17 +367,12 @@ button.tok { cursor: pointer; }
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    padding: calc(var(--key) + 0.2em);
-    border: 0;
+    padding: 0.2em;
+    border: var(--key) solid transparent;
+    border-image: url("/static/bar/img/card-frame.webp") 80 fill / var(--key) round;
     color: #221b12;
     text-align: center;
     font: 400 calc(var(--cw) * 0.083)/1.25 var(--ui);
-    background:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 1.2H16M0 14.8H16M0 12.6H16M14 12.6V3.6H4V10H10V6.6H7' fill='none' stroke='%237a5f3a' stroke-width='1.3'/%3E%3C/svg%3E") 0 0 / var(--key) var(--key) repeat-x,
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 1.2H16M0 14.8H16M0 12.6H16M14 12.6V3.6H4V10H10V6.6H7' fill='none' stroke='%237a5f3a' stroke-width='1.3'/%3E%3C/svg%3E") 0 100% / var(--key) var(--key) repeat-x,
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1.2 0V16M14.8 0V16M12.6 0V16M12.6 14H3.6V4H10V10H6.6V7' fill='none' stroke='%237a5f3a' stroke-width='1.3'/%3E%3C/svg%3E") 0 0 / var(--key) var(--key) repeat-y,
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1.2 0V16M14.8 0V16M12.6 0V16M12.6 14H3.6V4H10V10H6.6V7' fill='none' stroke='%237a5f3a' stroke-width='1.3'/%3E%3C/svg%3E") 100% 0 / var(--key) var(--key) repeat-y,
-        radial-gradient(ellipse at 50% 40%, #f6ecd6, #e6d6b4 80%);
     box-shadow: 0 1px 0 #b9a47c, 0 4px 9px rgba(0, 0, 0, 0.45);
     --scene-top: #1b1f4a;
     --scene-bottom: #4a1f5c;
@@ -456,27 +451,17 @@ button.tok { cursor: pointer; }
 
 .card-ribbon {
     position: relative;
-    margin: -0.8em -0.55em 0;
-    padding: 0.28em 0.35em;
-    background: linear-gradient(#fcf6e8, #e8d8b3);
-    border-block: 0.09em solid #6b5230;
-    box-shadow: 0 0.12em 0.2em rgba(0, 0, 0, 0.35);
+    margin: -0.75em -0.95em 0;
+    padding: 0.5em 1.25em 0.55em;
+    background: url("/static/bar/img/card-ribbon.webp") center / 100% 100% no-repeat;
+    filter: drop-shadow(0 0.1em 0.12em rgba(0, 0, 0, 0.35));
 }
-.card-ribbon::before, .card-ribbon::after {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    bottom: -0.4em;
-    width: 0.9em;
-    height: 1.25em;
-    background: #cdb68a;
-    border-block: 0.09em solid #6b5230;
-}
-.card-ribbon::before { left: -0.5em; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 38% 50%); }
-.card-ribbon::after { right: -0.5em; clip-path: polygon(0 0, 100% 0, 62% 50%, 100% 100%, 0 100%); }
+/* Names stay on one line, shrinking to fit, so every ribbon in a row is
+   the same height and the titles line up. */
 .card-name {
     display: block;
-    font: 800 1em/1.05 var(--display);
+    white-space: nowrap;
+    font: 800 min(1em, calc(var(--cw) * 1.06 / var(--len, 10)))/1.05 var(--display);
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: #1e1810;
@@ -493,10 +478,8 @@ button.tok { cursor: pointer; }
     display: grid;
     place-items: center;
     padding: 0.3em 0.4em;
-    border-radius: 0.3em;
-    background: #faf3e1;
-    border: 0.12em solid #b38a38;
-    box-shadow: inset 0 0 0 0.1em #faf3e1, inset 0 0 0 0.17em #d4b36a;
+    border: 0.45em solid transparent;
+    border-image: url("/static/bar/img/card-rule.webp") 36 fill / 0.45em stretch;
     font: 500 0.84em/1.22 var(--display);
     color: #221b12;
 }
@@ -524,6 +507,9 @@ button.card { cursor: pointer; }
 .card-back {
     display: grid;
     place-items: center;
+    padding: calc(var(--key) + 0.2em);
+    border: 0;
+    border-image: none;
     background:
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 1.2H16M0 14.8H16M0 12.6H16M14 12.6V3.6H4V10H10V6.6H7' fill='none' stroke='%23eaf1f5' stroke-width='1.3'/%3E%3C/svg%3E") 0 0 / var(--key) var(--key) repeat-x,
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 1.2H16M0 14.8H16M0 12.6H16M14 12.6V3.6H4V10H10V6.6H7' fill='none' stroke='%23eaf1f5' stroke-width='1.3'/%3E%3C/svg%3E") 0 100% / var(--key) var(--key) repeat-x,
@@ -583,15 +569,22 @@ button.card { cursor: pointer; }
 .display .slot.is-lifted { border: 2px dashed rgba(13, 42, 66, 0.55); }
 
 /* Specials that came out of the bag wait on their own small tray. */
-.specials-tray {
-    flex: 1 1 240px;
-    padding: 8px 12px 10px;
-    border-radius: 10px;
-    background: rgba(74, 38, 114, 0.35);
-    border: 1.5px dashed rgba(214, 190, 240, 0.6);
+.specials-tray { flex: 1 1 260px; }
+.specials-tray .zone-head { padding: 0 6px; }
+/* The tokens wait on an olive-wood board. */
+.specials-tray-row {
+    padding: 18px 56px;
+    background: url("/static/bar/img/specials-tray.webp") center / 100% 100% no-repeat;
+    filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45));
 }
-.specials-tray-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: var(--ts); }
-.specials-tray .slot.is-lifted { border: 2px dashed rgba(214, 190, 240, 0.7); }
+.specials-tray .zone-empty {
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(250, 243, 225, 0.85);
+    color: #3a2410;
+}
+.specials-tray-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: calc(var(--ts) + 36px); }
+.specials-tray .slot.is-lifted { border: 2px dashed rgba(74, 42, 16, 0.6); }
 
 /* ─── Score track ─────────────────────────────────────────────────────── */
 
@@ -636,20 +629,17 @@ button.card { cursor: pointer; }
 .mat {
     display: grid;
     gap: 12px;
-    padding: 12px 14px 14px;
-    border-radius: 12px;
-    background:
-        radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.08), transparent 55%),
-        url("/static/bar/img/mat.webp") 0 0 / 384px,
-        var(--aegean);
-    box-shadow:
-        inset 0 0 0 3px var(--aegean),
-        inset 0 0 0 5px var(--line),
-        0 4px 0 var(--aegean-deep),
-        0 12px 22px rgba(0, 0, 0, 0.5);
-    border-top: 6px solid var(--seat);
+    padding: 6px 6px 8px;
+    border: 14px solid transparent;
+    /* The key edge repeats round the board; the painted centre stretches
+       under everything inside it. */
+    border-image: url("/static/bar/img/mat-frame.webp") 46 / 14px round;
+    background: url("/static/bar/img/mat-centre.webp") center / 100% 100% no-repeat, var(--aegean);
+    background-clip: padding-box;
+    /* The seat's colour as a printed stripe across the top of the board. */
+    box-shadow: inset 0 5px 0 var(--seat), 0 12px 22px rgba(0, 0, 0, 0.5);
 }
-.mat.is-turn { box-shadow: inset 0 0 0 3px var(--aegean), inset 0 0 0 5px var(--line), 0 4px 0 var(--aegean-deep), 0 0 0 4px var(--kumquat), 0 12px 22px rgba(0, 0, 0, 0.5); }
+.mat.is-turn { box-shadow: inset 0 5px 0 var(--seat), 0 0 0 4px var(--kumquat), 0 12px 22px rgba(0, 0, 0, 0.5); }
 .mat.is-out { filter: saturate(0.35) brightness(0.8); }
 
 .mat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
@@ -680,8 +670,9 @@ button.card { cursor: pointer; }
     align-items: flex-start;
     gap: 14px;
     padding: 10px 12px;
-    border: 1.5px dashed var(--line);
     border-radius: 8px;
+    background: var(--zone-bg);
+    box-shadow: var(--zone-edge);
 }
 .body-area { display: grid; gap: 10px; }
 
@@ -722,16 +713,30 @@ button.glass { cursor: pointer; }
     z-index: 1;
     transform: translate(-50%, -50%);
 }
-/* The picture draws the empty spaces. */
-.glass-body .slot.is-empty { border: 0; background: none; }
+/* Empty spaces: a clear ring over each circle in the picture — solid for
+   spirits and mixers, dashed for the two specials spaces. */
+.glass-body .slot.is-empty {
+    border: 2px solid rgba(234, 241, 245, 0.75);
+    background: rgba(13, 42, 66, 0.22);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.glass-specials .slot.is-empty { border-style: dashed; }
 /* A soft shadow under the mug. */
 .glass-foot { width: 70%; height: 10px; margin-top: -6px; border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.35), transparent); }
-/* The picture also shows the specials spaces and their "Specials only"
-   label; this layer just holds the two special slots over it. */
+/* The picture shows the specials band; this layer holds its two spaces and
+   prints the "Specials only" label over it. */
 .glass-specials { position: absolute; inset: 0; z-index: 1; }
 .glass-specials-label {
-    position: absolute; width: 1px; height: 1px; overflow: hidden;
-    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+    position: absolute;
+    transform: translate(-50%, -50%);
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(234, 241, 245, 0.88);
+    color: var(--aegean-ink);
+    font: 800 calc(var(--gt) * 0.19)/1.2 var(--ui);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 .glass.is-target .glass-body { filter: drop-shadow(0 0 3px var(--kumquat)) drop-shadow(0 0 8px rgba(240, 138, 36, 0.7)); }
 .glass.is-target:hover .glass-body { filter: drop-shadow(0 0 4px var(--kumquat)) drop-shadow(0 0 14px rgba(240, 138, 36, 0.9)); }
@@ -824,10 +829,19 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 .mouth-note.is-danger { color: #ffd0c9; font-weight: 800; }
 
 /* Bladder: one printed space per ingredient; toilet tokens seal from the right. */
-.bladder { padding: 8px 10px; border: 1.5px dashed var(--line); border-radius: 8px; }
+.mat {
+    --zone-bg: rgba(8, 28, 48, 0.3);
+    --zone-edge: inset 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 -1px 0 rgba(234, 241, 245, 0.12);
+}
+.bladder { padding: 8px 10px; border-radius: 8px; background: var(--zone-bg); box-shadow: var(--zone-edge); }
+/* Empty bladder spaces: wells pressed into the board. */
+.bladder .slot.is-empty {
+    border: 0;
+    background: url("/static/bar/img/token-space.webp") center / 112% no-repeat;
+}
 .bladder-slots { display: flex; flex-wrap: wrap; gap: 5px; }
 .bladder.is-full .bladder-slots { gap: 1px; }
-.bladder.is-over { background: rgba(192, 57, 43, 0.35); border-color: #ffb3a7; }
+.bladder.is-over { background: rgba(192, 57, 43, 0.35); box-shadow: var(--zone-edge), inset 0 0 0 2px #ffb3a7; }
 .slot.is-sealed { border: 0; }
 .loo {
     display: inline-grid;
@@ -846,7 +860,7 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 .bladder .btn { margin-top: 8px; }
 
 /* Drunk track: sober on the left, hospital on the right. */
-.drunk { padding: 8px 10px; border: 1.5px dashed var(--line); border-radius: 8px; }
+.drunk { padding: 8px 10px; border-radius: 8px; background: var(--zone-bg); box-shadow: var(--zone-edge); }
 .drunk-steps { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .drunk-step {
     position: relative;
@@ -859,18 +873,20 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     min-height: 50px;
     padding: 5px 1px 4px;
     border-radius: 5px;
+    background: url("/static/bar/img/drunk-band.webp") 0 0 / 600% 100% no-repeat;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18), inset 0 2px 3px rgba(255, 255, 255, 0.25);
     font: 800 13px/1 var(--display);
 }
 .drunk-word { font: 700 9.5px/1 var(--ui); white-space: nowrap; }
 .drunk-ambulance { display: block; width: 26px; height: 16px; }
 .drunk-ambulance svg { display: block; width: 100%; height: 100%; }
 .drunk-step.lvl-6 .drunk-word { background: #fff; border-radius: 3px; padding: 1px 3px; }
-.drunk-step.lvl-0 { background: #cfe8d2; color: #1d4a26; }
-.drunk-step.lvl-1 { background: #e2ebb9; color: #3d4410; }
-.drunk-step.lvl-2 { background: #f3e2a2; color: #4a3a05; }
-.drunk-step.lvl-3 { background: #f7c98b; color: #4d2a02; }
-.drunk-step.lvl-4 { background: #f39b77; color: #4d1604; }
-.drunk-step.lvl-5 { background: #e0452b; color: #fff; }
+.drunk-step.lvl-0 { background-position-x: 0%; color: #1d4a26; }
+.drunk-step.lvl-1 { background-position-x: 20%; color: #3d4410; }
+.drunk-step.lvl-2 { background-position-x: 40%; color: #4a3a05; }
+.drunk-step.lvl-3 { background-position-x: 60%; color: #4d2a02; }
+.drunk-step.lvl-4 { background-position-x: 80%; color: #4d1604; }
+.drunk-step.lvl-5 { background-position-x: 100%; color: #fff; }
 .drunk-step.lvl-6 { background: repeating-linear-gradient(45deg, #fff 0 4px, #e0452b 4px 8px); color: #7d1f15; }
 .drunk-step.is-here { box-shadow: 0 0 0 3px var(--whitewash); }
 .drunk-step .pawn { position: absolute; top: -6px; right: -3px; width: 11px; height: 15px; }
