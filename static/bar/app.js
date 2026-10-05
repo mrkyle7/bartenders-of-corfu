@@ -1421,6 +1421,7 @@ function mat(pid) {
         h('span.pawn', { 'aria-hidden': 'true' }),
         h('h2.mat-name', { text: isMe ? `${seatName(pid)} (you)` : seatName(pid) }),
         theirTurn ? h('span.mat-turn', { text: isMe ? 'Your turn' : 'Playing' }) : null,
+        pid === seatOrder()[0] ? h('span.mat-first', { text: 'Goes first', title: 'Started the game: turns go round from here' }) : null,
         status ? h('span.mat-status', { text: status }) : null,
         h('span.mat-songs', { text: songs ? `${songs} of 3 songs` : '' }),
         h('span.mat-points', {}, h('strong', { text: ps.points }), ' points')),
@@ -1998,15 +1999,14 @@ function render({ force = false } = {}) {
     turnbar();
     document.body.classList.toggle('is-my-turn', myTurn());
 
-    const seats = seatOrder();
-    const start = Math.max(0, seats.indexOf(me.id));
-    const around = [...seats.slice(start + 1), ...seats.slice(0, start)].filter((pid) => pid !== me.id);
+    // Everyone else's mats go under yours, in turn order
+    const others = seatOrder().filter((pid) => pid !== me.id);
 
     $('table').replaceChildren(...[
-        around.length ? h('div.across', { 'aria-label': 'Other players' }, around.map(mat)) : null,
         // The bag and display sit under the cards, right above your mat
         h('div.middle', {}, h('div.middle-main', {}, renderMarket(), renderSupply()), h('div.middle-side', {}, renderScoreTrack())),
         isMember() && gs().player_states[me.id] ? mat(me.id) : null,
+        others.length ? h('div.across', { 'aria-label': 'Other players, in turn order' }, others.map(mat)) : null,
         h('div.extras', {}, chalkboard()),
         housekeeping(),
     ].filter(Boolean));

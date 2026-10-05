@@ -645,6 +645,7 @@ button.card { cursor: pointer; }
 .mat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .mat-name { font: 800 18px/1.15 var(--display); }
 .mat-turn { padding: 2px 8px; border-radius: 4px; background: var(--kumquat); color: var(--kumquat-ink); font-weight: 700; font-size: 13px; }
+.mat-first { padding: 2px 8px; border-radius: 4px; border: 1.5px solid var(--whitewash); color: var(--whitewash); font-weight: 700; font-size: 13px; }
 .mat-status { padding: 2px 8px; border-radius: 4px; background: var(--danger); color: #fff; font-weight: 700; font-size: 13px; }
 .mat-songs { font-size: 13px; color: var(--whitewash-dim); }
 .mat-points { margin-left: auto; font-size: 14px; }
@@ -1213,16 +1214,16 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 }
 
 @media (max-width: 860px) {
-    /* One column: bag and display sit right above your mat, the score
-       track moves below it. */
+    /* One column: bag and display sit right above your mat, then the
+       score track, then everyone else's mats. */
     .middle, .middle-main, .middle-side { display: contents; }
-    .across { order: 1; }
     .market { order: 2; }
     .supply { order: 3; }
     .mat.is-mine { order: 4; }
     .score { order: 5; }
-    .extras { order: 6; grid-template-columns: 1fr; }
-    .housekeeping { order: 7; }
+    .across { order: 6; }
+    .extras { order: 7; grid-template-columns: 1fr; }
+    .housekeeping { order: 8; }
     .mat-board { grid-template-columns: 1fr; }
     .bar-area { justify-content: center; flex-wrap: wrap; }
     .sheet {

@@ -146,6 +146,13 @@ def test_bar_everyone_mat_on_show(
     assert theirs.locator(".glass").count() == 2
     assert theirs.locator(".bladder-slots .slot").count() == 8
     assert theirs.locator(".drunk-step").count() == 7
+    # They sit under your mat, and one mat shows who went first
+    assert page.evaluate(
+        "document.querySelector('.mat.is-mine')"
+        ".compareDocumentPosition(document.querySelector('.mat.is-theirs'))"
+        " & Node.DOCUMENT_POSITION_FOLLOWING"
+    )
+    assert page.locator(".mat .mat-first").count() == 1
 
 
 def test_old_game_links_open_the_bar(page, base_url, new_user, new_game):
