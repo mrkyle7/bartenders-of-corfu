@@ -153,6 +153,8 @@ def test_bar_everyone_mat_on_show(
         " & Node.DOCUMENT_POSITION_FOLLOWING"
     )
     assert page.locator(".mat .mat-first").count() == 1
+    assert page.locator(".mat .mat-first").inner_text() == "Starting player"
+    assert page.locator(".overview-player .ov-first").count() == 1
 
 
 def test_old_game_links_open_the_bar(page, base_url, new_user, new_game):

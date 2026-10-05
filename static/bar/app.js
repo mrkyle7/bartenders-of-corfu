@@ -1421,7 +1421,7 @@ function mat(pid) {
         h('span.pawn', { 'aria-hidden': 'true' }),
         h('h2.mat-name', { text: isMe ? `${seatName(pid)} (you)` : seatName(pid) }),
         theirTurn ? h('span.mat-turn', { text: isMe ? 'Your turn' : 'Playing' }) : null,
-        pid === seatOrder()[0] ? h('span.mat-first', { text: 'Goes first', title: 'Started the game: turns go round from here' }) : null,
+        pid === seatOrder()[0] ? h('span.mat-first', { text: 'Starting player', title: 'Took the first turn: turns go round from here' }) : null,
         status ? h('span.mat-status', { text: status }) : null,
         h('span.mat-songs', { text: songs ? `${songs} of 3 songs` : '' }),
         h('span.mat-points', {}, h('strong', { text: ps.points }), ' points')),
@@ -1750,14 +1750,16 @@ function renderOverview() {
             const turn = gs().player_turn === pid && !gs().winner;
             const out = ps.status === 'hospitalised' ? 'Hospital' : ps.status === 'wet' ? 'Wet' : ps.status === 'quit' ? 'Left' : null;
             const songs = ps.cards.filter((c) => c.card_type === 'karaoke').length;
+            const first = pid === seatOrder()[0];
             return h('li.overview-player', {
                 cls: `${turn ? 'is-turn' : ''}${out ? ' is-out' : ''}${pid === me.id ? ' is-mine' : ''}`,
                 style: { '--seat': seatColour(pid) },
                 'aria-label': `${pid === me.id ? 'You' : seatName(pid)}: ${plural(ps.points, 'point')} of ${target}, `
                     + `${out ?? `drunk ${ps.drunk_level}`}, bladder ${ps.bladder.length} of ${ps.bladder_capacity}`
-                    + `${songs ? `, ${plural(songs, 'song')}` : ''}${turn ? ', playing now' : ''}`,
+                    + `${songs ? `, ${plural(songs, 'song')}` : ''}${first ? ', starting player' : ''}${turn ? ', playing now' : ''}`,
             },
             h('span.pawn', { 'aria-hidden': 'true' }),
+            first ? h('span.ov-first', { text: '1st', title: 'Starting player', 'aria-hidden': 'true' }) : null,
             h('span.ov-name', { text: pid === me.id ? 'You' : seatName(pid), 'aria-hidden': 'true' }),
             h('span.ov-stats', { 'aria-hidden': 'true' },
                 h('b', { text: `${ps.points}` }), ' pts',
