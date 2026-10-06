@@ -36,7 +36,7 @@ Reset all data: `supabase db reset --network-id k3s-net`
 The installed PWA uses [Web Push](https://developer.mozilla.org/en-US/docs/Web/API/Push_API) ([VAPID](https://datatracker.ietf.org/doc/html/rfc8292)) to notify players when it's their turn or a game ends — even when the app is fully closed.
 
 - **Turning them on:** players press "Turn on notifications" on the home page; the browser only asks for permission then. Every page load after that re-sends the device's subscription, so a device the server forgot, one signed in to another account, or one subscribed with old VAPID keys is picked up again (`static/push.js`).
-- **Who's told:** not a player looking at the game. Game pages (classic, table view and bar top) only poll while they're showing, and `POST /v1/games/{id}/away` when hidden; a player who polled in the last 15 seconds is watching (`app/presence.py`, kept in each instance's memory, so with several instances an extra notification can slip through).
+- **Who's told:** not a player looking at the game. The game page (bar top) only polls while it's showing, and sends `POST /v1/games/{id}/away` when hidden; a player who polled in the last 15 seconds is watching (`app/presence.py`, kept in each instance's memory, so with several instances an extra notification can slip through).
 - **When:** after every game action, as a background task once the reply has gone, so a slow push service never holds up a move. It reads the game afresh, since bots move within the same request: the next human is told, not the bot. Game over and cancelled games go to every human not watching.
 - **Each game** has one notification at a time (`tag`), the latest replacing the last. Notifications wait a day for an offline device.
 
@@ -73,14 +73,19 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
 
 | What | Where |
 |---|---|
-| VAPID key generation | `scripts/generate_vapid_keys.py` |
+| VAPID keys | Made by the server and kept in the database (`vapid_keys`): see below |
 | Server-side send | `app/push.py` |
 | Subscription storage | `supabase/migrations/20260509000001_push_subscriptions.sql` |
 | Who's told, and when | `_notify_after_action` in `app/api.py`, `app/presence.py` |
 | API endpoints | `POST /v1/push-subscriptions` (https push services only), `DELETE /v1/push-subscriptions` (your own devices), `GET /vapid-public-key`, `POST /v1/games/{id}/away` |
 | Service worker handler | `static/sw.js` — `push` and `notificationclick` events |
-| Browser subscription | `static/push.js` (`window.bocPush`), used by `static/script.js`, `static/game.js`, `static/play/app.js` and `static/bar/app.js` |
-| Infrastructure | `terraform/bartenders.tf` in [mrkyle7/cheetahmoongames](https://github.com/mrkyle7/cheetahmoongames) — `vapid-private-key` and `vapid-public-key` secrets |
+| Browser subscription | `static/push.js` (`window.bocPush`), used by `static/script.js` and `static/bar/app.js` |
+
+## The keys
+
+The key pair that signs notifications lives in the database (`vapid_keys`, one row), so there are no secrets to set up. The first server that needs it makes it and saves it, and every later server uses the same pair (`get_keys()` in `app/push.py`). If the database can't be read, no notifications are sent and `/vapid-public-key` answers 503 until it can.
+
+The keys used to be the Secret Manager secrets `vapid-public-key` and `vapid-private-key`, read as `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. A server that finds no pair in the database saves those, if it has them, so devices that already had notifications keep getting them. After that the secrets can be removed from `terraform/bartenders.tf` in [mrkyle7/cheetahmoongames](https://github.com/mrkyle7/cheetahmoongames). This is the way ADDING_A_GAME.md there describes for every game's notifications.
 
 ## References
 
@@ -102,7 +107,7 @@ With `COOKIE_DOMAIN=cheetahmoongames.com` (set in that Terraform), the login coo
 
 Bartenders' accounts are the Cheetah Moon accounts for every game on the site:
 
-- Players sign in at `https://cheetahmoongames.com/login`. With `LOGIN_URL` set (also in that Terraform), `GET /login` here redirects there, with `next` pointing back to the page that sent the player. Unset, `/login` serves the page in `static/login.html` as before.
+- Players sign in at `https://cheetahmoongames.com/login`: `GET /login` here redirects there, with `next` pointing back to the page that sent the player (`LOGIN_URL` overrides the address, e.g. for local runs). `GET /profile` likewise redirects to the account page there, `https://cheetahmoongames.com/profile` (`PROFILE_URL` overrides it), which changes email and password through `PATCH /v1/users/me/email` and `PATCH /v1/users/me/password` here. There are no sign-in or profile pages in this repo.
 - The home page passes sign-in, sign-up and sign-out on to `/login`, `/register`, `/logout` and `/userDetails` here.
 - `GET /v1/auth/keys/{kid}` returns the public key for a login token's `kid`, so other games can check the `userjwt` cookie themselves.
 - Forgotten passwords: `POST /v1/auth/password-reset {email, next?}` emails a one-time link (valid for an hour, at most 3 an hour per account) through [Brevo](https://www.brevo.com), always answering 202 so it doesn't reveal which emails have accounts. `POST /v1/auth/password-reset/confirm {token, new_password}` sets the password, signs out every other session and signs the player in. The pages for it are on the home page. Emails need `BREVO_API_KEY` (the `BREVO_API_KEY` GitHub secret, synced to Secret Manager on deploy) and `EMAIL_FROM`, a sender Brevo has verified; without a key nothing is sent. Code: `app/password_reset.py`, `app/email_sender.py`.

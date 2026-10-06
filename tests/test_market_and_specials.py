@@ -165,6 +165,10 @@ def test_end_turn_gives_up_a_possible_claim():
     ps.bladder = [Ingredient.RUM] * 3
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
     gs.card_rows[1].cards = []
+    # A card the rum can pay for, so a claim is always possible
+    _row(gs, 3).cards = [
+        Card(id="c-store", card_type="store", name="Rum Store", spirit_type="RUM")
+    ]
     gs, _ = sell_cup(gs, pid, 0, [])
     gs, payload = end_turn(gs, pid)
     assert gs.player_turn != pid
@@ -244,13 +248,13 @@ def test_a_drink_nobody_ordered_scores_as_usual():
 # ─── Clearing rows ───────────────────────────────────────────────────────────
 
 
-def test_clearing_orders_needs_drunk_three_and_is_free_once_a_turn():
+def test_clearing_orders_needs_drunk_two_and_is_free_once_a_turn():
     gs = _game()
     pid, ps = _me(gs)
-    ps.drunk_level = 2
+    ps.drunk_level = 1
     with pytest.raises(GameException):
         refresh_card_row(gs, pid, 2)
-    ps.drunk_level = 3
+    ps.drunk_level = 2
     before = [c.id for c in _row(gs, 2).cards]
     new, payload = refresh_card_row(gs, pid, 2)
     assert payload["is_free_action"] is True
@@ -326,25 +330,45 @@ def test_specials_drawn_to_fill_the_display_go_to_the_specials_display(monkeypat
     assert gs.bag_contents == []
 
 
-def test_a_blind_draw_skips_specials_onto_the_specials_display(monkeypatch):
+def test_a_blind_draw_hands_you_specials_to_deal_with(monkeypatch):
+    """Specials drawn blind aren't set aside: they're yours to put on a
+    glass rim or drink, like any other token."""
     monkeypatch.setattr("app.GameState.random.choice", lambda seq: seq[0])
     gs = _game()
-    pid, _ = _me(gs)
+    pid, ps = _me(gs)
     gs.specials_display = []
-    _bag_of(gs, [Ingredient.BITTERS, Ingredient.VERMOUTH, Ingredient.VODKA])
-    new, payload = actions.draw_from_bag(gs, pid, 1)
-    assert new.bag_draw_pending == [Ingredient.VODKA]
-    assert sorted(i.name for i in new.specials_display) == ["BITTERS", "VERMOUTH"]
-    assert sorted(payload["to_specials_display"]) == ["BITTERS", "VERMOUTH"]
+    _bag_of(gs, [Ingredient.BITTERS, Ingredient.LEMON, Ingredient.VODKA])
+    gs, payload = actions.draw_from_bag(gs, pid, 3)
+    assert gs.bag_draw_pending == [
+        Ingredient.BITTERS,
+        Ingredient.LEMON,
+        Ingredient.VODKA,
+    ]
+    assert gs.specials_display == [] and payload["to_specials_display"] == []
+    assert gs.player_states[pid].take_count == 3  # sober: take 3
+    gs, _ = take_ingredients(
+        gs,
+        pid,
+        [
+            {"source": "pending", "disposition": "cup", "cup_index": 0},  # rim
+            {"source": "pending", "disposition": "drink"},
+            {"source": "pending", "disposition": "cup", "cup_index": 0},
+        ],
+    )
+    me = gs.player_states[pid]
+    assert me.cups[0].ingredients == [Ingredient.BITTERS, Ingredient.VODKA]
+    assert Ingredient.LEMON in me.bladder
 
 
-def test_a_blind_draw_needs_enough_spirits_and_mixers_in_the_bag():
+def test_a_blind_draw_can_take_whatever_is_left_in_the_bag():
     gs = _game()
     pid, _ = _me(gs)
     _bag_of(gs, [Ingredient.BITTERS, Ingredient.VODKA])
+    new, _ = actions.draw_from_bag(gs, pid, 2)
+    assert sorted(i.name for i in new.bag_draw_pending) == ["BITTERS", "VODKA"]
     with pytest.raises(GameException) as exc:
-        actions.draw_from_bag(gs, pid, 2)
-    assert exc.value.status_code == 409
+        actions.draw_from_bag(gs, pid, 3)
+    assert exc.value.status_code in (400, 409)
 
 
 def test_a_special_goes_in_a_glass_on_top_of_five():
@@ -448,6 +472,10 @@ def test_specials_never_pay_for_cards():
     ps.bladder = [Ingredient.LEMON, Ingredient.SUGAR, Ingredient.BITTERS]
     for row in gs.card_rows:
         for card in row.cards:
+            # A specialist takes one of its own special (sugar pays for the
+            # Rum Specialist); that's tested on its own. Nothing else does.
+            if card.card_type == "specialist":
+                continue
             assert not actions._can_afford(ps, card)
 
 
@@ -689,7 +717,7 @@ def _ability(gs: GameState, card: Card) -> None:
     _row(gs, 3).cards = [card]
 
 
-def test_claiming_pays_the_cost_into_the_bag():
+def test_claiming_leaves_the_cost_in_your_bladder():
     gs = _game()
     pid, ps = _me(gs)
     _row(gs, 1).cards = []
@@ -705,9 +733,25 @@ def test_claiming_pays_the_cost_into_the_bag():
     ps.bladder = [Ingredient.VODKA, Ingredient.VODKA, Ingredient.SODA]
     bag = len(gs.bag_contents)
     new, payload = claim_card(gs, pid, "sp-vodka")
-    assert new.player_states[pid].bladder == [Ingredient.SODA]
-    assert len(new.bag_contents) == bag + 2
-    assert payload["paid"] == ["VODKA", "VODKA"]
+    assert new.player_states[pid].bladder == ps.bladder  # checked, not spent
+    assert len(new.bag_contents) == bag
+    assert payload["cost"] == ["VODKA", "VODKA"]
+
+
+def test_a_cup_doubler_remembers_which_glass_it_is_on():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 1).cards = []
+    _ability(gs, Card(id="umb", card_type="cup_doubler", name="Cocktail Umbrella"))
+    ps.bladder = [Ingredient.RUM] * 3
+    new, _ = claim_card(gs, pid, "umb", cup_index=1, spirit_type="RUM")
+    me = new.player_states[pid]
+    assert me.cups[1].has_cup_doubler and not me.cups[0].has_cup_doubler
+    card = next(c for c in me.cards if c["id"] == "umb")
+    assert card["cup_index"] == 1
+    # It survives a save and load
+    again = GameState.from_dict(new.to_dict()).player_states[pid]
+    assert next(c for c in again.cards if c["id"] == "umb")["cup_index"] == 1
 
 
 @pytest.mark.parametrize(
@@ -731,8 +775,8 @@ def test_a_specialist_can_be_paid_with_its_special(spirit, special):
     ps.bladder = [Ingredient[special]]
     new, payload = claim_card(gs, pid, "sp")
     assert new.player_states[pid].points == 2
-    assert new.player_states[pid].bladder == []
-    assert payload["paid"] == [special]
+    assert new.player_states[pid].bladder == [Ingredient[special]]
+    assert payload["cost"] == [special]
 
 
 def test_a_specialist_paid_with_spirits_when_you_say_so():
@@ -745,8 +789,8 @@ def test_a_specialist_paid_with_spirits_when_you_say_so():
     )
     ps.bladder = [Ingredient.SUGAR, Ingredient.RUM, Ingredient.RUM]
     new, payload = claim_card(gs, pid, "sp", spirit_type="RUM")
-    assert payload["paid"] == ["RUM", "RUM"]
-    assert new.player_states[pid].bladder == [Ingredient.SUGAR]
+    assert payload["cost"] == ["RUM", "RUM"]
+    assert len(new.player_states[pid].bladder) == 3
 
 
 def test_the_wrong_special_does_not_pay_for_a_specialist():
@@ -761,7 +805,7 @@ def test_the_wrong_special_does_not_pay_for_a_specialist():
         claim_card(gs, pid, "sp")
 
 
-def test_karaoke_needs_drunk_three_and_takes_two_spirits():
+def test_karaoke_needs_drunk_three_and_two_spirits():
     gs = _game()
     pid, ps = _me(gs)
     card = next(c for c in _row(gs, 1).cards if c.spirit_type == "GIN")
@@ -772,10 +816,10 @@ def test_karaoke_needs_drunk_three_and_takes_two_spirits():
     ps.drunk_level = 3
     new, payload = claim_card(gs, pid, card.id)
     me = new.player_states[pid]
-    assert me.bladder == [Ingredient.GIN]
+    assert me.bladder == [Ingredient.GIN] * 3  # the cost stays
     assert me.karaoke_cards_claimed == 1
-    assert me.drunk_level == 3  # drunk is checked, not paid
-    assert payload["paid"] == ["GIN", "GIN"]
+    assert me.drunk_level == 3
+    assert payload["cost"] == ["GIN", "GIN"]
 
 
 def test_one_spirit_does_not_sing_a_song_however_drunk():
@@ -788,7 +832,7 @@ def test_one_spirit_does_not_sing_a_song_however_drunk():
         claim_card(gs, pid, card.id)
 
 
-def test_a_store_card_pays_one_spirit_and_stores_the_rest():
+def test_a_store_card_stores_all_of_its_spirit():
     gs = _game()
     pid, ps = _me(gs)
     _row(gs, 1).cards = []
@@ -801,8 +845,8 @@ def test_a_store_card_pays_one_spirit_and_stores_the_rest():
     new, _ = claim_card(gs, pid, "st")
     me = new.player_states[pid]
     assert me.bladder == []
-    assert me.cards[-1]["stored_spirits"] == ["GIN", "GIN"]
-    assert len(new.bag_contents) == bag + 1
+    assert me.cards[-1]["stored_spirits"] == ["GIN", "GIN", "GIN"]
+    assert len(new.bag_contents) == bag
 
 
 def test_sell_actions_name_the_order_and_its_bonus():

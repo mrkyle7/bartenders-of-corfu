@@ -117,6 +117,22 @@
 
     window.bocPush = bocPush;
 
+    // Keeps the sign-in fresh while Bartenders is open: at most every
+    // 6 hours, on page load and while the page stays open. (The service
+    // worker used to do this from its background polling.)
+    const REFRESH_MS = 6 * 60 * 60 * 1000;
+    function refreshSignIn() {
+        let last = 0;
+        try { last = Number(localStorage.getItem('bocTokenRefreshedAt')) || 0; } catch (_) {}
+        if (Date.now() - last < REFRESH_MS) return;
+        fetch('/refresh-token', { method: 'POST' }).then((resp) => {
+            if (!resp.ok) return;
+            try { localStorage.setItem('bocTokenRefreshedAt', String(Date.now())); } catch (_) {}
+        }).catch(() => {});
+    }
+    refreshSignIn();
+    setInterval(refreshSignIn, REFRESH_MS);
+
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
     }

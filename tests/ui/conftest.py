@@ -19,6 +19,11 @@ import pytest
 
 PORT = 8765
 BASE = f"http://127.0.0.1:{PORT}"
+# Signing in happens on cheetahmoongames.com. Under test, /login sends the
+# browser here instead (a page the test server doesn't have), so a redirect to
+# sign in can be seen without leaving the machine: Playwright can't intercept
+# the second hop of a redirect.
+SIGN_IN_URL = f"{BASE}/__sign-in"
 
 
 # ---------------------------------------------------------------------------
@@ -29,8 +34,13 @@ BASE = f"http://127.0.0.1:{PORT}"
 @pytest.fixture(scope="session")
 def base_url():
     """Start a uvicorn server and yield the base URL."""
+    import os
+
     import uvicorn
     from app.api import app as fastapi_app
+
+    saved_login_url = os.environ.get("LOGIN_URL")
+    os.environ["LOGIN_URL"] = SIGN_IN_URL
 
     server = uvicorn.Server(
         uvicorn.Config(fastapi_app, host="127.0.0.1", port=PORT, log_level="warning")
@@ -53,6 +63,10 @@ def base_url():
 
     server.should_exit = True
     thread.join(timeout=5)
+    if saved_login_url is None:
+        os.environ.pop("LOGIN_URL", None)
+    else:
+        os.environ["LOGIN_URL"] = saved_login_url
 
 
 # ---------------------------------------------------------------------------
@@ -131,23 +145,19 @@ def _unique(prefix: str) -> str:
 
 @pytest.fixture
 def new_user(page, base_url):
-    """Register a fresh user via the login page form so the browser cookie
-    is definitely set (page.request.post does not reliably share cookies
-    with the browser context)."""
+    """Register a fresh user through the API and sign the browser in with
+    its cookie (signing in happens on cheetahmoongames.com, not here)."""
     username = _unique("u")
-    page.goto(f"{base_url}/login")
-    page.fill("#registerForm input[name='username']", username)
-    page.fill("#registerForm input[name='email']", f"{username}@test.invalid")
-    page.fill("#registerForm input[name='password']", "Password1")
-    page.click("#registerForm button[type='submit']")
-    page.wait_for_url(base_url + "/", timeout=10000)
-    # Extract the JWT from the cookie store for server-side API calls
-    cookies = page.context.cookies()
-    jwt = next((c["value"] for c in cookies if c["name"] == "userjwt"), "")
-    # Get user data from the API (we need the UUID)
-    resp = page.request.get(f"{base_url}/userDetails")
-    user_data = resp.json()
+    user, jwt = _api_register(base_url, username)
+    page.context.add_cookies([{"name": "userjwt", "value": jwt, "url": base_url}])
+    user_data = _api_get(base_url, "/userDetails", jwt)
     return {"user": user_data, "jwt": jwt, "username": username}
+
+
+@pytest.fixture
+def sign_in_page(base_url):
+    """Where tests expect to be sent to sign in (see SIGN_IN_URL)."""
+    return SIGN_IN_URL
 
 
 @pytest.fixture

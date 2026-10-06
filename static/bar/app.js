@@ -3,10 +3,10 @@
 // a glass, your bladder, a card). Legality comes from /valid-actions, so this
 // file only decides how things look and which request a touch sends.
 
-import { api } from '/static/play/api.js';
+import { api } from './api.js';
 import {
     BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ING, MIXERS, MODES, PAIRINGS,
-    RULES, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
+    RULES, RULES_INTRO, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
     orderRecipe, servesOrder, SPECIALIST_SPECIAL, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
@@ -40,7 +40,8 @@ const ui = {
     selected: null, // hand key being placed
     prompt: null, // { text, choices: [{ label, onclick, kind }] }
     historyOpen: false, // show every move, not just the latest
-    sheet: null, // 'menu' | 'rules': the panel opened from the turn bar
+    sheet: null, // 'menu' | 'rules' | 'recap': the panel opened from the turn bar
+    leaving: null, // 'cancel' | 'quit': asking to call the game off or leave it
 };
 
 const SPECIAL_TYPES = ['bitters', 'cointreau', 'lemon', 'sugar', 'vermouth'];
@@ -92,17 +93,57 @@ const SPECIAL_ICONS = {
     vermouth: '<svg viewBox="0 0 24 24"><path d="M4 4h16l-8 9z" fill="#e8c9d6" stroke="#6d3a50" stroke-width="1.3"/><path d="M12 13v7M8 21h8" stroke="#6d3a50" stroke-width="1.5"/><circle cx="14" cy="7" r="1.6" fill="#5f8d2d"/></svg>',
 };
 
-const KIND_ICONS = {
-    karaoke: '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 10a6 6 0 0 0 12 0M12 16v5M8 21h8" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
-    store: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="7" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 5v14c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5M5 10c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
-    refresher: '<svg viewBox="0 0 24 24"><path d="M12 2v20M3.5 7l17 10M20.5 7l-17 10" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>',
-    cup_doubler: '<svg viewBox="0 0 24 24"><path d="M2 11a10 7 0 0 1 20 0z" fill="currentColor"/><path d="M12 11v9a2 2 0 0 1-4 0" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>',
-    specialist: '<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" fill="currentColor"/></svg>',
-    free_action: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/></svg>',
-    order: '<svg viewBox="0 0 24 24"><path d="M5 2h14v19l-2.3-1.6L14.3 21 12 19.4 9.7 21l-2.4-1.6L5 21z" fill="currentColor"/><path d="M8 7h8M8 10.5h8M8 14h5" style="stroke:var(--scene-bottom)" stroke-width="1.5"/></svg>',
-};
 
 const AMBULANCE = '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 4h17v12H2z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M19 7h6l4 5v4H19z" fill="#fff" stroke="#7d1f15" stroke-width="1.2"/><path d="M21 8.5h3.4l2.6 3.3H21z" fill="#bfe3f5"/><path d="M8.5 6.5h2v3h3v2h-3v3h-2v-3h-3v-2h3z" fill="#e0452b"/><path d="M2 13h27" stroke="#e0452b" stroke-width="1.2"/><circle cx="7" cy="16.5" r="2.3" fill="#2b2b2b"/><circle cx="24" cy="16.5" r="2.3" fill="#2b2b2b"/><rect x="11" y="2" width="3" height="2" fill="#2f8fdb"/></svg>';
+
+// The cup doublers, as they stand in a glass. Each straw is one of a few
+// crazy straws in one of a few colours, picked at random but the same
+// every time for that card in that game. They're drawn in a 40×80 box
+// with the tube coming up out of the glass at x = 20; the shaft below is
+// CSS (.straw-shaft) so it reaches the bottom of any size of glass.
+const STRAW_SHAPES = {
+    bendy: { d: 'M20 80V38Q20 24 30 18L38 12', ridges: 'M20 40Q20 24 31 17.4', striped: true },
+    wavy: { d: 'M20 80V62C20 56 8 58 8 52S32 48 32 42S8 38 8 32S20 28 20 22V11Q20 4 27 2' },
+    heart: { d: 'M20 80V42C9 34 3 28 4.5 20C6 11 16 10 20 18C24 10 34 11 35.5 20C37 28 31 34 20 42M20 18V8Q20 3 26 1' },
+};
+const STRAW_COLOURS = [
+    { tube: '#4fd16a', dark: '#1d6b30', hi: '#c9f7d1' },
+    { tube: '#4aa8ff', dark: '#154f8a', hi: '#cfe8ff' },
+    { tube: '#ff9a2e', dark: '#8a4a00', hi: '#ffe0b8' },
+    { tube: '#ffd84a', dark: '#8a6d00', hi: '#fff4c2' },
+    { tube: '#b07cff', dark: '#4b2a8a', hi: '#e9dcff' },
+    { tube: '#ff5a5a', dark: '#8a1c1c', hi: '#ffd0d0' },
+];
+
+function strawLook(seed) {
+    let n = 0;
+    for (const ch of seed) n = (Math.imul(n, 31) + ch.charCodeAt(0)) >>> 0;
+    const shapes = Object.keys(STRAW_SHAPES);
+    return { shape: shapes[n % shapes.length], colour: STRAW_COLOURS[(n >>> 4) % STRAW_COLOURS.length] };
+}
+
+function strawTop({ shape, colour }) {
+    const { d, ridges, striped } = STRAW_SHAPES[shape];
+    const path = (stroke, width, extra = '') => `<path d="${d}" stroke="${stroke}" stroke-width="${width}"${extra}/>`;
+    return '<svg viewBox="0 0 40 80" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">'
+        + path(colour.dark, 6.4)
+        + (striped ? path('#fff', 5) + path(colour.tube, 5, ' stroke-dasharray="4 4" stroke-linecap="butt"') : path(colour.tube, 5))
+        + (ridges ? `<path d="${ridges}" stroke="rgba(0,0,0,.28)" stroke-width="5.4" stroke-dasharray="1 1.5" stroke-linecap="butt"/>` : '')
+        + path(colour.hi, 1.6, ' stroke-opacity=".9"')
+        + '</svg>';
+}
+const UMBRELLA = '<svg viewBox="0 0 48 80" aria-hidden="true">'
+    + '<path d="M24 5V80" stroke="#7a4a1c" stroke-width="2.6"/><path d="M24 5V80" stroke="#e2b07a" stroke-width="1.4"/>'
+    + '<g stroke="rgba(70,10,30,.45)" stroke-width=".8" stroke-linejoin="round">'
+    + '<path d="M24 4Q5 5 2 20Q7.5 16.5 13 20Z" fill="#ffd23f"/>'
+    + '<path d="M24 4L13 20Q18.5 16.5 24 20Z" fill="#ff4f8b"/>'
+    + '<path d="M24 4L24 20Q29.5 16.5 35 20Z" fill="#ffd23f"/>'
+    + '<path d="M24 4L35 20Q40.5 16.5 46 20Q43 5 24 4Z" fill="#ff4f8b"/>'
+    + '</g>'
+    + '<path d="M9 9.5Q15 5.6 21 5" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2" stroke-linecap="round"/>'
+    + '<rect x="22.4" y="21" width="3.2" height="2.6" rx=".8" fill="#7a4a1c"/>'
+    + '<circle cx="24" cy="3.6" r="1.8" fill="#fff" stroke="rgba(70,10,30,.5)" stroke-width=".7"/>'
+    + '</svg>';
 
 // Ingredient pictures, as printed on the real tokens. `currentColor` is the
 // token's ink; `var(--fill)` cuts detail back out in the token's colour.
@@ -218,6 +259,7 @@ async function refresh() {
     if (g.status !== 'NEW' && (before !== JSON.stringify(g.game_state) + g.status || !moves.length)) {
         await loadMoves(true);
     }
+    await loadRecap();
     render();
 }
 
@@ -422,6 +464,7 @@ function pickFromDisplay(slotIndex) {
     ui.picks.push(slotIndex);
     ui.selected = `d${slotIndex}`;
     render({ force: true });
+    showHand();
 }
 
 function pickFromSpecials(index) {
@@ -439,6 +482,30 @@ function pickFromSpecials(index) {
     ui.specialPicks.push(index);
     ui.selected = `s${index}`;
     render({ force: true });
+    showHand();
+}
+
+// Bring your hand and glasses into view once you're holding something, so
+// you can see where it goes: below the turn bar, and above the drinks menu
+// when that opens from the bottom of a phone.
+function showHand() {
+    const hand = document.querySelector('.mat.is-mine .mat-board');
+    if (!hand) return;
+    const r = hand.getBoundingClientRect();
+    const top = ($('turnbar')?.getBoundingClientRect().bottom ?? 0) + 8;
+    let bottom = window.innerHeight - 8;
+    const sheet = $('sheet');
+    if (!sheet.hidden) {
+        const s = sheet.getBoundingClientRect();
+        if (s.top > 0 && s.left <= r.left) bottom = Math.max(top + 120, s.top - 8);
+    }
+    const room = bottom - top;
+    let by = 0;
+    if (r.top < top) by = r.top - top;
+    else if (r.bottom > bottom) by = Math.min(r.top - top, r.bottom - bottom);
+    if (Math.abs(by) < 2) return;
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollBy({ top: room > 0 ? by : r.top - top, behavior: smooth ? 'smooth' : 'instant' });
 }
 
 function drawFromBag(count) {
@@ -601,9 +668,12 @@ function claim(card) {
     });
     const back = { label: 'Leave it', onclick: () => { ui.prompt = null; render({ force: true }); } };
     if (card.card_type === 'cup_doubler') {
-        ask(`${card.name}: which glass does it go on, and which three spirits pay for it? They go from your bladder into the bag.`, [
-            ...options.map((a) => ({
-                label: `Glass ${a.params.cup_index + 1}, paid with ${ING[a.params.spirit_type]?.label ?? a.params.spirit_type}`,
+        // Any spirit with three in your bladder meets the cost; only the glass matters
+        const byGlass = new Map();
+        for (const a of options) if (!byGlass.has(a.params.cup_index)) byGlass.set(a.params.cup_index, a);
+        ask(`${card.name}: which glass does it go on for good? Your bladder keeps what you've drunk.`, [
+            ...[...byGlass.values()].map((a) => ({
+                label: `Glass ${a.params.cup_index + 1}`,
                 onclick: () => send(a.params),
                 kind: 'go',
             })),
@@ -612,22 +682,9 @@ function claim(card) {
         return;
     }
     const free = isFree('claim_card') ? ' It doesn’t use your action.' : '';
-    if (card.card_type === 'specialist') {
-        ask(`Claim ${card.name} for ${plural(points, 'point')}? What you pay with goes from your bladder into the bag.${free}`, [
-            ...options.map((a) => {
-                const pay = a.params.spirit_type;
-                const what = pay === card.spirit_type ? `2 ${ING[pay].label}` : `1 ${ING[pay]?.label ?? pay}`;
-                return { label: `Pay ${what}`, onclick: () => send(a.params), kind: 'go' };
-            }),
-            back,
-        ]);
-        return;
-    }
-    const cost = cardCost(card);
-    const paying = `${cost.length} ${ING[cost[0]]?.label ?? ''}`.trim();
     const extra = card.card_type === 'store'
-        ? ` One ${ING[card.spirit_type].label} goes into the bag and the rest in your bladder moves onto the card.`
-        : ` ${paying} goes from your bladder into the bag.`;
+        ? ` All the ${ING[card.spirit_type].label} in your bladder moves onto the card.`
+        : ' Your bladder keeps what you\u2019ve drunk.';
     ask(`Claim ${card.name} for ${plural(points, 'point')}?${extra}${free}`, [
         { label: 'Claim it', onclick: () => send(options[0].params), kind: 'go' },
         back,
@@ -656,18 +713,35 @@ function endTurn() {
     act(() => api.endTurn(gameId));
 }
 
-function confirmLeave() {
-    const host = game.host === me.id;
-    ask(host ? 'Call off the game for everyone?' : 'Leave the game? You can’t come back to it.', [
-        {
-            label: host ? 'Call it off' : 'Leave the game',
-            kind: 'danger',
-            onclick: () => act(() => (host ? api.cancel(gameId) : api.quit(gameId)), {
-                after: () => refresh().catch(() => {}),
-            }),
-        },
-        { label: 'Stay', onclick: () => { ui.prompt = null; render({ force: true }); } },
-    ]);
+// Calling the game off (host) or leaving it asks first, right by the
+// button: it can happen on anyone's turn.
+function askLeave(kind) {
+    ui.leaving = kind;
+    render({ force: true });
+    document.querySelector('[data-k="leave-yes"]')?.focus();
+}
+
+function leave() {
+    const kind = ui.leaving;
+    ui.leaving = null;
+    act(() => (kind === 'cancel' ? api.cancel(gameId) : api.quit(gameId)), {
+        after: () => refresh().catch(() => {}),
+    });
+}
+
+function leaveConfirm() {
+    if (!ui.leaving) return null;
+    const cancel = ui.leaving === 'cancel';
+    const inLobby = game.status === 'NEW';
+    return h('div.leave-confirm', { role: 'group', 'aria-label': cancel ? 'Call off the game' : 'Leave the game' },
+        h('p', {
+            text: cancel
+                ? (inLobby ? 'Call off this game? Everyone seated goes back to the games list.' : 'Call off the game for everyone? No one wins.')
+                : 'Leave the game? You can’t come back to it; the others play on.',
+        }),
+        h('div.prompt-choices', {},
+            h('button.btn.danger', { type: 'button', onclick: leave, text: cancel ? 'Call it off' : 'Leave the game', 'data-k': 'leave-yes' }),
+            h('button.btn', { type: 'button', onclick: () => { ui.leaving = null; render({ force: true }); }, text: 'Stay', 'data-k': 'leave-no' })));
 }
 
 function proposeUndo() {
@@ -751,7 +825,9 @@ function turnbar() {
         buttons.push(h('button.btn.go', { type: 'button', onclick: endTurn, text: 'End turn', 'data-k': 'end-turn' }));
     }
     if (game.status !== 'NEW') {
-        for (const [sheet, label] of [['menu', 'Drinks menu'], ['rules', 'Rules']]) {
+        const sheets = [['menu', 'Drinks menu'], ['rules', 'Rules']];
+        if (hasRecap()) sheets.unshift(['recap', 'Since your last turn']);
+        for (const [sheet, label] of sheets) {
             buttons.push(h('button.btn.tiny.sheet-btn', {
                 type: 'button', text: label, 'data-k': `open-${sheet}`,
                 cls: ui.sheet === sheet ? 'is-open' : '',
@@ -822,7 +898,7 @@ function costHave(card, ps) {
     if (!ps) return Infinity;
     const have = bladderCounts(ps);
     if (card.card_type === 'cup_doubler') return Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
-    // One of its special pays for a specialist in full
+    // One of its special meets a specialist's whole cost
     if (card.card_type === 'specialist' && have[SPECIALIST_SPECIAL[card.spirit_type]]) return cardCost(card).length;
     return have[cardCost(card)[0]] ?? 0;
 }
@@ -838,6 +914,16 @@ const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.6l3 6.6
 
 // The token a card is about, drawn big in its art: the spirit or mixer.
 const cardSubject = (card) => card.spirit_type ?? card.mixer_type ?? null;
+
+// Each card's painted scene (static/bar/img/cards): one per kind, and the
+// doublers and free-action cards each have their own.
+const FREE_ACTION_ART = { Entrepreneur: 'entrepreneur', 'Greedy Bartender': 'greedy', 'Weak Bladder': 'weak-bladder' };
+
+function cardArt(card) {
+    if (card.card_type === 'cup_doubler') return /umbrella/i.test(card.name) ? 'doubler-umbrella' : 'doubler-straw';
+    if (card.card_type === 'free_action') return FREE_ACTION_ART[card.name] ?? 'entrepreneur';
+    return ['karaoke', 'store', 'refresher', 'specialist', 'order'].includes(card.card_type) ? card.card_type : 'order';
+}
 
 // A card laid out like the printed ones: Greek-key border, art panel with the
 // cost badge and points star, name ribbon, kind, and the rule in a frame.
@@ -862,9 +948,7 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
         role: claimable ? undefined : 'group',
         'data-k': claimable ? `card-${card.id}` : undefined,
     },
-    h('span.card-art', { 'aria-hidden': 'true' },
-        h('span.card-lights'),
-        h('span.card-emblem', { svg: KIND_ICONS[card.card_type] ?? '' }),
+    h('span.card-art', { 'aria-hidden': 'true', style: { '--art': `url("/static/bar/img/cards/${cardArt(card)}.webp")` } },
         subject ? h('span.card-subject', {}, token(subject, { print: true })) : null,
         h('span.card-costbadge', { cls: `${ps && short ? 'is-short' : ''}${isOrder ? ' is-order' : ''}` },
             h('span.card-costtoks', {},
@@ -875,7 +959,7 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
             h('span.card-star-shape', { svg: STAR }),
             h('span.card-star-num', { text: isOrder ? `+${card.bonus}` : kind.points }),
             h('span.card-star-cap', { text: isOrder ? 'Bonus' : 'Points' }))),
-    h('span.card-ribbon', {}, h('span.card-name', { text: card.name })),
+    h('span.card-ribbon', {}, h('span.card-name', { text: card.name, style: { '--len': String(card.name.length) } })),
     h('span.card-kind', { text: kind.label }),
     compact ? null : h('span.card-rule', {}, h('span', { text: cardText(card) })));
 
@@ -928,7 +1012,7 @@ function renderMarket() {
             tag('Karaoke stage', 'Sing at drunk 3+ with 2 of the song’s spirit. Three songs wins.'),
             h('div.row-cards', {}, cells(1, 5))),
         h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
-            tag('Orders', 'Sell what they want for the bonus. Clear at drunk 3+ (free).', 2, 'Clear (free)'),
+            tag('Orders', 'Sell what they want for the bonus. Clear at drunk 2+ (free).', 2, 'Clear (free)'),
             h('div.row-cards', {}, cells(2, 3)),
             cardBack(state.order_deck_size ?? 0, `Order deck, ${plural(state.order_deck_size ?? 0, 'order')}`, 'Orders')),
         h('div.card-row', { 'aria-label': 'Ability cards', role: 'group' },
@@ -974,7 +1058,6 @@ function renderSupply() {
 
     const bag = h('div.bag-wrap', {},
         h('div.bag', { role: 'img', 'aria-label': `The bag, ${plural(state.bag_contents.length, 'ingredient')} inside` },
-            h('span.bag-neck', { 'aria-hidden': 'true' }),
             h('span.bag-body', {}, h('span.bag-count', { text: state.bag_contents.length }), h('span.bag-word', { text: 'in the bag' }))),
         maxDraw > 0
             ? h('div.draws', { role: 'group', 'aria-label': 'Draw blind from the bag' },
@@ -1029,6 +1112,48 @@ function renderScoreTrack() {
 
 // ─── Player mats ────────────────────────────────────────────────────────────
 
+// The cup doubler cards on a glass. Games from before cards remembered
+// their glass just know the glass is doubled: they get a straw.
+function doublersOn(ps, cupIndex) {
+    if (!ps.cups[cupIndex].has_cup_doubler) return [];
+    const placed = (ps.cards ?? []).filter((c) => c.card_type === 'cup_doubler');
+    const here = placed.filter((c) => c.cup_index === cupIndex);
+    if (here.length) return here;
+    const unplaced = placed.filter((c) => c.cup_index == null);
+    return unplaced.length ? unplaced.slice(0, 1) : [{ name: 'Bendy Straw' }];
+}
+
+function doublerPicture(card, cupIndex) {
+    if (/umbrella/i.test(card.name)) return h('span.umbrella', { svg: UMBRELLA, 'aria-hidden': 'true' });
+    const look = strawLook(`${gameId}:${card.id ?? cupIndex}`);
+    return h('span.straw', {
+        'aria-hidden': 'true',
+        cls: `is-${look.shape}`,
+        style: { '--straw': look.colour.tube, '--straw-dark': look.colour.dark, '--straw-hi': look.colour.hi },
+    },
+    h('span.straw-top', { svg: strawTop(look) }),
+    h('span.straw-shaft'));
+}
+
+// The two glass pictures (static/bar/img/glass-N.webp): their size, where
+// the circles drawn on them are (centres, in % of the picture; base spaces
+// fill bottom-left, bottom-right, middle-left, middle-right, top) and how
+// much of the picture the handle takes beside the glass's body.
+const GLASS_ART = [
+    {
+        src: '/static/bar/img/glass-1.webp', w: 314, h: 505, bodyLeft: 26.8, bodyRight: 0.6,
+        specials: [[47.74, 22.89], [79.86, 22.78]],
+        label: [63.8, 11.6],
+        base: [[46.78, 84.67], [78.49, 84.59], [47.99, 66.08], [79.41, 66.09], [62.94, 46.37]],
+    },
+    {
+        src: '/static/bar/img/glass-2.webp', w: 313, h: 503, bodyLeft: 1, bodyRight: 28.8,
+        specials: [[20.76, 23.61], [53.65, 23.29]],
+        label: [37.2, 11.9],
+        base: [[21.55, 84.25], [53.77, 84.55], [20.86, 66.17], [53.65, 66.14], [36.61, 46.37]],
+    },
+];
+
 function glass(pid, cupIndex, { interactive }) {
     const ps = gs().player_states[pid];
     const cup = ps.cups[cupIndex];
@@ -1042,7 +1167,8 @@ function glass(pid, cupIndex, { interactive }) {
         label: `${ING[it.name].label} going into glass ${cupIndex + 1}. Tap to pick it back up.`,
         onclick: () => selectInHand(it.key),
     });
-    // Spirits and mixers fill the glass; specials sit on the rim.
+    // Spirits and mixers fill the glass; specials have their own two
+    // spaces at the top of it.
     const contents = [
         ...cup.ingredients.filter((n) => !isSpecial(n)).map((name) => token(name)),
         ...incoming.filter((it) => !isSpecial(it.name)).map(staged),
@@ -1051,23 +1177,30 @@ function glass(pid, cupIndex, { interactive }) {
         ...cup.ingredients.filter(isSpecial).map((name) => token(name)),
         ...incoming.filter((it) => isSpecial(it.name)).map(staged),
     ];
-    const layers = Array.from({ length: CUP_SIZE }, (_, i) => slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'));
-    const showRim = garnish.length || (placing && isSpecial(held.name));
-    const rim = showRim
-        ? h('span.glass-rim', { 'aria-hidden': 'true' },
-            Array.from({ length: GLASS_SPECIALS }, (_, i) => slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty')))
-        : null;
+    // Each space sits over one of the circles drawn on the glass.
+    const art = GLASS_ART[cupIndex];
+    const placed = (node, [x, y]) => { node.style.left = `${x}%`; node.style.top = `${y}%`; return node; };
+    const layers = Array.from({ length: CUP_SIZE }, (_, i) => placed(slot(contents[i] ?? null, contents[i] ? '' : 'is-empty'), art.base[i]));
+    const specialSpaces = h('span.glass-specials', {},
+        placed(h('span.glass-specials-label', { text: 'Specials only' }), art.label),
+        Array.from({ length: GLASS_SPECIALS }, (_, i) => placed(slot(garnish[i] ?? null, garnish[i] ? '' : 'is-empty'), art.specials[i])));
 
     const vessel = h(room ? 'button.glass' : 'div.glass', {
         cls: `${room ? 'is-target' : ''}${cup.has_cup_doubler ? ' has-doubler' : ''}`,
         type: room ? 'button' : undefined,
         onclick: room ? () => placeSelected('cup', cupIndex) : undefined,
-        'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? ', scores double' : ''}${room ? '. Tap to put the token here.' : ''}`,
+        'aria-label': `Glass ${cupIndex + 1}: ${cup.ingredients.length ? cup.ingredients.map((i) => ING[i].label).join(', ') : 'empty'}${cup.has_cup_doubler ? `, scores double (${doublersOn(ps, cupIndex).map((c) => c.name).join(' and ')})` : ''}${room ? '. Tap to put the token here.' : ''}`,
         'data-k': room ? `glass-${cupIndex}` : undefined,
     },
-    rim,
-    cup.has_cup_doubler ? h('span.straw', { 'aria-hidden': 'true' }) : null,
-    h('span.glass-body', {}, layers),
+    h('span.glass-body', {
+        style: {
+            '--art': `url("${GLASS_ART[cupIndex].src}")`,
+            '--art-ratio': `${GLASS_ART[cupIndex].w} / ${GLASS_ART[cupIndex].h}`,
+            '--art-w': String(GLASS_ART[cupIndex].w),
+            '--body-left': `${GLASS_ART[cupIndex].bodyLeft}%`,
+            '--body-right': `${GLASS_ART[cupIndex].bodyRight}%`,
+        },
+    }, ...doublersOn(ps, cupIndex).map((c) => doublerPicture(c, cupIndex)), layers, specialSpaces),
     h('span.glass-foot', { 'aria-hidden': 'true' }));
 
     const buttons = [];
@@ -1292,9 +1425,11 @@ function mat(pid) {
         h('span.pawn', { 'aria-hidden': 'true' }),
         h('h2.mat-name', { text: isMe ? `${seatName(pid)} (you)` : seatName(pid) }),
         theirTurn ? h('span.mat-turn', { text: isMe ? 'Your turn' : 'Playing' }) : null,
+        pid === seatOrder()[0] ? h('span.mat-first', { text: 'Starting player', title: 'Took the first turn: turns go round from here' }) : null,
         status ? h('span.mat-status', { text: status }) : null,
         h('span.mat-songs', { text: songs ? `${songs} of 3 songs` : '' }),
         h('span.mat-points', {}, h('strong', { text: ps.points }), ' points')),
+    matRecap(pid),
     h('div.mat-board', {},
         taking ? hand() : null,
         h('div.bar-area', {},
@@ -1424,6 +1559,137 @@ function menu() {
             slammerOrder ? h('span.menu-wanted', { text: `Wanted +${slammerOrder.bonus}` }) : null)));
 }
 
+// ─── Since your last turn ───────────────────────────────────────────────────
+// As your turn starts, a panel says what everyone else did since your last
+// one: each of their turns, from the move log, and what that changed on the
+// table, from the state as your last turn ended and as this one began. It
+// opens by itself once a turn; "Since your last turn" in the turn bar opens it
+// again. Until you make your first move, each mat says what changed on it.
+
+let recap = null; // { turn, turns: [{ pid, lines }], changes: [text], mats: { pid: [text] } }
+let recapFor = null; // the turn a recap is loading or loaded for
+
+async function loadRecap() {
+    if (game.status !== 'STARTED' || gs().winner || !isMember() || !myTurn()) return;
+    const turn = gs().turn_number;
+    if (recapFor === turn) return;
+    recapFor = turn;
+    // From the turn after your last one up to this one
+    let last = -1;
+    for (const m of moves) if (m.player_id === me.id && m.turn_number < turn) last = Math.max(last, m.turn_number);
+    const from = last + 1;
+    const theirs = moves.filter((m) => m.turn_number >= from && m.turn_number < turn && m.player_id !== me.id);
+    let before = null;
+    let after = null;
+    if (theirs.length) {
+        try {
+            [before, after] = (await Promise.all([api.stateAtTurn(gameId, from), api.stateAtTurn(gameId, turn)]))
+                .map((r) => r.game_state);
+        } catch {
+            // The turns alone still tell the story.
+        }
+    }
+    if (recapFor !== turn) return;
+    recap = buildRecap(turn, theirs, before, after);
+    if (recap.turns.length && !recapSeen(turn)) {
+        markRecapSeen(turn);
+        ui.sheet = 'recap';
+    }
+}
+
+const recapKey = () => `bar-recap-${gameId}`;
+function recapSeen(turn) {
+    try { return localStorage.getItem(recapKey()) === String(turn); } catch { return false; }
+}
+function markRecapSeen(turn) {
+    try { localStorage.setItem(recapKey(), String(turn)); } catch { /* shown again next time */ }
+}
+
+const hasRecap = () => !!recap && recap.turn === gs()?.turn_number && recap.turns.length > 0 && myTurn();
+
+// The mats keep their notes until you make your first move this turn.
+function recapMarks() {
+    if (!hasRecap()) return false;
+    return !moves.some((m) => m.player_id === me.id && m.turn_number === recap.turn);
+}
+
+function buildRecap(turn, theirs, before, after) {
+    const turns = [];
+    for (const m of theirs) {
+        if (m.action?.type === 'end_turn') continue;
+        let t = turns[turns.length - 1];
+        if (!t || t.turnNumber !== m.turn_number || t.pid !== m.player_id) {
+            t = { turnNumber: m.turn_number, pid: m.player_id, lines: [] };
+            turns.push(t);
+        }
+        t.lines.push(describeMove(m, nameOf));
+    }
+    // A turn that only ended still happened
+    for (const m of theirs) {
+        if (!turns.some((t) => t.turnNumber === m.turn_number && t.pid === m.player_id)) {
+            turns.push({ turnNumber: m.turn_number, pid: m.player_id, lines: [`${nameOf(m.player_id)} ended their turn`] });
+        }
+    }
+    turns.sort((a, b) => a.turnNumber - b.turnNumber);
+    const changes = [];
+    const mats = {};
+    if (before && after) {
+        for (const pid of after.turn_order ?? []) {
+            if (pid === me.id) continue;
+            const b = before.player_states?.[pid];
+            const a = after.player_states?.[pid];
+            if (!a || !b) continue;
+            const notes = [];
+            const name = seatName(pid);
+            if (a.points !== b.points) notes.push(`${a.points > b.points ? '+' : ''}${plural(a.points - b.points, 'point')}`);
+            const newCards = (a.cards ?? []).filter((c) => !(b.cards ?? []).some((o) => o.id === c.id));
+            for (const c of newCards) notes.push(`claimed ${c.name || 'a card'}`);
+            if (a.drunk_level !== b.drunk_level) {
+                notes.push(a.drunk_level > b.drunk_level ? `drunk ${a.drunk_level} (+${a.drunk_level - b.drunk_level})` : `sobered up to ${a.drunk_level}`);
+            }
+            const fill = (a.bladder ?? []).length;
+            const was = (b.bladder ?? []).length;
+            if (fill !== was) notes.push(fill < was ? `bladder down to ${fill} of ${a.bladder_capacity}` : `bladder ${fill} of ${a.bladder_capacity} (+${fill - was})`);
+            if (a.status !== b.status) {
+                notes.push(a.status === 'hospitalised' ? 'went to hospital: out of the game'
+                    : a.status === 'wet' ? 'wet themselves: out of the game'
+                        : a.status === 'quit' ? 'left the game' : `now ${a.status}`);
+            }
+            if (notes.length) {
+                mats[pid] = notes;
+                changes.push(`${name}: ${notes.join(', ')}`);
+            }
+        }
+        for (const [position, what] of [[2, 'orders'], [3, 'ability cards']]) {
+            const row = (state) => (state.card_rows ?? []).find((r) => r.position === position)?.cards ?? [];
+            const fresh = row(after).filter((c) => !row(before).some((o) => o.id === c.id));
+            if (fresh.length) changes.push(`New ${what}: ${fresh.map((c) => c.name || 'a card').join(', ')}`);
+        }
+        if (!before.last_round && after.last_round) changes.push('The last round has started: everyone gets one more turn.');
+    }
+    return { turn, turns, changes, mats };
+}
+
+function recapSheet() {
+    const r = recap;
+    if (!r || !hasRecap()) return h('p.recap-lead', { text: 'Nothing new since your last turn.' });
+    return h('section.recap', { 'aria-label': 'Since your last turn' },
+        h('p.recap-lead', { text: 'Since your last turn:' }),
+        r.turns.map((t) => h('section.recap-turn', { style: { '--seat': seatColour(t.pid) } },
+            h('h3.recap-who', {}, h('span.pawn', { 'aria-hidden': 'true' }), h('span', { text: `${seatName(t.pid)}’s turn` })),
+            h('ul.recap-lines', {}, t.lines.map((line) => h('li', { text: line }))))),
+        r.changes.length ? h('section.recap-changes', {},
+            h('h3', { text: 'What changed' }),
+            h('ul', {}, r.changes.map((c) => h('li', { text: c })))) : null,
+        h('button.btn.go.recap-go', { type: 'button', onclick: closeSheet, text: 'Back to the bar', 'data-k': 'recap-close' }));
+}
+
+function matRecap(pid) {
+    if (pid === me.id || !recapMarks() || !recap.mats[pid]) return null;
+    return h('p.mat-recap', { 'aria-label': `Since your last turn, ${seatName(pid)}: ${recap.mats[pid].join(', ')}` },
+        h('span.mat-recap-tag', { text: 'Since your turn' }), ' ', recap.mats[pid].join(' · '));
+}
+
 // ─── The drinks menu and rules panel ────────────────────────────────────────
 
 function toggleSheet(which) {
@@ -1477,7 +1743,7 @@ function sheetGlasses() {
 function renderOverview() {
     const box = $('overview');
     if (!box) return;
-    if (!game || game.status === 'NEW' || !gs()?.player_states) {
+    if (!game || game.status === 'NEW' || !gs()?.player_states || !gs().turn_order?.length) {
         box.replaceChildren();
         return;
     }
@@ -1488,14 +1754,16 @@ function renderOverview() {
             const turn = gs().player_turn === pid && !gs().winner;
             const out = ps.status === 'hospitalised' ? 'Hospital' : ps.status === 'wet' ? 'Wet' : ps.status === 'quit' ? 'Left' : null;
             const songs = ps.cards.filter((c) => c.card_type === 'karaoke').length;
+            const first = pid === seatOrder()[0];
             return h('li.overview-player', {
                 cls: `${turn ? 'is-turn' : ''}${out ? ' is-out' : ''}${pid === me.id ? ' is-mine' : ''}`,
                 style: { '--seat': seatColour(pid) },
                 'aria-label': `${pid === me.id ? 'You' : seatName(pid)}: ${plural(ps.points, 'point')} of ${target}, `
                     + `${out ?? `drunk ${ps.drunk_level}`}, bladder ${ps.bladder.length} of ${ps.bladder_capacity}`
-                    + `${songs ? `, ${plural(songs, 'song')}` : ''}${turn ? ', playing now' : ''}`,
+                    + `${songs ? `, ${plural(songs, 'song')}` : ''}${first ? ', starting player' : ''}${turn ? ', playing now' : ''}`,
             },
             h('span.pawn', { 'aria-hidden': 'true' }),
+            first ? h('span.ov-first', { text: '1st', title: 'Starting player', 'aria-hidden': 'true' }) : null,
             h('span.ov-name', { text: pid === me.id ? 'You' : seatName(pid), 'aria-hidden': 'true' }),
             h('span.ov-stats', { 'aria-hidden': 'true' },
                 h('b', { text: `${ps.points}` }), ' pts',
@@ -1517,18 +1785,21 @@ function renderSheet() {
         return;
     }
     const isMenu = ui.sheet === 'menu';
+    const isRecap = ui.sheet === 'recap';
     const scroll = box.querySelector('.sheet-body')?.scrollTop ?? 0;
+    const [label, title, what] = isMenu ? ['Drinks menu', 'Drinks menu', 'drinks menu']
+        : isRecap ? ['Since your last turn', 'Your turn', 'summary'] : ['Rules', 'How to play', 'rules'];
     box.hidden = false;
-    box.setAttribute('aria-label', isMenu ? 'Drinks menu' : 'Rules');
+    box.setAttribute('aria-label', label);
     box.replaceChildren(...[
         h('div.sheet-head', {},
-            h('h2.sheet-title', { text: isMenu ? 'Drinks menu' : 'How to play' }),
+            h('h2.sheet-title', { text: title }),
             h('button.btn.tiny.sheet-close', {
                 type: 'button', text: 'Close', onclick: closeSheet, 'data-k': 'sheet-close',
-                'aria-label': `Close the ${isMenu ? 'drinks menu' : 'rules'}`,
+                'aria-label': `Close the ${what}`,
             })),
         isMenu ? sheetGlasses() : null,
-        h('div.sheet-body', {}, isMenu ? menu() : rulebook()),
+        h('div.sheet-body', {}, isMenu ? menu() : isRecap ? recapSheet() : rulebook()),
     ].filter(Boolean));
     box.querySelector('.sheet-body').scrollTop = scroll;
 }
@@ -1556,8 +1827,10 @@ function chalkboard() {
 
 function rulebook() {
     return h('section.rulebook', { 'aria-label': 'Rules' },
+        h('p.rulebook-intro', { text: RULES_INTRO }),
         h('div.rulebook-pages', {}, RULES.map((part) => h('section.rule-part', {},
             h('h3', { text: part.title }),
+            part.lead ? h('p.rule-lead', { text: part.lead }) : null,
             h('ul', {}, part.items.map((t) => h('li', { text: t })))))));
 }
 
@@ -1570,20 +1843,15 @@ function housekeeping() {
         if (moves.length && !undoOpen && ps?.status === 'active') {
             bits.push(h('button.btn.tiny', { type: 'button', onclick: proposeUndo, text: 'Ask to take back the last turn', 'data-k': 'undo' }));
         }
-        if (game.host === me.id || ps?.status === 'active') {
-            bits.push(h('button.btn.tiny.quiet', { type: 'button', onclick: confirmLeave, text: game.host === me.id ? 'Call off the game' : 'Leave the game', 'data-k': 'leave' }));
+        if (ps?.status === 'active') {
+            bits.push(h('button.btn.tiny.quiet', { type: 'button', onclick: () => askLeave('quit'), text: 'Leave the game', 'data-k': 'leave' }));
+        }
+        if (game.host === me.id) {
+            bits.push(h('button.btn.tiny.quiet', { type: 'button', onclick: () => askLeave('cancel'), text: 'Call off the game', 'data-k': 'call-off' }));
         }
     }
-    bits.push(h('a.btn.tiny.quiet', { href: `/play?id=${encodeURIComponent(gameId)}`, onclick: () => setView('table'), text: 'Switch to table view' }));
-    bits.push(h('a.btn.tiny.quiet', { href: `/game?id=${encodeURIComponent(gameId)}`, onclick: () => setView('classic'), text: 'Switch to classic view' }));
-    return h('nav.housekeeping', { 'aria-label': 'Game options' }, bits);
-}
-
-function setView(view) {
-    try {
-        localStorage.setItem('bocUi', view);
-        localStorage.setItem('bocTableView', view === 'table' ? '1' : '0');
-    } catch { /* storage blocked: the link still works */ }
+    if (!bits.length && !ui.leaving) return null;
+    return h('nav.housekeeping', { 'aria-label': 'Game options' }, bits, leaveConfirm());
 }
 
 // ─── Game over ──────────────────────────────────────────────────────────────
@@ -1693,6 +1961,9 @@ async function renderLobby() {
             text: game.players.length < 2 ? 'Needs a second player' : 'Open the bar',
             onclick: () => act(async () => { await api.start(gameId); await refresh(); return null; }),
         }));
+        parts.push(ui.leaving ? leaveConfirm() : h('button.btn.tiny.quiet', {
+            type: 'button', text: 'Call off this game', 'data-k': 'call-off', onclick: () => askLeave('cancel'),
+        }));
     } else if (isMember()) {
         parts.push(h('p.lobby-sub', { text: `Waiting for ${seatName(game.host)} to open the bar.` }));
     }
@@ -1704,10 +1975,13 @@ async function renderLobby() {
 function render({ force = false } = {}) {
     if (!game) return;
     const signature = JSON.stringify([game.status, game.game_state, game.pending_undo, valid, moves.length,
-        ui.picks, ui.specialPicks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt, ui.sheet]);
+        ui.picks, ui.specialPicks, ui.staged, ui.specialDraft, ui.selected, ui.historyOpen, !!ui.prompt, ui.sheet, ui.leaving, recap?.turn, recapMarks()]);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
     const focusKey = document.activeElement?.getAttribute?.('data-k');
+    // Redrawing removes the piece you just touched, and with it the focus;
+    // the browser then scrolls the page. Keep it where the player left it.
+    const scrollY = window.scrollY;
 
     if (game.status === 'NEW') {
         turnbar();
@@ -1716,18 +1990,29 @@ function render({ force = false } = {}) {
         renderLobby().then(() => restoreFocus(focusKey));
         return;
     }
+    if (game.status === 'ENDED' && !gs()?.turn_order?.length) {
+        // Called off in the lobby, before anyone played
+        turnbar();
+        renderSheet();
+        renderOverview();
+        $('table').replaceChildren(h('section.lobby', { id: 'lobby' },
+            h('h2.lobby-title', { text: 'This game was called off' }),
+            h('p.lobby-sub', { text: `${seatName(game.host)} called it off before the bar opened.` }),
+            h('a.btn.go', { href: '/', text: 'Back to the games' })));
+        return;
+    }
     reconcile();
     turnbar();
     document.body.classList.toggle('is-my-turn', myTurn());
 
-    const seats = seatOrder();
-    const start = Math.max(0, seats.indexOf(me.id));
-    const around = [...seats.slice(start + 1), ...seats.slice(0, start)].filter((pid) => pid !== me.id);
+    // Everyone else's mats go under yours, in turn order
+    const others = seatOrder().filter((pid) => pid !== me.id);
 
     $('table').replaceChildren(...[
-        around.length ? h('div.across', { 'aria-label': 'Other players' }, around.map(mat)) : null,
-        h('div.middle', {}, renderMarket(), h('div.middle-side', {}, renderSupply(), renderScoreTrack())),
+        // The bag and display sit under the cards, right above your mat
+        h('div.middle', {}, h('div.middle-main', {}, renderMarket(), renderSupply()), h('div.middle-side', {}, renderScoreTrack())),
         isMember() && gs().player_states[me.id] ? mat(me.id) : null,
+        others.length ? h('div.across', { 'aria-label': 'Other players, in turn order' }, others.map(mat)) : null,
         h('div.extras', {}, chalkboard()),
         housekeeping(),
     ].filter(Boolean));
@@ -1735,6 +2020,7 @@ function render({ force = false } = {}) {
     renderOverview();
     ending();
     restoreFocus(focusKey);
+    if (Math.abs(window.scrollY - scrollY) > 1) window.scrollTo({ top: scrollY, behavior: 'instant' });
 }
 
 function restoreFocus(key) {

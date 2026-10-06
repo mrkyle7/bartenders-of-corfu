@@ -17,7 +17,6 @@ async function setUserHeader() {
         showLogin()
     } else {
         user = await response.json()
-        if (typeof applyTheme === 'function') applyTheme(user.theme || 'taverna');
         setUser(user)
     }
 }
@@ -132,9 +131,13 @@ function buildGameItem(game) {
         const isFull = (game.players ? game.players.length : 0) >= 4;
         if (user && game.players && game.players.some(p => p === user.id)) {
             const btn = document.createElement('button');
+            btn.className = 'go';
             btn.textContent = 'Go to Game';
-            btn.onclick = () => window.location.href = `/game?id=${game.id}`;
+            btn.onclick = () => window.location.href = `/bar?id=${game.id}`;
             action.appendChild(btn);
+            if (game.status === 'NEW' && game.host === user.id) {
+                action.appendChild(cancelGameButton(game.id, action));
+            }
         } else if (game.status !== 'NEW') {
             const label = document.createElement('span');
             label.className = 'game-full-label';
@@ -152,6 +155,7 @@ function buildGameItem(game) {
             action.appendChild(btn);
         } else {
             const btn = document.createElement('button');
+            btn.className = 'go';
             btn.textContent = 'Join Game';
             btn.onclick = () => joinGame(game.id);
             action.appendChild(btn);
@@ -305,8 +309,9 @@ async function createNewGame() {
         const action = placeholder.querySelector('.game-action');
         action.innerHTML = '';
         const goBtn = document.createElement('button');
+        goBtn.className = 'go';
         goBtn.textContent = 'Go to Game';
-        goBtn.onclick = () => window.location.href = `/game?id=${data.id}`;
+        goBtn.onclick = () => window.location.href = `/bar?id=${data.id}`;
         action.appendChild(goBtn);
         // Ensure the Active filter (NEW,STARTED) is selected so the new game is visible
         myGamesStatusFilter = 'NEW,STARTED';
@@ -358,6 +363,44 @@ async function listGames() {
     }
 }
 
+// Cancelling a game you host that hasn't started asks first, in place.
+function cancelGameButton(gameId, actionEl) {
+    const btn = document.createElement('button');
+    btn.className = 'cancel-game';
+    btn.textContent = 'Cancel game';
+    btn.onclick = () => {
+        const saved = [...actionEl.childNodes];
+        const ask = document.createElement('span');
+        ask.className = 'cancel-confirm';
+        ask.textContent = 'Cancel this game? ';
+        const yes = document.createElement('button');
+        yes.className = 'cancel-game';
+        yes.textContent = 'Yes, cancel it';
+        yes.onclick = () => cancelGame(gameId);
+        const no = document.createElement('button');
+        no.textContent = 'Keep it';
+        no.onclick = () => actionEl.replaceChildren(...saved);
+        actionEl.replaceChildren(ask, yes, no);
+        no.focus();
+    };
+    return btn;
+}
+
+async function cancelGame(gameId) {
+    clearGameListError();
+    const response = await fetch(`/v1/games/${gameId}/cancel`, { method: 'POST' });
+    if (response.status == 401) {
+        window.location.href = '/login';
+        return;
+    }
+    if (response.ok) {
+        listGames();
+    } else {
+        const data = await response.json().catch(() => ({}));
+        showGameListError(data.error || 'Failed to cancel the game. Please try again.');
+    }
+}
+
 async function joinGame(gameId) {
     clearGameListError();
 
@@ -369,8 +412,9 @@ async function joinGame(gameId) {
         originalHTML = actionEl.innerHTML;
         actionEl.innerHTML = '';
         const btn = document.createElement('button');
+        btn.className = 'go';
         btn.textContent = 'Go to Game';
-        btn.onclick = () => window.location.href = `/game?id=${gameId}`;
+        btn.onclick = () => window.location.href = `/bar?id=${gameId}`;
         actionEl.appendChild(btn);
     }
 

@@ -31,7 +31,7 @@ self.addEventListener('notificationclick', (e) => {
     e.notification.close();
     const url = new URL(e.notification.data?.url || '/', self.location.origin);
     const gameId = url.searchParams.get('id');
-    // Any of the three game views (/game, /play, /bar) of the same game
+    // The game page (/bar; old /game and /play links redirect there)
     const isGamePage = (u) => ['/game', '/play', '/bar'].includes(u.pathname);
     e.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (tabs) => {

@@ -27,7 +27,6 @@ class Db:
         "deactivated_by",
         "deleted_at",
         "logged_out_at",
-        "theme",
         "is_bot",
         "bot_strategy",
     )
@@ -49,7 +48,6 @@ class Db:
                 "deactivated_by": row.get("deactivated_by"),
                 "deleted_at": row.get("deleted_at"),
                 "logged_out_at": row.get("logged_out_at"),
-                "theme": row.get("theme", "taverna"),
                 "is_bot": row.get("is_bot", False),
                 "bot_strategy": row.get("bot_strategy"),
             }
@@ -230,9 +228,7 @@ class Db:
     def get_user_by_email(self, email: str) -> User | None:
         """The active or deactivated account using ``email``, ignoring case."""
         # ilike without wildcards: escape the characters it treats specially.
-        pattern = (
-            email.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
+        pattern = email.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         response = (
             self.supabase.table("users")
             .select(",".join(self._USER_COLUMNS))
@@ -298,15 +294,6 @@ class Db:
             .is_("used_at", "null")
             .execute()
         )
-
-    def update_theme(self, user_id: UUID, theme: str) -> bool:
-        response = (
-            self.supabase.table("users")
-            .update({"theme": theme})
-            .eq("id", str(user_id))
-            .execute()
-        )
-        return len(response.data) == 1
 
     def get_public_key(self, kid: str) -> bytes | None:
         response = (
@@ -689,6 +676,28 @@ class Db:
         )
         return len(response.data) >= 1
 
+    def get_vapid_keys(self) -> dict | None:
+        """The key pair that signs push notifications, or None if there isn't one yet."""
+        response = (
+            self.supabase.table("vapid_keys")
+            .select("public_key, private_key")
+            .eq("id", 1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def save_vapid_keys(self, keys: dict) -> None:
+        """Save a key pair, unless one has been saved already."""
+        self.supabase.table("vapid_keys").upsert(
+            {
+                "id": 1,
+                "public_key": keys["public_key"],
+                "private_key": keys["private_key"],
+            },
+            on_conflict="id",
+            ignore_duplicates=True,
+        ).execute()
+
     def add_player_to_game(self, game_id: UUID, player_id: UUID) -> str:
         """Add a player to an existing game. Returns a text code: 'ok' | 'not_found' | 'not_new' | 'duplicate' | 'full'"""
         response = self.supabase.rpc(
@@ -709,7 +718,6 @@ class Db:
             },
         ).execute()
         return response.data
-
 
     # --- Bot policy persistence ---
 

@@ -29,7 +29,7 @@ export const ING = {
 export const isSpecial = (name) => !!ING[name]?.special;
 // Drunk, these specials count like a spirit; lemon and sugar like a mixer.
 export const BOOZY = ['BITTERS', 'COINTREAU', 'VERMOUTH'];
-// One of these pays for the specialist card of that spirit.
+// One of these meets the cost of the specialist card of that spirit.
 export const SPECIALIST_SPECIAL = { WHISKEY: 'BITTERS', TEQUILA: 'COINTREAU', VODKA: 'VERMOUTH', RUM: 'SUGAR', GIN: 'LEMON' };
 // Max specials that sit in one glass, on top of its five spirits and mixers.
 export const GLASS_SPECIALS = 2;
@@ -136,7 +136,7 @@ export function cardText(card) {
         case 'store': return `Keeps your ${spirit} out of your bladder. Pour it or drink it whenever you like.`;
         case 'refresher': return `Every ${mixer} you drink sobers you up by one, even with spirits.`;
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
-        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Pay 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'}.`;
+        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Needs 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'} in your bladder.`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
         case 'order':
             if (card.drink === 'simple') return `Serve a ${card.name}, single or double, for +${card.bonus} on top.`;
@@ -177,61 +177,89 @@ export const FREE_ACTIONS = {
 };
 
 // The rule book shown on the table. Keep in step with "Game Rules.md".
+export const RULES_INTRO = 'You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails to sell to the thirsty punters quicker than your rivals to win! Bartending is thirsty work, so you\u2019ll sample your own drinks along the way. Just don\u2019t get too drunk, or you\u2019ll end up on a fast trip to the nearest hospital.';
+
 export const RULES = [
     {
-        title: 'Winning',
+        title: 'How the night goes',
         items: [
-            'Reach the target to start the last round: 40 points with two players, 35 with three, 30 with four. The round finishes so everyone has had the same number of turns, then the most points wins (a tie goes to whoever is earliest in turn order).',
-            'Sing three karaoke songs and you win on the spot, even in the last round. A song needs drunk 3 or more and 2 of its spirit in your bladder.',
-            'Last one standing wins when everyone else is in hospital, wet or gone home.',
+            'Pour and serve: take ingredients into your two glasses and sell the drinks you make for points. Cocktails are worth the most, and punters’ orders pay a bonus on top.',
+            'Drink on the job: whatever you don’t pour, you drink. It goes into your bladder, and what’s in your bladder lets you claim cards that help you.',
+            'Stay on your feet: every spirit you drink makes you drunker, and your bladder only holds so much. Too drunk and it’s hospital; too full and you’ve wet yourself. Either way, you’re out.',
+            'Win by reaching the points target first, singing three karaoke songs, or being the last bartender standing (see Winning, at the end).',
+        ],
+    },
+    {
+        title: 'Behind the bar',
+        items: [
+            'The bag holds every ingredient: spirits, mixers, and two each of the purple specials (bitters, cointreau, lemon, sugar, vermouth).',
+            'The open display shows five spirits and mixers for anyone to take. A special that comes out while refilling it goes to the specials tray, also for anyone.',
+            'Three rows of cards: the five karaoke songs, three orders the punters are calling for, and three ability cards that help you.',
+            'Your mat: two glasses, a bladder of 8 spaces, the drunk track and 4 toilet tokens.',
         ],
     },
     {
         title: 'Your turn',
         items: [
-            'One main action: take ingredients, sell your glasses (one or both), drink a glass, or go for a wee.',
-            'Free actions, each once a turn, before or after: claim a card, clear the orders (drunk 3 or more), swipe the ability cards (drunk 2 or more), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
-            'Your turn ends when your main action is done and there is nothing free left you could use. You can end it early after your main action.',
+            'One main action: pour (take ingredients), serve (sell one or both glasses), drink a glass, or go for a wee.',
+            'Free actions, each once a turn, before or after: claim a card, swipe the ability cards or clear the orders (drunk 2 or more each), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
+            'Your turn ends when your main action is done and nothing free is left that you could use. You can end it early after your main action.',
         ],
     },
     {
-        title: 'Taking ingredients',
+        title: 'Pouring',
+        lead: 'The punters are waiting. Grab what you need, and whatever doesn’t fit in a glass goes down the hatch.',
         items: [
             'Take exactly 3 plus your drunk level, from the display, the specials tray, blind from the bag, or any mix.',
-            'Put each one in a glass (five spirits and mixers at most) or drink it before you take more. Nothing goes back.',
-            'Your drunk level changes once, after the whole take: +1 per spirit, bitters, cointreau or vermouth drunk; if you drank none of those, −1 per mixer, lemon or sugar.',
+            'Put each one in a glass or drink it before you take more. A glass holds five spirits and mixers, plus two specials in the specials spaces at its top. Nothing goes back, and a blind draw can hand you anything, specials included.',
+            'Specials are for cocktails: a glass with one in it only sells as the cocktail it makes. You might drink one so a rival can’t have it, or to claim a specialist with it.',
         ],
     },
     {
-        title: 'Specials',
+        title: 'Serving',
+        lead: 'A punter’s waiting at the bar. Hand over the drink and take the money.',
         items: [
-            'There are two each of bitters, cointreau, lemon, sugar and vermouth in the bag. Whenever one comes out, it goes to the specials tray and the drawing carries on, so the display always shows five spirits and mixers and a blind draw never hands you a special.',
-            'Anyone can take specials from the tray as part of their take. A special goes straight into a glass, up to two per glass on top of its five spirits and mixers, or you drink it.',
-            'A glass with a special in it only sells as the cocktail it makes. Drink one to stop others getting it: lemon and sugar sober you like a mixer, bitters, cointreau and vermouth get you drunk like a spirit.',
-            'Specials never count toward a card, except that one pays for a specialist: bitters for whisky, cointreau for tequila, vermouth for vodka, sugar for rum, lemon for gin.',
+            'Sell one glass or both. One spirit with one kind of mixer: 1 point. Two of the same spirit with one kind of mixer: 3. Tequila slammer (two tequila, nothing else): 3.',
+            'Cocktails score 10 (Long Island Iced Tea 15) and must match the recipe exactly, specials included. The Drinks menu lists them all.',
+            'Serve a drink an order is calling for and you get its bonus too: +2 simple drinks, +3 slammer, +4 cocktails, +5 Long Island. Each glass serves one order; bonuses aren’t doubled.',
         ],
     },
     {
-        title: 'Selling',
+        title: 'Having a drink',
+        lead: 'Bartending is thirsty work. A drink or two helps; too many and you’re off in an ambulance.',
         items: [
-            'One spirit with one kind of mixer: 1 point. Two of the same spirit with one kind of mixer: 3. Tequila slammer (two tequila, nothing else): 3.',
-            'Cocktails score 10 (Long Island Iced Tea 15) and must match the recipe exactly, specials included.',
-            'If an order on the table wants your drink, you also get its bonus: +2 simple drinks, +3 slammer, +4 cocktails, +5 Long Island. Bonuses aren’t doubled.',
+            'Drink ingredients as you take them, or a whole glass as your main action. Everything you drink goes into your bladder.',
+            'After each action: +1 drunk for every spirit, bitters, cointreau or vermouth you drank. If you drank none of those, you sober up 1 for each mixer, lemon or sugar instead.',
+            'The drunk track: 0 Sober, 1 Merry, 2 Tipsy, 3 Squiffy, 4 Sozzled, 5 Legless. Above 5 it’s hospital, and you’re out of the game.',
+            'Being drunk has its uses: you take more ingredients each turn, can swipe the ability cards or clear the orders at drunk 2, and sing karaoke at drunk 3.',
         ],
     },
     {
-        title: 'Drink, wee and limits',
+        title: 'Nipping to the loo',
+        lead: 'Once you break the seal, there’s no going back.',
         items: [
-            'Everything you drink goes into your bladder. More than it holds and you’ve wet yourself; above drunk 5 it’s hospital. Either way you’re out.',
-            'A wee empties your bladder into the bag and sobers you up by 1. Each wee seals a bladder space with a toilet token, down to 4 spaces.',
+            'More in your bladder than it has spaces and you’ve wet yourself: you’re out of the game.',
+            'A wee (main action) empties your bladder back into the bag and sobers you up by 1. Each wee seals a bladder space with a toilet token, down to 4 spaces.',
+            'When you’re out, everything you held goes back in the bag for the others.',
         ],
     },
     {
         title: 'Cards',
+        lead: 'What you’ve drunk earns them.',
         items: [
-            'Claiming pays the cost: those ingredients leave your bladder and go back in the bag. Stored spirits don’t count. A Store card pays one spirit and the rest of it moves onto the card.',
-            'A karaoke song also needs you drunk 3 or more (checked, not paid). Karaoke cards are all out from the start and aren’t replaced. A claimed ability card is replaced from the deck.',
-            'Clearing the orders (drunk 3 or more) or swiping the abilities (drunk 2 or more) is free, once a turn each. All three cards go to the bottom of their deck and three new ones are dealt. The karaoke row is never cleared.',
+            'Claim a card (free, once a turn) if your bladder holds its cost. The cost is only checked: it stays in your bladder. Stored spirits and specials don’t count, except that one special meets the cost of its specialist.',
+            'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more. Sing three and you win.',
+            'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), and free-action cards that make taking, selling or weeing free. The card says what it does.',
+            'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',
+            'Swiping the abilities or clearing the orders (drunk 2 or more) is free, once a turn each: all three go under their deck and three new ones are dealt. The karaoke row is never cleared.',
+        ],
+    },
+    {
+        title: 'Winning',
+        items: [
+            'Reach the target to start the last round: 40 points with two players, 35 with three, 30 with four. The round finishes so everyone has had the same number of turns, then the most points wins (a tie goes to whoever is earliest in turn order).',
+            'Sing three karaoke songs and you win on the spot, even in the last round.',
+            'Last one standing wins when everyone else is in hospital, wet or gone home.',
         ],
     },
 ];
@@ -285,6 +313,7 @@ export function describeMove(move, nameOf) {
         case 'refresh_card_row':
             return a.row_position === 2 ? `${who} cleared the orders` : a.row_position === 3 ? `${who} swiped the ability cards` : `${who} cleared card row ${a.row_position}`;
         case 'end_turn': return `${who} ended their turn`;
+        case 'skip_turn': return `${who} had nothing they could do and passed`;
         case 'quit_game': return `${who} left the bar`;
         case 'cancel_game': return 'The game was called off';
         case 'undo': return `${who} took back the last turn`;

@@ -41,6 +41,11 @@ def no_shared_sign_in(monkeypatch):
     monkeypatch.delenv("LOGIN_URL", raising=False)
 
 
+@given("there is no shared profile page")
+def no_shared_profile(monkeypatch):
+    monkeypatch.delenv("PROFILE_URL", raising=False)
+
+
 @given("a registered user", target_fixture="ctx")
 def registered_user():
     return {"token": _register()}
@@ -71,6 +76,11 @@ def open_login_next(next_path):
     )
 
 
+@when("a player opens the profile page", target_fixture="resp")
+def open_profile():
+    return _client.get("/profile", headers=_HTTPS, follow_redirects=False)
+
+
 @when(
     "a game fetches the public key for the user's login cookie", target_fixture="resp"
 )
@@ -88,12 +98,6 @@ def fetch_key(kid):
 def redirected(resp, location):
     assert resp.status_code == 302
     assert resp.headers["location"] == location
-
-
-@then("the login form is shown")
-def login_form(resp):
-    assert resp.status_code == 200
-    assert 'id="loginForm"' in resp.text
 
 
 @then(parsers.parse("the response status should be {status:d}"))

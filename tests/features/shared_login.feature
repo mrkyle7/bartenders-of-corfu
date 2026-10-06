@@ -18,10 +18,15 @@ Feature: Shared cheetahmoongames.com login
     When a player opens the login page with next "//evil.example/steal"
     Then they are redirected to "https://cheetahmoongames.com/login?next=https%3A%2F%2Fbartenders.cheetahmoongames.com%2F"
 
-  Scenario: Without a shared sign-in page the login page is served here
+  Scenario: Without a sign-in page set, players still go to cheetahmoongames.com
     Given there is no shared sign-in page
     When a player opens the login page
-    Then the login form is shown
+    Then they are redirected to "https://cheetahmoongames.com/login?next=https%3A%2F%2Fbartenders.cheetahmoongames.com%2F"
+
+  Scenario: The profile page is on cheetahmoongames.com
+    Given there is no shared profile page
+    When a player opens the profile page
+    Then they are redirected to "https://cheetahmoongames.com/profile"
 
   Scenario: Games can fetch the key that checks a login cookie
     Given a registered user

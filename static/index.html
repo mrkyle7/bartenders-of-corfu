@@ -7,15 +7,19 @@
     <title>Bartenders of Corfu</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#4a2c0e">
-    <script src="/static/theme.js"></script>
+    <meta name="theme-color" content="#2b1a0f">
+    <meta name="color-scheme" content="dark">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Fonts load without holding up the page; system fonts stand in until then. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,500;0,700;0,800;1,500&family=Figtree:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/static/css/home.css">
     <script src="/static/push.js"></script>
     <script src="/static/script.js"></script>
-    <link rel="stylesheet" href="/static/css/base.css">
-    <link rel="stylesheet" href="/static/css/themes.css">
 </head>
 
 <body>
+    <div class="topline">
     <a class="site-home" href="https://cheetahmoongames.com/" aria-label="More games from Cheetah Moon Games">&larr; Cheetah Moon Games</a>
     <header class="user-header"><span id="helloUser"></span><a class="notif-bell hidden" id="notificationBell"
             href="#myGamesSection" aria-label="Games waiting for your turn"><svg width="20" height="20" viewBox="0 0 24 24"
@@ -25,22 +29,17 @@
             href="/profile">Profile</a><a class="hidden" id="adminLink"
             href="/admin">Admin</a><a class="hidden" id="logoutLink"
             href="/logout">Logout</a><a class="hidden" id="loginLink" href="/login">Login</a></header>
+    </div>
     <main>
-        <img src="/static/bartenders.png" alt="Illustration of bartenders mixing cocktails" class="bartender-image"
-            role="img" aria-describedby="bartender-desc">
-        <h1>Welcome to Bartenders of Corfu</h1>
-        <p>Mix, shake, and serve! Create amazing cocktails and become the ultimate bartender, before you get too drunk!
-        </p>
-        <button aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
-        <fieldset class="ui-choice" aria-describedby="uiChoiceDesc">
-            <legend>How the game looks</legend>
-            <label><input type="radio" name="uiChoice" value="classic" id="uiClassic"><span>Classic</span></label>
-            <label><input type="radio" name="uiChoice" value="table" id="tableViewToggle"><span>Table view</span></label>
-            <label><input type="radio" name="uiChoice" value="bar" id="uiBar"><span>Bar top</span></label>
-        </fieldset>
-        <small id="uiChoiceDesc" class="ui-toggle-desc">Bar top lays the game out like the real box: cards, tokens, glasses and mats.</small>
-        <p class="notify-row"><button type="button" id="notifyToggle" class="hidden">Turn on notifications</button>
-            <small id="notifyStatus" class="ui-toggle-desc" role="status" aria-live="polite"></small></p>
+        <section class="sign" aria-labelledby="pageTitle">
+            <img src="/static/bartenders.png" alt="Illustration of bartenders mixing cocktails" class="bartender-image">
+            <p class="sign-over">Taverna Corfu</p>
+            <h1 id="pageTitle">Bartenders of Corfu</h1>
+            <p class="sign-lead">Mix, shake and serve! Sell drinks and cocktails to the thirsty punters faster than your rivals, and sample a few along the way. Just don&rsquo;t get too drunk.</p>
+            <button class="start-btn" aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
+            <p class="notify-row"><button type="button" id="notifyToggle" class="hidden">Turn on notifications</button>
+                <small id="notifyStatus" role="status" aria-live="polite"></small></p>
+        </section>
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <section class="game-section hidden" id="myGamesSection">
             <h2>Your Games</h2>
@@ -85,80 +84,7 @@
         setLogOutLink();
         init();
 
-        // Which game UI to use. Game links keep pointing at /game; the classic
-        // page sends players on to /play or /bar when they picked one.
-        let uiChoice = 'classic';
-        try {
-            uiChoice = localStorage.getItem('bocUi')
-                || (localStorage.getItem('bocTableView') === '1' ? 'table' : 'classic');
-        } catch (e) { /* storage blocked: classic */ }
-        document.querySelectorAll('input[name="uiChoice"]').forEach((input) => {
-            input.checked = input.value === uiChoice;
-            input.addEventListener('change', () => {
-                if (!input.checked) return;
-                try {
-                    localStorage.setItem('bocUi', input.value);
-                    localStorage.setItem('bocTableView', input.value === 'table' ? '1' : '0');
-                } catch (e) { /* storage blocked */ }
-            });
-        });
     </script>
-    <style>
-        /* Game UI choice: three printed tiles, the picked one filled. */
-        .ui-choice {
-            display: inline-flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 6px;
-            margin: 10px auto 0;
-            padding: 0;
-            border: 0;
-        }
-
-        .ui-choice legend {
-            width: 100%;
-            margin-bottom: 6px;
-            text-align: center;
-            font-weight: 600;
-            color: var(--theme-text-primary);
-        }
-
-        .ui-choice label { position: relative; cursor: pointer; }
-
-        .ui-choice input {
-            position: absolute;
-            opacity: 0;
-            width: 1px;
-            height: 1px;
-            margin: 0;
-        }
-
-        .ui-choice span {
-            display: inline-block;
-            min-height: 44px;
-            padding: 11px 16px;
-            border: 2px solid var(--theme-btn-bg);
-            border-radius: 6px;
-            color: var(--theme-text-primary);
-            font-weight: 600;
-        }
-
-        .ui-choice input:checked + span {
-            background: var(--theme-btn-bg);
-            color: var(--theme-btn-text);
-        }
-
-        .ui-choice input:focus-visible + span {
-            outline: 2px solid var(--theme-btn-bg);
-            outline-offset: 2px;
-        }
-
-        .ui-toggle-desc {
-            display: block;
-            margin: 2px auto 12px;
-            opacity: 0.75;
-        }
-    </style>
 </body>
 
 </html>

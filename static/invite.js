@@ -1,9 +1,8 @@
-// Invite links for a game waiting to start. The link opens /game, which
-// sends each friend to whichever view they picked on the home page; from
-// the lobby there they can take a seat.
+// Invite links for a game waiting to start. The link opens the game's
+// lobby, where a friend can take a seat.
 
 export function inviteUrl(gameId) {
-    return `${window.location.origin}/game?id=${encodeURIComponent(gameId)}`;
+    return `${window.location.origin}/bar?id=${encodeURIComponent(gameId)}`;
 }
 
 // Copy text to the clipboard. Returns true when it worked.

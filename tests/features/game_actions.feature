@@ -169,7 +169,7 @@ Feature: Game turn actions
     When player 1 claims that card
     Then player 1 should have 1 card
     And row 1 should have 5 cards
-    And player 1's bladder should contain 1 ingredients
+    And player 1's bladder should contain 3 ingredients
 
   Scenario: Singing karaoke needs drunk level 3
     Given it is player 1's turn
@@ -202,7 +202,7 @@ Feature: Game turn actions
 
   Scenario: Player clears the orders row when drunk enough
     Given it is player 1's turn
-    And player 1 has a drunk level of 3
+    And player 1 has a drunk level of 2
     When player 1 refreshes card row 2
     Then row 2 should be refreshed with new cards
     And row 2 should have 3 cards
@@ -211,7 +211,7 @@ Feature: Game turn actions
 
   Scenario: Player cannot clear the orders row when not drunk enough
     Given it is player 1's turn
-    And player 1 has a drunk level of 2
+    And player 1 has a drunk level of 1
     When player 1 tries to refresh card row 2
     Then the action should be rejected with a 400 error
 
@@ -386,9 +386,9 @@ Feature: Game turn actions
     And the current bag size is recorded
     When player 1 claims that card
     Then player 1 should have 1 card
-    And player 1's store card should have 2 stored spirits
+    And player 1's store card should have 3 stored spirits
     And player 1's bladder should be empty
-    And the bag should contain 1 more ingredient than before
+    And the bag should contain 0 more ingredients than before
 
   Scenario: Store card cost cannot be paid using same-type stored spirits
     Given it is player 1's turn
@@ -652,12 +652,12 @@ Feature: Game turn actions
 
   # ── Integration: Drink stored to qualify for refresh row ─────────────────────
 
-  Scenario: Drink stored spirits to reach drunk level 3 then refresh row
+  Scenario: Drink stored spirits to reach drunk level 2 then refresh row
     Given it is player 1's turn
-    And player 1 holds a VODKA store card with 3 stored spirits
+    And player 1 holds a VODKA store card with 2 stored spirits
     And player 1 has a drunk level of 0
-    When player 1 drinks 3 stored spirits from card 0
-    Then player 1's drunk level should be 3
+    When player 1 drinks 2 stored spirits from card 0
+    Then player 1's drunk level should be 2
     And it should still be player 1's turn
     When player 1 refreshes card row 2
     Then the action should succeed
@@ -683,14 +683,14 @@ Feature: Game turn actions
     And player 1 should have 1 card
     And a move record should be created for the game
 
-  Scenario: Claiming a specialist card pays its spirits into the bag
+  Scenario: Claiming a specialist card leaves its spirits in the bladder
     Given it is player 1's turn
     And a specialist card for VODKA is available in row 3
     And player 1's bladder has 2 VODKA spirits
     And the current bag size is recorded
     When player 1 claims that card
-    Then player 1's bladder should be empty
-    And the bag should contain 2 more ingredients than before
+    Then player 1's bladder should contain 2 ingredients
+    And the bag should contain 0 more ingredients than before
 
   Scenario: A specialist card can be claimed with its special instead
     Given it is player 1's turn
@@ -698,7 +698,7 @@ Feature: Game turn actions
     And player 1's bladder has 1 VERMOUTH spirit
     When player 1 claims that card
     Then player 1 should have 2 points
-    And player 1's bladder should be empty
+    And player 1's bladder should contain 1 ingredients
 
   Scenario: The wrong special does not pay for a specialist card
     Given it is player 1's turn
@@ -814,14 +814,14 @@ Feature: Game turn actions
     And player 1 should have 1 card
     And a move record should be created for the game
 
-  Scenario: Claiming a free action card pays its spirits into the bag
+  Scenario: Claiming a free action card leaves its spirits in the bladder
     Given it is player 1's turn
     And a free action card for VODKA is available in row 3
     And player 1's bladder has 3 VODKA spirits
     And the current bag size is recorded
     When player 1 claims that card
-    Then player 1's bladder should be empty
-    And the bag should contain 3 more ingredients than before
+    Then player 1's bladder should contain 3 ingredients
+    And the bag should contain 0 more ingredients than before
 
   Scenario: Cannot claim free action card with fewer than 3 matching bladder spirits
     Given it is player 1's turn

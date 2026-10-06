@@ -37,18 +37,33 @@ class TestVapidPublicKeyEndpoint(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_returns_503_when_not_configured(self):
-        with patch("app.push._VAPID_PUBLIC_KEY", ""):
+        with patch("app.push.get_public_key", return_value=""):
             resp = self.client.get("/vapid-public-key")
         self.assertEqual(resp.status_code, 503)
         self.assertIn("error", resp.json())
 
     def test_returns_public_key_when_configured(self):
-        with patch("app.push._VAPID_PUBLIC_KEY", "FAKE_PUBLIC_KEY_VALUE"):
+        with patch("app.push.get_public_key", return_value="FAKE_PUBLIC_KEY_VALUE"):
             resp = self.client.get("/vapid-public-key")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("public_key", data)
         self.assertEqual(data["public_key"], "FAKE_PUBLIC_KEY_VALUE")
+
+
+class TestVapidKeysTable(unittest.TestCase):
+    """The key pair is kept in the database: the first one saved wins."""
+
+    def test_keeps_the_first_pair_saved(self):
+        from app.db import db
+
+        before = db.get_vapid_keys()
+        first = {"public_key": "pub-first", "private_key": "priv-first"}
+        db.save_vapid_keys(first)
+        kept = before or first
+        self.assertEqual(db.get_vapid_keys(), kept)
+        db.save_vapid_keys({"public_key": "pub-second", "private_key": "priv-second"})
+        self.assertEqual(db.get_vapid_keys(), kept)
 
 
 class TestSavePushSubscription(unittest.TestCase):
@@ -291,7 +306,7 @@ class TestNotifyAfterAction(unittest.TestCase):
                 (
                     f"https://push.example.com/{self.b}",
                     "It's your turn in ann's game!",
-                    f"/game?id={self.game_id}",
+                    f"/bar?id={self.game_id}",
                     f"game-{self.game_id}",
                 )
             ],

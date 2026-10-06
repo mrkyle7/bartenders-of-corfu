@@ -1,5 +1,7 @@
+import asyncio
 import os
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import BackgroundTasks, FastAPI, Query, Request
@@ -28,7 +30,17 @@ _VALID_STATUSES = {"NEW", "STARTED", "ENDED"}
 setup_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Load (or make) the notification keys now rather than at the first
+    # notification, so a pair this server still has from Secret Manager is
+    # saved to the database straight away (app/push.py).
+    await asyncio.to_thread(push.get_keys)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 gameManager = GameManager()
 userManager = UserManager()
 jwt_handler = JWTHandler()
@@ -159,9 +171,18 @@ async def root():
     )
 
 
-def _login_url() -> str | None:
-    """Where players sign in, when that's the shared cheetahmoongames.com page."""
-    return os.getenv("LOGIN_URL", "").strip() or None
+DEFAULT_LOGIN_URL = "https://cheetahmoongames.com/login"
+DEFAULT_PROFILE_URL = "https://cheetahmoongames.com/profile"
+
+
+def _login_url() -> str:
+    """Where players sign in: the shared cheetahmoongames.com page."""
+    return os.getenv("LOGIN_URL", "").strip() or DEFAULT_LOGIN_URL
+
+
+def _profile_url() -> str:
+    """Where players change their email and password: on cheetahmoongames.com."""
+    return os.getenv("PROFILE_URL", "").strip() or DEFAULT_PROFILE_URL
 
 
 def _public_origin(request: Request) -> str:
@@ -188,49 +209,19 @@ def _return_to(request: Request) -> str:
 
 @app.get("/login")
 async def login_page(request: Request):
-    login_url = _login_url()
-    if login_url:
-        # Signing in happens on the shared page, which sends the player back here.
-        return RedirectResponse(
-            f"{login_url}?{urlencode({'next': _return_to(request)})}",
-            status_code=302,
-        )
-    login_path = os.path.join("static", "login.html")
-    return FileResponse(
-        login_path,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
+    """Signing in happens on cheetahmoongames.com, which sends the player back here."""
+    return RedirectResponse(
+        f"{_login_url()}?{urlencode({'next': _return_to(request)})}",
+        status_code=302,
     )
 
 
 @app.get("/game")
-async def game_page():
-    login_path = os.path.join("static", "game.html")
-    return FileResponse(
-        login_path,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
-
-
 @app.get("/play")
-async def play_page():
-    """Table view — the alternative game UI. Same game, new table."""
-    play_path = os.path.join("static", "play.html")
-    return FileResponse(
-        play_path,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
+async def old_game_pages(request: Request):
+    """The old classic and table views are gone: send links to the bar top."""
+    query = request.url.query
+    return RedirectResponse(url=f"/bar?{query}" if query else "/bar", status_code=302)
 
 
 @app.get("/bar")
@@ -262,15 +253,8 @@ async def admin_page():
 
 @app.get("/profile")
 async def profile_page():
-    profile_path = os.path.join("static", "profile.html")
-    return FileResponse(
-        profile_path,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
+    """The account page (email and password) is on cheetahmoongames.com."""
+    return RedirectResponse(_profile_url(), status_code=302)
 
 
 @app.get("/health")
@@ -794,30 +778,6 @@ async def change_email(body: ChangeEmailRequest, request: Request):
         )
 
 
-class ChangeThemeRequest(BaseModel):
-    theme: str
-
-
-@app.patch("/v1/users/me/theme")
-async def change_theme(body: ChangeThemeRequest, request: Request):
-    token_user, err = _require_auth(request)
-    if err:
-        return err
-    try:
-        userManager.change_theme(token_user.id, body.theme)
-        logger.info("Theme changed for user %s to %s", token_user.username, body.theme)
-        return JSONResponse(
-            content={"message": "Theme updated successfully", "theme": body.theme}
-        )
-    except UserValidationError as e:
-        return JSONResponse(status_code=400, content={"error": str(e)})
-    except Exception:
-        logger.exception("Error changing theme for %s", token_user.username)
-        return JSONResponse(
-            status_code=500, content={"error": "Failed to update theme"}
-        )
-
-
 @app.delete("/v1/users/me")
 async def delete_account(request: Request):
     token_user, err = _require_auth(request)
@@ -940,7 +900,7 @@ def _send_to_user(user_id, title: str, body: str, game_id) -> None:
             },
             title=title,
             body=body,
-            url=f"/game?id={game_id}",
+            url=f"/bar?id={game_id}",
             tag=f"game-{game_id}",
         )
         if not ok:

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
-from app.GameState import GameState, regular_in_bag
+from app.GameState import GameState, drawable_in_bag
 from app.Ingredient import Ingredient
 from app.actions import _advance_turn, _deep_copy_state
 from app.game import GameException
@@ -207,7 +207,7 @@ class RolloutExecutor:
             remaining = ps.take_count - gs.ingredients_taken_this_turn
             if remaining <= 0:
                 break
-            bag_count = min(remaining, regular_in_bag(gs))
+            bag_count = min(remaining, drawable_in_bag(gs))
             if bag_count <= 0:
                 display_assignments = strategy.choose_take_assignments(
                     gs, player_id, remaining

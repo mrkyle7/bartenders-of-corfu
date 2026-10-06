@@ -33,7 +33,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from uuid import UUID
 
-from app.GameState import GameState, regular_in_bag
+from app.GameState import GameState, drawable_in_bag
 from app.Ingredient import (
     BOOZY_SPECIALS,
     SPECIAL_INGREDIENTS,
@@ -976,7 +976,7 @@ def _smart_take_assignments(
                             }
                         )
                         placed = True
-                    elif regular_in_bag(gs) >= count - len(assignments):
+                    elif drawable_in_bag(gs) >= count - len(assignments):
                         # Bail: leave display alone, let the bag fill the rest
                         # of the take (random — may give mixers or specials
                         # instead of certain drunk). Only safe when bag has
@@ -1022,7 +1022,7 @@ def _smart_take_assignments(
         if (
             not placed
             and specials_available
-            and regular_in_bag(gs) < count - len(assignments)
+            and drawable_in_bag(gs) < count - len(assignments)
         ):
             _take_special(
                 min(specials_available, key=lambda i: i in BOOZY_SPECIALS), "drink"
@@ -2052,7 +2052,7 @@ class Mastermind(Strategy):
     # ------------------------------------------------------------------
 
     def _bag_spirit_frac(self, gs: GameState) -> float:
-        drawable = regular_in_bag(gs)
+        drawable = drawable_in_bag(gs)
         if not drawable:
             return 0.0
         return sum(1 for i in gs.bag_contents if i in _SPIRITS) / drawable

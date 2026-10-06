@@ -57,9 +57,23 @@ def draw_token(gs: "GameState") -> Ingredient | None:
     return None
 
 
-def regular_in_bag(gs: "GameState") -> int:
-    """Tokens in the bag that a draw can hand you (everything but specials)."""
-    return sum(1 for t in gs.bag_contents if not is_special(t))
+def draw_blind(gs: "GameState") -> Ingredient | None:
+    """Draw one token blind from the bag: whatever comes out, specials too.
+
+    A special drawn blind is the player's to deal with, like a spirit or a
+    mixer: onto a glass rim or drunk. (Specials drawn to refill the open
+    display go to the specials display instead; see ``draw_token``.)
+    """
+    if not gs.bag_contents:
+        return None
+    token = random.choice(gs.bag_contents)
+    gs.bag_contents.remove(token)
+    return token
+
+
+def drawable_in_bag(gs: "GameState") -> int:
+    """Tokens a blind draw can hand you: everything in the bag."""
+    return len(gs.bag_contents)
 
 
 def _faces_for(
