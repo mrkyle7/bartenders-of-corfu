@@ -14,6 +14,7 @@
     <!-- Fonts load without holding up the page; system fonts stand in until then. -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,500;0,700;0,800;1,500&family=Figtree:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="/static/css/home.css">
+    <script src="/static/push.js"></script>
     <script src="/static/script.js"></script>
 </head>
 
@@ -36,6 +37,8 @@
             <h1 id="pageTitle">Bartenders of Corfu</h1>
             <p class="sign-lead">Mix, shake and serve! Sell drinks and cocktails to the thirsty punters faster than your rivals, and sample a few along the way. Just don&rsquo;t get too drunk.</p>
             <button class="start-btn" aria-label="Start new game" onclick="createNewGame()">Start Mixing Cocktails</button>
+            <p class="notify-row"><button type="button" id="notifyToggle" class="hidden">Turn on notifications</button>
+                <small id="notifyStatus" role="status" aria-live="polite"></small></p>
         </section>
         <p id="gameListError" role="alert" aria-live="polite" class="hidden error-msg"></p>
         <section class="game-section hidden" id="myGamesSection">

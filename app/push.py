@@ -13,7 +13,9 @@ import base64
 import json
 import logging
 import os
+import re
 import threading
+from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric.ec import SECP256R1, generate_private_key
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -22,6 +24,11 @@ from pywebpush import WebPushException, webpush
 logger = logging.getLogger(__name__)
 
 _VAPID_CLAIMS = {"sub": "mailto:admin@cheetahmoongames.com"}
+# Keep a notification for a day while the device is offline or asleep
+# (pywebpush's default of 0 drops it unless the device is reachable now),
+# and don't wait forever on a slow push service.
+_TTL_SECONDS = 24 * 60 * 60
+_TIMEOUT_SECONDS = 10
 # Terraform used to create the key secrets with this value until they were set.
 _PLACEHOLDER = "not-set"
 
@@ -91,7 +98,36 @@ def get_public_key() -> str:
     return keys["public_key"] if keys else ""
 
 
-def send_push(subscription_info: dict, title: str, body: str, url: str) -> bool:
+def valid_endpoint(endpoint: str) -> bool:
+    """Whether a browser's push endpoint is safe for the server to send to.
+
+    The server POSTs to it, so it must be an https URL on a named host on the
+    internet, not an address on the server's own network.
+    """
+    if not isinstance(endpoint, str) or len(endpoint) > 1000:
+        return False
+    try:
+        parts = urlsplit(endpoint)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        return False
+    if parts.scheme != "https" or parts.username or parts.password:
+        return False
+    if (
+        "." not in host
+        or host == "localhost"
+        or host.endswith((".localhost", ".internal", ".local"))
+    ):
+        return False
+    # IP addresses: IPv4 dotted numbers, or IPv6 (hostname drops the brackets)
+    if re.fullmatch(r"[\d.]+", host) or ":" in host:
+        return False
+    return True
+
+
+def send_push(
+    subscription_info: dict, title: str, body: str, url: str, tag: str | None = None
+) -> bool:
     """Send a Web Push notification to one subscription.
 
     Returns True if the push was sent (or if there are no keys to sign it).
@@ -104,9 +140,14 @@ def send_push(subscription_info: dict, title: str, body: str, url: str) -> bool:
     try:
         webpush(
             subscription_info=subscription_info,
-            data=json.dumps({"title": title, "body": body, "url": url}),
+            data=json.dumps(
+                {"title": title, "body": body, "url": url, "tag": tag or "turn-push"}
+            ),
             vapid_private_key=keys["private_key"],
             vapid_claims=dict(_VAPID_CLAIMS),
+            ttl=_TTL_SECONDS,
+            timeout=_TIMEOUT_SECONDS,
+            headers={"Urgency": "high"},
         )
         return True
     except WebPushException as exc:

@@ -35,6 +35,11 @@ Reset all data: `supabase db reset --network-id k3s-net`
 
 The installed PWA uses [Web Push](https://developer.mozilla.org/en-US/docs/Web/API/Push_API) ([VAPID](https://datatracker.ietf.org/doc/html/rfc8292)) to notify players when it's their turn or a game ends — even when the app is fully closed.
 
+- **Turning them on:** players press "Turn on notifications" on the home page; the browser only asks for permission then. Every page load after that re-sends the device's subscription, so a device the server forgot, one signed in to another account, or one subscribed with old VAPID keys is picked up again (`static/push.js`).
+- **Who's told:** not a player looking at the game. The game page (bar top) only polls while it's showing, and sends `POST /v1/games/{id}/away` when hidden; a player who polled in the last 15 seconds is watching (`app/presence.py`, kept in each instance's memory, so with several instances an extra notification can slip through).
+- **When:** after every game action, as a background task once the reply has gone, so a slow push service never holds up a move. It reads the game afresh, since bots move within the same request: the next human is told, not the bot. Game over and cancelled games go to every human not watching.
+- **Each game** has one notification at a time (`tag`), the latest replacing the last. Notifications wait a day for an offline device.
+
 ## How it works
 
 ```
@@ -71,9 +76,10 @@ Your Server (Cloud Run)          Browser Vendor             Player's Device
 | VAPID keys | Made by the server and kept in the database (`vapid_keys`): see below |
 | Server-side send | `app/push.py` |
 | Subscription storage | `supabase/migrations/20260509000001_push_subscriptions.sql` |
-| API endpoints | `POST /v1/push-subscriptions`, `DELETE /v1/push-subscriptions`, `GET /vapid-public-key` |
-| Service worker handler | `static/sw.js` — `push` event |
-| Browser subscription | `static/script.js` — `subscribeToPush()` |
+| Who's told, and when | `_notify_after_action` in `app/api.py`, `app/presence.py` |
+| API endpoints | `POST /v1/push-subscriptions` (https push services only), `DELETE /v1/push-subscriptions` (your own devices), `GET /vapid-public-key`, `POST /v1/games/{id}/away` |
+| Service worker handler | `static/sw.js` — `push` and `notificationclick` events |
+| Browser subscription | `static/push.js` (`window.bocPush`), used by `static/script.js` and `static/bar/app.js` |
 
 ## The keys
 

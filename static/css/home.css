@@ -177,6 +177,20 @@ main button[disabled] { opacity: 0.6; cursor: progress; }
 .start-btn:hover:not([disabled]), .game-action button.go:hover:not([disabled]) { background: #ff9d3d; }
 .start-btn { min-height: 54px; padding: 10px 30px; font-size: 18px; }
 
+/* Turning notifications on and off: quieter than the start button */
+.notify-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.notify-row button {
+    min-height: 40px;
+    padding: 6px 14px;
+    background: transparent;
+    color: var(--whitewash);
+    border-color: var(--line);
+    box-shadow: none;
+    font-size: 14px;
+}
+.notify-row button:hover:not([disabled]) { background: rgba(234, 241, 245, 0.1); }
+.notify-row small { color: var(--whitewash-dim); font-size: 14px; }
+
 .game-action button.cancel-game { background: var(--danger); color: #fff; border-color: #7d1f15; box-shadow: 0 3px 0 #7d1f15; }
 .game-action button.cancel-game:hover:not([disabled]) { background: #d64534; }
 

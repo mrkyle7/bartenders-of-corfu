@@ -1,41 +1,6 @@
 let user;
 let listGamesInProgress = false;
 
-function _urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const raw = atob(base64);
-    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-}
-
-async function subscribeToPush() {
-    if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
-    try {
-        const reg = await navigator.serviceWorker.ready;
-        const resp = await fetch('/vapid-public-key');
-        if (!resp.ok) return;
-        const { public_key } = await resp.json();
-        const serverKey = _urlBase64ToUint8Array(public_key);
-        const existing = await reg.pushManager.getSubscription();
-        if (existing) {
-            // Still signed with the server's key: nothing to do. A subscription
-            // for an older key gets nothing any more, so make a new one.
-            const key = existing.options.applicationServerKey;
-            if (key && new Uint8Array(key).join() === serverKey.join()) return;
-            await existing.unsubscribe();
-        }
-        const sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: serverKey,
-        });
-        await fetch('/v1/push-subscriptions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(sub.toJSON()),
-        });
-    } catch (_) {}
-}
-
 let initialLoadDone = false;
 let myTurnCount = 0;
 let myGamesStatusFilter = 'NEW,STARTED';
@@ -467,10 +432,47 @@ async function joinGame(gameId) {
     }
 }
 
+// The button that turns notifications on and off. The browser only asks for
+// permission when it's clicked, never on page load.
+async function setUpNotifications() {
+    const button = document.getElementById('notifyToggle');
+    const push = window.bocPush;
+    if (!button || !user || !push || !push.supported || Notification.permission === 'denied') return;
+    if (!(await push.publicKey())) return;
+    const show = () => {
+        const label = push.on ? 'Turn off notifications' : 'Turn on notifications';
+        button.textContent = label;
+        button.setAttribute('aria-label', push.on
+            ? 'Turn off notifications on this device'
+            : "Turn on notifications on this device for your turns and finished games");
+        button.classList.remove('hidden');
+    };
+    button.addEventListener('click', async () => {
+        button.disabled = true;
+        const status = document.getElementById('notifyStatus');
+        if (push.on) {
+            await push.turnOff();
+            status.textContent = 'Notifications are off on this device.';
+        } else if (await push.turnOn()) {
+            status.textContent = "Notifications are on. You'll hear when it's your turn.";
+        } else if (Notification.permission === 'denied') {
+            status.textContent = 'Notifications are blocked. Allow them for this site in your browser settings.';
+        } else {
+            status.textContent = "Couldn't turn on notifications. Please try again.";
+        }
+        button.disabled = false;
+        show();
+    });
+    show();
+    // Already allowed: make sure the server still has this device.
+    push.sync().then(show);
+}
+
 function updateNotificationBell() {
     const bell = document.getElementById('notificationBell');
     if (!bell) return;
     const badge = bell.querySelector('.notif-badge');
+    if (window.bocPush) window.bocPush.setBadge(myTurnCount);
     if (myTurnCount > 0) {
         bell.classList.remove('hidden');
         badge.textContent = myTurnCount;
@@ -501,31 +503,5 @@ async function init() {
     await listGames();
     setInterval(listGames, 30000);
 
-    // Register service worker for PWA notifications
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-
-    // Request notification permission, then subscribe to Web Push
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then((perm) => {
-            if (perm === 'granted') subscribeToPush();
-        });
-    } else if ('Notification' in window && Notification.permission === 'granted') {
-        subscribeToPush();
-    }
-
-    // Background polling: tell SW to poll all games when tab is hidden
-    document.addEventListener('visibilitychange', () => {
-        if (!navigator.serviceWorker?.controller || !user) return;
-        if (document.visibilityState === 'hidden') {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'START_POLL',
-                playerId: user.id,
-                knownTurns: {},
-            });
-        } else {
-            navigator.serviceWorker.controller.postMessage({ type: 'STOP_POLL' });
-        }
-    });
+    setUpNotifications();
 }
