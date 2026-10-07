@@ -696,7 +696,9 @@ button.card { cursor: pointer; }
 .zone-warn { margin-top: 6px; color: #ffd0c9; font-weight: 700; }
 
 /* Glasses: tokens stack from the bottom up. */
-.glass-spot { display: grid; justify-items: center; gap: 6px; max-width: 200px; }
+/* A glass's column is as wide as the glass: its buttons wrap their text
+   rather than push the two glasses apart onto separate lines. */
+.glass-spot { display: grid; grid-template-columns: min-content; justify-items: center; gap: 6px; max-width: 200px; }
 .glass {
     position: relative;
     display: grid;
@@ -765,7 +767,7 @@ button.glass { cursor: pointer; }
     text-align: center;
 }
 .glass-actions { display: grid; gap: 6px; justify-items: stretch; width: 100%; }
-.glass-actions .btn { width: 100%; }
+.glass-actions .btn { width: 100%; min-width: 0; text-align: center; }
 /* Cup doublers stand in the glass, behind its tokens: a straw on the
    right, a paper umbrella on the left. */
 .straw {
