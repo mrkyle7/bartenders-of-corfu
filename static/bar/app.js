@@ -10,6 +10,8 @@ import {
     orderRecipe, servesOrder, SPECIALIST_SPECIAL, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
+import { initLive, isLive, layout, liveZoom, setLive } from './live.js';
+import { play, snapshot } from './motion.js';
 
 const POLL_MS = 2000;
 const MAX_DRUNK = 5;
@@ -169,7 +171,7 @@ const TOKEN_NAMES = {
 // ring, a picture and its name. Tokens are one size wherever they sit;
 // `print` is only for the small pictures printed on a card.
 // `name` is an ingredient key, 'ANY_SPIRIT', or a rolled special ('lemon'…).
-function token(name, { onclick, label, state, selected, key, print, printed: printedName } = {}) {
+function token(name, { onclick, label, state, selected, key, print, printed: printedName, from } = {}) {
     const meta = ING[name];
     const special = SPECIALS[name] ?? SPECIALS[meta?.special];
     const kind = special ? 'rolled' : meta?.kind ?? 'spirit';
@@ -184,6 +186,8 @@ function token(name, { onclick, label, state, selected, key, print, printed: pri
         'aria-pressed': onclick && selected !== undefined ? String(!!selected) : undefined,
         title: label ?? text,
         'data-k': key,
+        'data-n': print ? undefined : name,
+        'data-from': from,
         role: onclick ? undefined : 'img',
     });
     node.append(h('span.tok-icon', { svg: special ? SPECIAL_ICONS[meta?.special ?? name] : ING_ICONS[name] ?? '', 'aria-hidden': 'true' }));
@@ -214,6 +218,7 @@ async function boot() {
     }
     try {
         me = await api.me();
+        initLive(() => render({ force: true }));
         await refresh();
     } catch (e) {
         if (e.status === 403 || e.status === 404) {
@@ -836,6 +841,15 @@ function turnbar() {
             }));
         }
     }
+    if (game.status !== 'NEW') {
+        buttons.push(h('button.btn.tiny.sheet-btn.live-btn', {
+            type: 'button', text: 'Live view', 'data-k': 'live-view',
+            cls: isLive() ? 'is-open' : '',
+            'aria-pressed': String(isLive()),
+            title: 'Draw the table at a fixed size and animate every move',
+            onclick: () => { setLive(!isLive()); render({ force: true }); },
+        }));
+    }
     if (buttons.length) kids.push(h('div.turn-buttons', {}, buttons));
     if (strip) kids.push(strip);
 
@@ -947,6 +961,8 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
         'aria-label': label,
         role: claimable ? undefined : 'group',
         'data-k': claimable ? `card-${card.id}` : undefined,
+        'data-m': `card-${card.id}`,
+        'data-pile': owner ? undefined : isOrder ? 'orders' : card.card_type === 'karaoke' ? undefined : 'abilities',
     },
     h('span.card-art', { 'aria-hidden': 'true', style: { '--art': `url("/static/bar/img/cards/${cardArt(card)}.webp")` } },
         subject ? h('span.card-subject', {}, token(subject, { print: true })) : null,
@@ -964,7 +980,7 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
     compact ? null : h('span.card-rule', {}, h('span', { text: cardText(card) })));
 
     if (card.card_type === 'store' && owner) {
-        face.append(h('span.card-store', { 'aria-label': `${plural(card.stored_spirits.length, 'spirit')} stored` },
+        face.append(h('span.card-store', { 'aria-label': `${plural(card.stored_spirits.length, 'spirit')} stored`, 'data-loc': `store-${card.id}` },
             card.stored_spirits.length
                 ? card.stored_spirits.map((s) => token(s))
                 : h('span.card-store-empty', { text: 'Nothing stored' })));
@@ -984,8 +1000,8 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
     return face;
 }
 
-function cardBack(count, label, word = 'Bartenders of Corfu') {
-    return h('div.pile', { role: 'img', 'aria-label': label },
+function cardBack(count, label, word = 'Bartenders of Corfu', pile) {
+    return h('div.pile', { role: 'img', 'aria-label': label, 'data-loc': pile ? `pile-${pile}` : undefined },
         count ? h('div.card.card-back', {}, h('span.back-mark', { text: word })) : h('div.card-space'),
         h('span.pile-count', { text: count ? plural(count, 'card') : 'Empty' }));
 }
@@ -1014,11 +1030,11 @@ function renderMarket() {
         h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
             tag('Orders', 'Sell what they want for the bonus. Clear at drunk 2+ (free).', 2, 'Clear (free)'),
             h('div.row-cards', {}, cells(2, 3)),
-            cardBack(state.order_deck_size ?? 0, `Order deck, ${plural(state.order_deck_size ?? 0, 'order')}`, 'Orders')),
+            cardBack(state.order_deck_size ?? 0, `Order deck, ${plural(state.order_deck_size ?? 0, 'order')}`, 'Orders', 'orders')),
         h('div.card-row', { 'aria-label': 'Ability cards', role: 'group' },
             tag('Ability cards', 'Swipe at drunk 2+ (free).', 3, 'Swipe (free)'),
             h('div.row-cards', {}, cells(3, 3)),
-            cardBack(state.deck_size, `Ability deck, ${plural(state.deck_size, 'card')}`, 'Abilities')));
+            cardBack(state.deck_size, `Ability deck, ${plural(state.deck_size, 'card')}`, 'Abilities', 'abilities')));
 }
 
 // ─── Bag and open display ───────────────────────────────────────────────────
@@ -1033,7 +1049,7 @@ function renderSupply() {
     const drawable = state.bag_contents.filter((n) => !isSpecial(n)).length;
     const maxDraw = taking && !pendingDraw ? Math.min(left, drawable) : 0;
 
-    const display = h('div.display', { role: 'group', 'aria-label': 'Open display' },
+    const display = h('div.display', { role: 'group', 'aria-label': 'Open display', 'data-loc': 'display' },
         Array.from({ length: 5 }, (_, i) => {
             const name = state.open_display[i];
             if (!name) return slot(null, 'is-empty');
@@ -1057,7 +1073,7 @@ function renderSupply() {
         }));
 
     const bag = h('div.bag-wrap', {},
-        h('div.bag', { role: 'img', 'aria-label': `The bag, ${plural(state.bag_contents.length, 'ingredient')} inside` },
+        h('div.bag', { role: 'img', 'aria-label': `The bag, ${plural(state.bag_contents.length, 'ingredient')} inside`, 'data-loc': 'bag' },
             h('span.bag-body', {}, h('span.bag-count', { text: state.bag_contents.length }), h('span.bag-word', { text: 'in the bag' }))),
         maxDraw > 0
             ? h('div.draws', { role: 'group', 'aria-label': 'Draw blind from the bag' },
@@ -1074,7 +1090,7 @@ function renderSupply() {
         h('div.zone-head', {},
             h('span.zone-name', { text: 'Specials tray' }),
             h('span.zone-count', { text: tray.length ? 'Into a glass, or drink it' : '' })),
-        h('div.specials-tray-row', {},
+        h('div.specials-tray-row', { 'data-loc': 'tray' },
             tray.length
                 ? tray.map((name, i) => {
                     const what = ING[name]?.label ?? name;
@@ -1101,6 +1117,7 @@ function renderScoreTrack() {
         return h('li.score-cell', { cls: n % 5 === 0 ? 'is-five' : '' },
             n % 5 === 0 || n === target ? h('span.score-num', { text: n === target ? `${target}+ last round` : n, 'aria-hidden': 'true' }) : null,
             here.map((pid) => h('span.pawn', {
+                'data-m': `score-${pid}`,
                 style: { '--seat': seatColour(pid) }, role: 'img',
                 'aria-label': `${seatName(pid)}: ${plural(gs().player_states[pid].points, 'point')}`,
             })));
@@ -1163,7 +1180,7 @@ function glass(pid, cupIndex, { interactive }) {
     const space = interactive ? glassRoom(cupIndex) : null;
     const room = placing && (isSpecial(held.name) ? space.specials > 0 : space.base > 0);
     const staged = (it) => token(it.name, {
-        state: 'placed', key: `staged-${it.key}`,
+        state: 'placed', key: `staged-${it.key}`, from: `hand-${it.key}`,
         label: `${ING[it.name].label} going into glass ${cupIndex + 1}. Tap to pick it back up.`,
         onclick: () => selectInHand(it.key),
     });
@@ -1193,6 +1210,7 @@ function glass(pid, cupIndex, { interactive }) {
         'data-k': room ? `glass-${cupIndex}` : undefined,
     },
     h('span.glass-body', {
+        'data-loc': `glass-${pid}-${cupIndex}`,
         style: {
             '--art': `url("${GLASS_ART[cupIndex].src}")`,
             '--art-ratio': `${GLASS_ART[cupIndex].w} / ${GLASS_ART[cupIndex].h}`,
@@ -1270,8 +1288,8 @@ function mouth() {
     h('span.mouth-word', { text: 'Drink' }));
     return h('div.mouth-spot', {},
         node,
-        h('div.mouth-tokens', {}, drinks.map((it) => token(it.name, {
-            state: 'placed', key: `staged-${it.key}`,
+        h('div.mouth-tokens', { 'data-loc': 'mouth' }, drinks.map((it) => token(it.name, {
+            state: 'placed', key: `staged-${it.key}`, from: `hand-${it.key}`,
             label: `${ING[it.name].label} to drink. Tap to pick it back up.`,
             onclick: () => selectInHand(it.key),
         }))),
@@ -1301,8 +1319,8 @@ function bladder(pid, { interactive }) {
     h('div.zone-head', {},
         h('span.zone-name', { text: 'Bladder' }),
         h('span.zone-count', { text: `${ps.bladder.length} of ${ps.bladder_capacity}` })),
-    h('div.bladder-slots', {}, slots),
-    h('div.loo-reserve', { role: 'img', 'aria-label': `${plural(ps.toilet_tokens, 'toilet token')} left` },
+    h('div.bladder-slots', { 'data-loc': `bladder-${pid}` }, slots),
+    h('div.loo-reserve', { role: 'img', 'aria-label': `${plural(ps.toilet_tokens, 'toilet token')} left`, 'data-loc': `loos-${pid}` },
         Array.from({ length: ps.toilet_tokens }, () => h('span.loo')),
         h('span.reserve-word', { text: ps.toilet_tokens ? 'toilet tokens left' : 'No toilet tokens left' })),
     overflow ? h('p.zone-warn', { text: 'Overflowing!' }) : null,
@@ -1320,7 +1338,7 @@ function drunkTrack(pid) {
                 ? h('span.drunk-ambulance', { svg: AMBULANCE })
                 : h('span.drunk-num', { text: lvl, 'aria-hidden': 'true' }),
             h('span.drunk-word', { text: hospital ? 'Hospital' : DRUNK_LABELS[lvl], 'aria-hidden': 'true' }),
-            here ? h('span.pawn', { style: { '--seat': seatColour(pid) }, 'aria-hidden': 'true' }) : null);
+            here ? h('span.pawn', { style: { '--seat': seatColour(pid) }, 'aria-hidden': 'true', 'data-m': `drunk-${pid}` }) : null);
     });
     const where = out ? 'in hospital' : `${DRUNK_LABELS[ps.drunk_level] ?? ''}, level ${ps.drunk_level} of ${MAX_DRUNK}`;
     return h('div.drunk', { role: 'group', 'aria-label': `Drunk track: ${where}` },
@@ -1340,7 +1358,7 @@ function matSpecials(pid, { interactive }) {
         h('div.zone-head', {},
             h('span.zone-name', { text: 'Specials' }),
             h('span.zone-count', { text: `${ps.special_ingredients.length} of ${MAX_SPECIALS}` })),
-        h('div.specials-row', {},
+        h('div.specials-row', { 'data-loc': `matspec-${pid}` },
             ps.special_ingredients.map((s) => token(s, {
                 state: leaving.has(s) ? 'ghost' : undefined,
                 label: leaving.has(s) ? `${SPECIALS[s]?.label}, going back` : SPECIALS[s]?.label,
@@ -1384,10 +1402,11 @@ function hand() {
         h('div.zone-head', {},
             h('span.zone-name', { text: 'In your hand' }),
             h('span.zone-count', { text: `${gs().ingredients_taken_this_turn + items.length} of ${mine().take_count} taken` })),
-        h('div.hand-row', {},
+        h('div.hand-row', { 'data-loc': 'hand' },
             items.length
                 ? items.map((it) => tableToken(it.name, it.face, {
                     key: `hand-${it.key}`,
+                    from: it.source === 'display' ? `disp-${it.slotIndex}` : it.source === 'specials' ? `spec-${it.key.slice(1)}` : undefined,
                     state: ui.staged[it.key] ? 'ghost' : undefined,
                     selected: ui.selected === it.key,
                     onclick: () => selectInHand(it.key),
@@ -1428,7 +1447,7 @@ function mat(pid) {
         pid === seatOrder()[0] ? h('span.mat-first', { text: 'Starting player', title: 'Took the first turn: turns go round from here' }) : null,
         status ? h('span.mat-status', { text: status }) : null,
         h('span.mat-songs', { text: songs ? `${songs} of 3 songs` : '' }),
-        h('span.mat-points', {}, h('strong', { text: ps.points }), ' points')),
+        h('span.mat-points', {}, h('strong', { text: ps.points, 'data-pts': pid, 'data-v': String(ps.points) }), ' points')),
     matRecap(pid),
     h('div.mat-board', {},
         taking ? hand() : null,
@@ -2008,6 +2027,9 @@ function render({ force = false } = {}) {
     // Everyone else's mats go under yours, in turn order
     const others = seatOrder().filter((pid) => pid !== me.id);
 
+    // Live view: note where every piece is, so the redraw can move them.
+    layout();
+    const before = isLive() ? snapshot($('table')) : null;
     $('table').replaceChildren(...[
         // The bag and display sit under the cards, right above your mat
         h('div.middle', {}, h('div.middle-main', {}, renderMarket(), renderSupply()), h('div.middle-side', {}, renderScoreTrack())),
@@ -2021,6 +2043,7 @@ function render({ force = false } = {}) {
     ending();
     restoreFocus(focusKey);
     if (Math.abs(window.scrollY - scrollY) > 1) window.scrollTo({ top: scrollY, behavior: 'instant' });
+    if (before?.tokens.length) play(before, $('table'), liveZoom());
 }
 
 function restoreFocus(key) {
