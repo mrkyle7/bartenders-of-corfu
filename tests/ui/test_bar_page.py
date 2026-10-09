@@ -343,7 +343,7 @@ def test_bar_picking_up_keeps_the_page_still_and_your_hand_in_view(
 
 
 # ---------------------------------------------------------------------------
-# Live view: a fixed-size table, zoomed to fit, with animated moves
+# A fixed-size table, zoomed to fit, with animated moves
 # ---------------------------------------------------------------------------
 
 
@@ -377,28 +377,17 @@ def _live_zoom(page):
     )
 
 
-def test_bar_live_view_turns_on_and_stays_on(
+def test_bar_table_is_fixed_size_by_default(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
-    """Live view is off until asked for; once on, it fits the table to the
-    screen, shows the zoom controls, and is remembered next time."""
+    """The table is always drawn at a fixed size and fitted to the screen,
+    with the zoom controls showing and no button to switch it off."""
     _started_game(base_url, new_user, new_game, other_user_and_jwt)
     page.goto(f"{base_url}/bar?id={new_game}")
-    toggle = page.locator('[data-k="live-view"]')
-    toggle.wait_for(state="visible", timeout=10000)
-    assert toggle.get_attribute("aria-pressed") == "false"
-    assert "is-live" not in page.evaluate("document.body.className")
-    assert page.locator(".zoomer:visible").count() == 0
-
-    toggle.click()
-    assert "is-live" in page.evaluate("document.body.className")
-    assert page.locator('[data-k="live-view"]').get_attribute("aria-pressed") == "true"
-    assert page.locator(".zoomer").is_visible()
+    page.locator(".zoomer").wait_for(state="visible", timeout=10000)
     assert _live_zoom(page) > 0
-
-    page.reload()
-    page.locator('[data-k="live-view"]').wait_for(state="visible", timeout=10000)
-    assert "is-live" in page.evaluate("document.body.className")
+    assert "live-wide" in page.evaluate("document.body.className")
+    assert page.locator('[data-k="live-view"]').count() == 0
 
 
 def test_bar_live_view_zoom_buttons(
@@ -407,7 +396,7 @@ def test_bar_live_view_zoom_buttons(
     """The zoom buttons scale the table, and stop at their limits."""
     _started_game(base_url, new_user, new_game, other_user_and_jwt)
     page.goto(f"{base_url}/bar?id={new_game}")
-    page.locator('[data-k="live-view"]').click()
+    page.locator(".zoomer").wait_for(state="visible", timeout=10000)
     start = _live_zoom(page)
     assert page.locator(".zoom-level").inner_text() == "100%"
 
@@ -425,10 +414,9 @@ def test_bar_live_view_zoom_buttons(
 def test_bar_live_view_animates_a_pick_up(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
-    """In live view, a token picked off the display flies into your hand,
-    and the move still goes through."""
+    """A token picked off the display flies into your hand, and the move
+    still goes through."""
     gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
-    page.add_init_script("localStorage.setItem('bar-live', '1')")
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
     slot = next(i for i, name in enumerate(gs["open_display"]) if name != "SPECIAL")
@@ -451,6 +439,38 @@ def test_bar_live_view_animates_a_pick_up(
     )
 
 
+def test_bar_placing_in_a_glass_sends_nothing_to_the_bag(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """Putting a token into a glass, and sending the take, flies it from the
+    hand to the glass: nothing flies back into the bag."""
+    gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+    slot = next(i for i, name in enumerate(gs["open_display"]) if name != "SPECIAL")
+    # Tokens leaving the table fly off on the motion layer
+    page.evaluate(
+        """() => {
+            window.flownOff = 0;
+            new MutationObserver((records) => {
+                for (const r of records) for (const n of r.addedNodes) {
+                    if (n.classList?.contains('tok') && r.target.classList.contains('motion-layer')) window.flownOff += 1;
+                }
+            }).observe(document.body, { childList: true, subtree: true });
+        }"""
+    )
+    page.locator(f'[data-k="disp-{slot}"]').click()
+    page.locator(".mat.is-mine button.glass").first.click()
+    page.locator('[data-k="done-placing"]').click()
+    page.wait_for_function(
+        "() => !document.querySelector('.mat.is-mine .glass .tok.is-placed')"
+        " && document.querySelectorAll('.mat.is-mine .glass .tok').length === 1",
+        timeout=10000,
+    )
+    page.wait_for_timeout(300)
+    assert page.evaluate("window.flownOff") == 0
+
+
 def test_bar_live_view_stays_still_with_reduced_motion(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
@@ -458,10 +478,9 @@ def test_bar_live_view_stays_still_with_reduced_motion(
     flying pieces."""
     gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
     page.emulate_media(reduced_motion="reduce")
-    page.add_init_script("localStorage.setItem('bar-live', '1')")
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
-    assert "is-live" in page.evaluate("document.body.className")
+    assert _live_zoom(page) > 0
     slot = next(i for i, name in enumerate(gs["open_display"]) if name != "SPECIAL")
 
     page.locator(f'[data-k="disp-{slot}"]').click()

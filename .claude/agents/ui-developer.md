@@ -98,9 +98,9 @@ These principles are non-negotiable:
 - Undo proposal/voting must surface as a prominent overlay or banner to all
   active players, not buried in a log.
 
-## Live view and animation
+## Fixed-size table and animation
 
-The "Live view" button draws the table at one fixed size (`bar/live.js`:
+The table is always drawn at one fixed size (`bar/live.js`:
 a wide layout at 1240px, a narrow one at 540px under 860px screens) and
 zooms it to fit, like Board Game Arena. `bar/motion.js` snapshots every
 piece before each redraw and flies it to its new place afterwards. For a
@@ -115,7 +115,9 @@ new piece to animate, mark it the way the others are:
   market card so a new one is dealt from its pile.
 - `from` (→ `data-from`) on a token whose origin isn't obvious, naming the
   `data-k` it came from (a hand token picked off the display, a token
-  placed from your hand).
+  placed from your hand). That origin token has moved, not vanished.
+- Tokens drawn `is-ghost` or `is-lifted` are reminders of where a piece
+  was, not pieces: they never animate.
 - `data-pts`/`data-v` on a player's points, so a score floats up.
 
 Animations are decoration: never await them, keep flying pieces below the

@@ -298,9 +298,14 @@ button.tok { cursor: pointer; }
 /* ─── Table layout ────────────────────────────────────────────────────── */
 
 .table {
+    --t: 54px;
+    --cw: 168px;
     display: grid;
     gap: 22px;
-    max-width: 1400px;
+    /* One fixed size (bar/live.js picks the wide or narrow layout and sets
+       --live-w and --live-zoom), zoomed to fit the screen. */
+    width: var(--live-w);
+    zoom: var(--live-zoom, 1);
     margin: 0 auto;
     padding: 20px 16px 48px;
 }
@@ -1077,7 +1082,9 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 .sheet-glass-empty { font-size: 13px; color: var(--whitewash-dim); }
 .sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px; }
 @media (min-width: 1200px) {
-    body.has-sheet .table, body.has-sheet .turnbar { margin-right: 460px; }
+    /* The panel lies over the table instead of squeezing it, so opening it
+       never changes the zoom (and never shuffles every piece). */
+    body.has-sheet .turnbar { margin-right: 460px; }
 }
 
 /* The free actions you could use right now, as small chips. */
@@ -1219,14 +1226,6 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 
 /* ─── Smaller screens ─────────────────────────────────────────────────── */
 
-@media (max-width: 1180px) {
-    /* (The live view keeps its wide layout and zooms it instead.) */
-    body:not(.is-live) .middle { grid-template-columns: 1fr; }
-    body:not(.is-live) .middle-side { order: -1; } /* score first, so the bag stays by your mat */
-    body:not(.is-live) .supply { justify-content: center; }
-    body:not(.is-live) .market { justify-content: center; }
-}
-
 @media (max-width: 860px) {
     /* One column: bag and display sit right above your mat, then the
        score track, then everyone else's mats. */
@@ -1291,17 +1290,9 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
     .tok.is-selected, .card.is-claimable { transform: none; }
 }
 
-/* ─── Live view ───────────────────────────────────────────────────────── */
+/* ─── Fixed-size table ────────────────────────────────────────────────── */
 
-/* The table at one fixed size (bar/live.js picks the wide or narrow
-   layout and sets --live-w and --live-zoom), zoomed to fit the screen. */
-body.is-live .table {
-    --t: 54px;
-    --cw: 168px;
-    width: var(--live-w);
-    max-width: none;
-    zoom: var(--live-zoom, 1);
-}
+/* The narrow layout, for phones. */
 body.live-narrow .table {
     --t: 46px;
     --cw: 152px;
@@ -1315,10 +1306,6 @@ body.live-narrow .table .row-tag { display: flex; flex-wrap: wrap; align-items: 
 body.live-narrow .table .mat-cards .card { --cw: 150px; }
 body.live-narrow .table .is-theirs .mat-cards .card { --cw: 110px; }
 body.live-narrow .table .across { grid-template-columns: 1fr; }
-
-/* The side panel lies over the table instead of squeezing it, so opening
-   it never changes the zoom (and never shuffles every piece). */
-body.is-live.has-sheet .table { margin-right: auto; }
 
 /* Zoom, like the magnifiers on a Board Game Arena table. */
 .zoomer {
@@ -1346,7 +1333,6 @@ body.is-live.has-sheet .table { margin-right: auto; }
 }
 .zoom-btn:disabled { opacity: 0.4; cursor: default; }
 .zoom-level { min-width: 46px; text-align: center; font: 700 13px/1 var(--ui); color: var(--whitewash); }
-.live-btn.is-open { background: var(--kumquat); color: var(--kumquat-ink); }
 
 /* Pieces in flight ride above the table; pieces leaving it (and points
    scored) fly on a layer zoomed like the table. */

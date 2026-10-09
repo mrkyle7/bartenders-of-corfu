@@ -1,12 +1,11 @@
-// Live view: the table drawn at one fixed size, like a real box on a real
-// table, then scaled to fit the screen (the way Board Game Arena does it).
+// The table drawn at one fixed size, like a real box on a real table, then
+// scaled to fit the screen (the way Board Game Arena does it).
 // Because every piece keeps the same size and place whatever the screen,
 // pieces can be animated as they move (bar/motion.js).
 //
 // Two layouts: wide (desktop) and narrow (phones). Each is laid out at its
 // own fixed width and zoomed to fit; − and + zoom further in or out.
 
-const KEY_ON = 'bar-live';
 const KEY_ZOOM = 'bar-live-zoom';
 const WIDE = 1240;
 const NARROW = 540;
@@ -18,7 +17,6 @@ const store = {
     set(key, value) { try { localStorage.setItem(key, value); } catch { /* private mode */ } },
 };
 
-let on = store.get(KEY_ON) === '1';
 let zoom = 1; // what the table is drawn at right now
 let zoomer = null;
 let onChange = () => {};
@@ -29,28 +27,14 @@ const userZoom = () => {
     return STEPS.includes(z) ? z : 1;
 };
 
-export const isLive = () => on;
-export const liveZoom = () => (on ? zoom : 1);
-
-export function setLive(value) {
-    on = value;
-    store.set(KEY_ON, on ? '1' : '0');
-    layout();
-}
+export const liveZoom = () => zoom;
 
 // Fit the fixed-width table to the room the screen gives it.
 export function layout() {
     const body = document.body;
-    body.classList.toggle('is-live', on);
     const which = design();
-    body.classList.toggle('live-wide', on && which === 'wide');
-    body.classList.toggle('live-narrow', on && which === 'narrow');
-    if (!on) {
-        body.style.removeProperty('--live-zoom');
-        body.style.removeProperty('--live-w');
-        if (zoomer) zoomer.hidden = true;
-        return;
-    }
+    body.classList.toggle('live-wide', which === 'wide');
+    body.classList.toggle('live-narrow', which === 'narrow');
     const width = which === 'wide' ? WIDE : NARROW;
     const room = document.documentElement.clientWidth;
     const fit = Math.min(room / width, 1.2);
@@ -88,7 +72,6 @@ function renderZoomer() {
         zoomer.append(out, level, inn);
         document.body.append(zoomer);
     }
-    zoomer.hidden = false;
     const z = userZoom();
     zoomer.querySelector('.zoom-level').textContent = `${Math.round(z * 100)}%`;
     zoomer.querySelector('[data-k="zoom-out"]').disabled = z === STEPS[0];

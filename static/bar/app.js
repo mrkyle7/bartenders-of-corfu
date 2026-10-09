@@ -10,7 +10,7 @@ import {
     orderRecipe, servesOrder, SPECIALIST_SPECIAL, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
-import { initLive, isLive, layout, liveZoom, setLive } from './live.js';
+import { initLive, layout, liveZoom } from './live.js';
 import { play, snapshot } from './motion.js';
 
 const POLL_MS = 2000;
@@ -840,15 +840,6 @@ function turnbar() {
                 onclick: () => toggleSheet(sheet),
             }));
         }
-    }
-    if (game.status !== 'NEW') {
-        buttons.push(h('button.btn.tiny.sheet-btn.live-btn', {
-            type: 'button', text: 'Live view', 'data-k': 'live-view',
-            cls: isLive() ? 'is-open' : '',
-            'aria-pressed': String(isLive()),
-            title: 'Draw the table at a fixed size and animate every move',
-            onclick: () => { setLive(!isLive()); render({ force: true }); },
-        }));
     }
     if (buttons.length) kids.push(h('div.turn-buttons', {}, buttons));
     if (strip) kids.push(strip);
@@ -2027,9 +2018,9 @@ function render({ force = false } = {}) {
     // Everyone else's mats go under yours, in turn order
     const others = seatOrder().filter((pid) => pid !== me.id);
 
-    // Live view: note where every piece is, so the redraw can move them.
+    // Note where every piece is, so the redraw can move them.
     layout();
-    const before = isLive() ? snapshot($('table')) : null;
+    const before = snapshot($('table'));
     $('table').replaceChildren(...[
         // The bag and display sit under the cards, right above your mat
         h('div.middle', {}, h('div.middle-main', {}, renderMarket(), renderSupply()), h('div.middle-side', {}, renderScoreTrack())),

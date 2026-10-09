@@ -141,11 +141,8 @@ surface GamePage {
             -- Fetches and displays the reconstructed game state at the given turn boundary.
             -- turn_number = 0 shows the initial state; turn_number = N shows state after turn N.
             when viewer.id in game.players
-        -- Live view: the table at a fixed size, zoomed to fit, with animated moves
-        ToggleLiveView(viewer)
-            when game.status != new
+        -- The table is drawn at a fixed size, zoomed to fit, with animated moves
         ZoomTable(viewer, in | out)
-            when live view is on
 
     guarantee: a 401 or 403 response triggers an alert and redirects to HomePage
     guarantee: all operation failures display a clear, non-technical error message inline
@@ -162,15 +159,15 @@ surface GamePage {
     guarantee: the move history log is visible to all game members and updates in real time as new moves are made
     guarantee: the replay controls allow stepping to any recorded turn; the reconstructed state is fetched
                from the API and displayed without requiring a full page reload
-    guarantee: live view is off until the viewer turns it on; the choice is remembered on that device
-    guarantee: in live view the table is laid out at one fixed size (a wide layout for desktops, a narrow
+    guarantee: the table is always laid out at one fixed size (a wide layout for desktops, a narrow
                one for phones) and zoomed to fit the screen; ZoomTable steps between 60% and 160% of the fit,
                remembered per layout; opening the side panel never changes the zoom
-    guarantee: in live view every move is animated from where its pieces were to where they are now, for the
+    guarantee: every move is animated from where its pieces were to where they are now, for the
                viewer's own moves and for other players' moves as they arrive: tokens drawn come out of the
                bag, tokens sold or wee'd away go back into it, claimed cards travel to the claimer's mat,
-               new market cards are dealt from their pile, pawns slide, and points scored float up
-    guarantee: when the viewer asks for reduced motion, live view keeps its fixed-size table but animates nothing
+               new market cards are dealt from their pile, pawns slide, and points scored float up;
+               tokens put into a glass or the mouth travel there from the hand and nowhere else
+    guarantee: when the viewer asks for reduced motion, the table keeps its fixed size but animates nothing
     guarantee: animations are decoration only — input is never blocked or delayed while pieces are in flight
     guidance: in-game interactions (ingredient actions, state updates) should respond within 200 ms
     guidance: the move history log and replay controls should be visually distinct from the live game board
