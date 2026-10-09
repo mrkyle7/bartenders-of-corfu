@@ -1,4 +1,4 @@
-// Motion for the live view: each redraw rebuilds the table, so before it we
+// Motion for the table: each redraw rebuilds the table, so before it we
 // note where every piece is (snapshot) and after it we fly each piece from
 // where it was to where it is now (play). What moved is worked out from the
 // pieces themselves, so it works the same for your own moves and for other
@@ -11,7 +11,11 @@
 //     are the same token on the move;
 //   - a token that arrives from nowhere came out of the bag (or from the
 //     piece named in its data-from, e.g. the display slot you picked it
-//     from), and one that vanishes goes back into the bag;
+//     from, which has then moved rather than vanished), and one that
+//     vanishes goes back into the bag;
+//   - a token lifted off the display or tray, or ghosted in your hand once
+//     placed, is only a reminder of where it was: the piece is in your hand
+//     or where you put it;
 //   - a market card that arrives from nowhere is dealt from its pile, and
 //     one that vanishes goes to the bottom of its pile.
 //
@@ -31,7 +35,8 @@ function rectOf(el) {
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
 }
 
-const isPiece = (el) => !el.classList.contains('is-ghost') && !el.closest('.tok-print, .card-costbadge, .card-subject');
+const isPiece = (el) => !el.classList.contains('is-ghost') && !el.classList.contains('is-lifted')
+    && !el.closest('.tok-print, .card-costbadge, .card-subject');
 
 export function snapshot(root) {
     if (!root) return null;
@@ -51,7 +56,7 @@ export function snapshot(root) {
         const base = `${loc}|${name}`;
         const n = seen.get(base) ?? 0;
         seen.set(base, n + 1);
-        tokens.push({ el, r: rectOf(el), key: `${base}|${n}`, name, from: el.dataset.from });
+        tokens.push({ el, r: rectOf(el), key: `${base}|${n}`, name, from: el.dataset.from, k: el.dataset.k });
     }
     for (const el of root.querySelectorAll('[data-k], [data-loc]')) {
         if (el.dataset.k) anchors.set(el.dataset.k, rectOf(el));
@@ -182,13 +187,15 @@ export function play(before, root, zoom = 1) {
         if (was) fly(t.el, was.r, t.r, zoom, { duration: SHIFT, arc: 0 });
         else arrived.push(t);
     }
-    const take = (name) => {
-        const i = gone.findIndex((g) => g.name === name);
+    const take = (match) => {
+        const i = gone.findIndex(match);
         return i < 0 ? null : gone.splice(i, 1)[0];
     };
     for (const t of arrived) {
         const hinted = t.from && before.anchors.get(t.from);
-        const was = hinted ? null : take(t.name);
+        // The piece it came from has moved here, not gone back in the bag.
+        if (hinted) take((g) => g.k === t.from);
+        const was = hinted ? null : take((g) => g.name === t.name);
         const from = hinted ?? was?.r ?? null;
         if (from) {
             fly(t.el, from, t.r, zoom, { delay: wait++ * GAP });
