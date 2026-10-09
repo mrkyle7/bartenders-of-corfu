@@ -1220,10 +1220,11 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 /* ─── Smaller screens ─────────────────────────────────────────────────── */
 
 @media (max-width: 1180px) {
-    .middle { grid-template-columns: 1fr; }
-    .middle-side { order: -1; } /* score first, so the bag stays by your mat */
-    .supply { justify-content: center; }
-    .market { justify-content: center; }
+    /* (The live view keeps its wide layout and zooms it instead.) */
+    body:not(.is-live) .middle { grid-template-columns: 1fr; }
+    body:not(.is-live) .middle-side { order: -1; } /* score first, so the bag stays by your mat */
+    body:not(.is-live) .supply { justify-content: center; }
+    body:not(.is-live) .market { justify-content: center; }
 }
 
 @media (max-width: 860px) {
@@ -1288,6 +1289,82 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
     .tok.is-selected, .card.is-claimable { transform: none; }
+}
+
+/* ─── Live view ───────────────────────────────────────────────────────── */
+
+/* The table at one fixed size (bar/live.js picks the wide or narrow
+   layout and sets --live-w and --live-zoom), zoomed to fit the screen. */
+body.is-live .table {
+    --t: 54px;
+    --cw: 168px;
+    width: var(--live-w);
+    max-width: none;
+    zoom: var(--live-zoom, 1);
+}
+body.live-narrow .table {
+    --t: 46px;
+    --cw: 152px;
+    padding: 14px 12px 40px;
+    gap: 18px;
+}
+body.live-narrow .table .card-row,
+body.live-narrow .table .card-row.is-karaoke { grid-template-columns: 1fr; gap: 6px; --cw: 152px; }
+body.live-narrow .table .card-row .pile { --cw: 84px; justify-self: start; }
+body.live-narrow .table .row-tag { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+body.live-narrow .table .mat-cards .card { --cw: 150px; }
+body.live-narrow .table .is-theirs .mat-cards .card { --cw: 110px; }
+body.live-narrow .table .across { grid-template-columns: 1fr; }
+
+/* The side panel lies over the table instead of squeezing it, so opening
+   it never changes the zoom (and never shuffles every piece). */
+body.is-live.has-sheet .table { margin-right: auto; }
+
+/* Zoom, like the magnifiers on a Board Game Arena table. */
+.zoomer {
+    position: fixed;
+    right: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(18, 55, 84, 0.92);
+    box-shadow: 0 0 0 2px var(--line), 0 6px 14px rgba(0, 0, 0, 0.5);
+}
+.zoom-btn {
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--whitewash);
+    color: var(--aegean-ink);
+    font: 800 24px/1 var(--ui);
+    cursor: pointer;
+}
+.zoom-btn:disabled { opacity: 0.4; cursor: default; }
+.zoom-level { min-width: 46px; text-align: center; font: 700 13px/1 var(--ui); color: var(--whitewash); }
+.live-btn.is-open { background: var(--kumquat); color: var(--kumquat-ink); }
+
+/* Pieces in flight ride above the table; pieces leaving it (and points
+   scored) fly on a layer zoomed like the table. */
+/* Above the table's pieces, below the turn bar (20) and the panel. */
+.is-flying { position: relative; z-index: 10; }
+.motion-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    pointer-events: none;
+    zoom: var(--live-zoom, 1);
+}
+.motion-layer > * { position: absolute; }
+.motion-float {
+    font: 800 30px/1 var(--display);
+    color: var(--kumquat);
+    text-shadow: 0 2px 0 var(--kumquat-ink), 0 4px 10px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
 }
 
 /* Since your last turn: each other player's turn, in their seat colour, then

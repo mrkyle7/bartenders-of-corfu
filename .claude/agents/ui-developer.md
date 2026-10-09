@@ -98,6 +98,29 @@ These principles are non-negotiable:
 - Undo proposal/voting must surface as a prominent overlay or banner to all
   active players, not buried in a log.
 
+## Live view and animation
+
+The "Live view" button draws the table at one fixed size (`bar/live.js`:
+a wide layout at 1240px, a narrow one at 540px under 860px screens) and
+zooms it to fit, like Board Game Arena. `bar/motion.js` snapshots every
+piece before each redraw and flies it to its new place afterwards. For a
+new piece to animate, mark it the way the others are:
+
+- `data-loc` on the container a token sits in (`display`, `tray`, `hand`,
+  `mouth`, `glass-<pid>-<cup>`, `bladder-<pid>`, `loos-<pid>`,
+  `store-<card id>`, `pile-orders`, `pile-abilities`, `bag`). A token is
+  known by its place and name (`data-n`, set by `token()`).
+- `data-m` on a piece that keeps its identity wherever it goes (cards:
+  `card-<id>`; pawns: `score-<pid>`, `drunk-<pid>`), plus `data-pile` on a
+  market card so a new one is dealt from its pile.
+- `from` (→ `data-from`) on a token whose origin isn't obvious, naming the
+  `data-k` it came from (a hand token picked off the display, a token
+  placed from your hand).
+- `data-pts`/`data-v` on a player's points, so a score floats up.
+
+Animations are decoration: never await them, keep flying pieces below the
+turn bar (z-index under 20), and do nothing under reduced motion.
+
 ## Physical realism
 
 Game elements are physical objects on a table, not database fields in a form.
