@@ -6,7 +6,9 @@
 //
 //   - a piece with a motion key (data-m: cards, pawns) is the same piece
 //     before and after, wherever it went;
-//   - a token is known by where it sits (the nearest data-loc) and its name;
+//   - a token is known by where it sits (the nearest data-loc), its name
+//     and its data-k if it has one (so of two gins on the display, the one
+//     you didn't pick stays put);
 //     one that left a place and one of the same name that arrived elsewhere
 //     are the same token on the move;
 //   - a token that arrives from nowhere came out of the bag (or from the
@@ -54,9 +56,16 @@ export function snapshot(root) {
         if (!loc) continue;
         const name = el.classList.contains('loo') ? 'LOO' : el.dataset.n;
         const base = `${loc}|${name}`;
-        const n = seen.get(base) ?? 0;
-        seen.set(base, n + 1);
-        tokens.push({ el, r: rectOf(el), key: `${base}|${n}`, name, from: el.dataset.from, k: el.dataset.k });
+        const k = el.dataset.k;
+        // A token with a key of its own (a display slot, the tray, your
+        // hand) is that piece; otherwise it's the nth of its name there.
+        let key = `${base}|k:${k}`;
+        if (!k) {
+            const n = seen.get(base) ?? 0;
+            seen.set(base, n + 1);
+            key = `${base}|${n}`;
+        }
+        tokens.push({ el, r: rectOf(el), key, name, from: el.dataset.from, k });
     }
     for (const el of root.querySelectorAll('[data-k], [data-loc]')) {
         if (el.dataset.k) anchors.set(el.dataset.k, rectOf(el));

@@ -447,7 +447,10 @@ def test_bar_placing_in_a_glass_sends_nothing_to_the_bag(
     gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
-    slot = next(i for i, name in enumerate(gs["open_display"]) if name != "SPECIAL")
+    display = gs["open_display"]
+    plain = [i for i, name in enumerate(display) if name != "SPECIAL"]
+    # Of two alike on the display, take the first: the other must stay put
+    slot = next((i for i in plain if display.count(display[i]) > 1), plain[0])
     # Tokens leaving the table fly off on the motion layer
     page.evaluate(
         """() => {
