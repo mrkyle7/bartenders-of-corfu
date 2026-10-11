@@ -99,7 +99,7 @@ Which mixers go with which spirit:
 - +4 for a cocktail
 - +5 for the Long Island Iced Tea
 
-A served order goes to the bottom of the order deck and the next one is dealt. Each glass serves at most one order, so selling both can serve two. Order bonuses aren't doubled by a cup doubler, and no specialist bonus is added to them.
+A served order goes on the order discard pile and the next one is dealt. Each glass serves at most one order, so selling both can serve two. Order bonuses aren't doubled by a cup doubler, and no specialist bonus is added to them.
 
 ## Having a drink
 
@@ -133,9 +133,10 @@ A served order goes to the bottom of the order deck and the next one is dealt. E
 
 **Clearing the rows** (free actions, once a turn each):
 
-- **Swipe the ability row** (drunk 2 or more): put all three cards on the bottom of the ability deck and deal three new ones.
-- **Clear the orders row** (drunk 2 or more): put all three orders on the bottom of the order deck and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
+- **Swipe the ability row** (drunk 2 or more): put all three cards on the ability discard pile and deal three new ones.
+- **Clear the orders row** (drunk 2 or more): put all three orders on the order discard pile and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
 - The karaoke row is never cleared.
+- When a deck runs out, shuffle its discard pile to make a new deck.
 
 | Card | Cost (in your bladder) | Points | What it does |
 |---|---|---|---|

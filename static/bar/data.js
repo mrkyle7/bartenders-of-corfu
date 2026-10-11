@@ -251,7 +251,7 @@ export const RULES = [
             'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more, wherever it turns up. Sing three and you win.',
             'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), and free-action cards that make taking, selling or weeing free. The card says what it does.',
             'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',
-            'Swiping the abilities or clearing the orders (drunk 2 or more) is free, once a turn each: all three go under their deck and three new ones are dealt. The karaoke row is never cleared.',
+            'Swiping the abilities or clearing the orders (drunk 2 or more) is free, once a turn each: all three are discarded and three new ones are dealt. When a deck runs out, its discards are shuffled to make a new one. The karaoke row is never cleared.',
         ],
     },
     {

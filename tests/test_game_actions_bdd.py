@@ -115,7 +115,7 @@ def ctx():
 
 
 def _clear_orders_row(game_id: str):
-    """Put the dealt orders at the bottom of the order deck.
+    """Put the dealt orders back at the bottom of the order deck.
 
     A random order on the table would add its bonus to any matching sale and
     make point checks flaky; scenarios about orders put one out explicitly.
@@ -594,6 +594,7 @@ def cup_doubler_card_in_row(ctx, row):
 def deck_is_empty(ctx):
     def patch(gs):
         gs._deck_dicts = []
+        gs.discard = []  # nothing to reshuffle either
         return gs
 
     _patch_game_state(ctx["game_id"], patch)

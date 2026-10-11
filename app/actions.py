@@ -7,6 +7,7 @@ Turn advancement: after every action the turn advances to the next active
 (non-eliminated) player in turn_order.
 """
 
+import random
 from uuid import UUID
 
 from app.card import (
@@ -214,7 +215,7 @@ def _usable_now(gs: GameState, ps: "PlayerState", action_type: str) -> bool:
         return (
             ps.drunk_level >= MIN_DRUNK_TO_SWIPE
             and row is not None
-            and (bool(row.cards) or bool(gs._deck_dicts))
+            and (bool(row.cards) or bool(gs._deck_dicts) or bool(gs.discard))
         )
     if action_type == CLEAR_ORDERS:
         row = _row(gs, ORDERS_ROW)
@@ -568,27 +569,51 @@ def _deck_for_row(gs: GameState, row: CardRow) -> list[dict] | None:
     if row.position == KARAOKE_ROW:
         return None
     if row.position == ORDERS_ROW and (
-        gs.order_deck or any(c.card_type == "order" for c in row.cards)
+        gs.order_deck
+        or gs.order_discard
+        or any(c.card_type == "order" for c in row.cards)
     ):
         return gs.order_deck
     return gs._deck_dicts
 
 
-def _replace_card(gs: GameState, row: CardRow):
-    """Deal the top card of the row's deck into the row, if there is one."""
+def _discard_for_row(gs: GameState, row: CardRow) -> list[dict] | None:
+    """The discard pile for the row's deck (None for the karaoke row)."""
     deck = _deck_for_row(gs, row)
+    if deck is None:
+        return None
+    return gs.order_discard if deck is gs.order_deck else gs.discard
+
+
+def _discard(gs: GameState, row: CardRow, cards: list[Card]) -> None:
+    """Put cards leaving the row (still in it) on its deck's discard pile."""
+    pile = _discard_for_row(gs, row)
+    if pile is not None:
+        pile.extend(c.to_dict() for c in cards)
+
+
+def _replace_card(gs: GameState, row: CardRow):
+    """Deal the top card of the row's deck into the row, if there is one.
+    An empty deck is first made again from its discard pile, shuffled."""
+    deck = _deck_for_row(gs, row)
+    if deck is None:
+        return
+    pile = _discard_for_row(gs, row)
+    if not deck and pile:
+        random.shuffle(pile)
+        deck.extend(pile)
+        pile.clear()
     if deck:
         row.cards.append(Card.from_dict(deck.pop(0)))
 
 
 def _rotate_row(gs: GameState, row: CardRow) -> int:
-    """Put every card in the row on the bottom of its deck and deal a fresh row."""
-    deck = _deck_for_row(gs, row)
-    removed = list(row.cards)
-    row.cards = []
-    if deck is None:
+    """Discard every card in the row and deal a fresh row."""
+    if _deck_for_row(gs, row) is None:
         return 0
-    deck.extend(c.to_dict() for c in removed)
+    removed = list(row.cards)
+    _discard(gs, row, removed)
+    row.cards = []
     for _ in range(ROW_SIZE):
         _replace_card(gs, row)
     return len(removed)
@@ -1017,8 +1042,8 @@ def _sell_one_cup(
                 break
     if served is not None:
         pts += served.bonus
+        _discard(gs, orders, [served])
         orders.cards.remove(served)
-        gs.order_deck.append(served.to_dict())
         _replace_card(gs, orders)
 
     sold_ingredients = list(cup.ingredients)
@@ -1462,7 +1487,8 @@ def refresh_card_row(
     Row 2 (orders): a free action once a turn, at drunk 3+. Nothing like
     wiping out the order a rival was one ingredient away from.
     Row 3 (abilities): a free action once a turn, at drunk 2+.
-    Cleared cards go to the bottom of their deck.
+    Cleared cards go on their deck's discard pile, shuffled back in once
+    the deck runs out.
     """
     gs = _deep_copy_state(gs)
     _require_turn(gs, player_id)

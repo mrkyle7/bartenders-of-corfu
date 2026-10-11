@@ -244,7 +244,7 @@ def test_serving_an_order_pays_its_bonus_and_rotates_it():
 
     assert payload["points_earned"] == 3 + 2
     assert payload["orders"] == [{"name": "Rum and Cola", "bonus": 2}]
-    assert new.order_deck[-1]["id"] == "o-Rum and Cola"
+    assert [d["id"] for d in new.order_discard] == ["o-Rum and Cola"]
     assert next_up in [c.id for c in _row(new, 2).cards]
 
 
@@ -313,7 +313,7 @@ def test_clearing_orders_needs_drunk_two_and_is_free_once_a_turn():
     new, payload = refresh_card_row(gs, pid, 2)
     assert payload["is_free_action"] is True
     assert new.player_turn == pid and not new.main_action_taken_this_turn
-    assert [d["id"] for d in new.order_deck[-3:]] == before
+    assert [d["id"] for d in new.order_discard] == before
     assert len(_row(new, 2).cards) == 3
     with pytest.raises(GameException) as exc:
         refresh_card_row(new, pid, 2)
@@ -344,10 +344,57 @@ def test_swiping_abilities_needs_drunk_two_and_is_free_once_a_turn():
     new, payload = refresh_card_row(gs, pid, 3)
     assert payload["is_free_action"] is True
     assert new.player_turn == pid and not new.main_action_taken_this_turn
-    assert [d["id"] for d in new._deck_dicts[-3:]] == before
+    assert [d["id"] for d in new.discard] == before
     with pytest.raises(GameException) as exc:
         refresh_card_row(new, pid, 3)
     assert exc.value.status_code == 409
+
+
+def _swipe(gs: GameState) -> GameState:
+    pid, ps = _me(gs)
+    ps.drunk_level = 2
+    gs.free_actions_used_this_turn = []
+    gs, _ = refresh_card_row(gs, pid, 3)
+    return gs
+
+
+def test_swiped_cards_wait_on_the_discard_pile_until_the_deck_runs_out():
+    gs = _game()
+    swiped = {c.id for c in _row(gs, 3).cards}
+    gs = _swipe(gs)
+    # Every card left in the deck is dealt before any swiped one comes back
+    while gs._deck_dicts:
+        assert not swiped & {c.id for c in _row(gs, 3).cards}
+        gs = _swipe(gs)
+    assert swiped <= {d["id"] for d in gs.discard} | {c.id for c in _row(gs, 3).cards}
+
+
+def test_an_empty_deck_is_made_again_from_the_discard_pile_shuffled():
+    orders_seen = set()
+    for _ in range(30):
+        gs = _game()
+        deck = [Card.from_dict(d) for d in gs._deck_dicts]
+        _row(gs, 3).cards = deck[:3]
+        gs.discard = [c.to_dict() for c in deck[3:]]
+        gs._deck_dicts = []
+        gs = _swipe(gs)
+        # A fresh row comes off the reshuffled discards; nothing is lost
+        assert len(_row(gs, 3).cards) == 3
+        assert len(gs._deck_dicts) + len(gs.discard) + 3 == len(deck)
+        orders_seen.add(tuple(d["id"] for d in gs._deck_dicts[:5]))
+    # Shuffled, not dealt back in the order they were discarded
+    assert len(orders_seen) > 1
+
+
+def test_an_empty_order_deck_is_made_again_from_the_served_and_cleared_orders():
+    gs = _game()
+    pid, ps = _me(gs)
+    ps.drunk_level = 2
+    gs.order_discard, gs.order_deck = gs.order_deck, []
+    gs, _ = refresh_card_row(gs, pid, 2)
+    orders = _row(gs, 2).cards
+    assert len(orders) == 3 and all(c.card_type == "order" for c in orders)
+    assert len(gs.order_deck) + len(gs.order_discard) + 3 == 18
 
 
 def test_karaoke_row_is_never_cleared():

@@ -719,8 +719,8 @@ function claim(card) {
 function clearRow(position) {
     const orders = position === 2;
     ask(orders
-        ? 'Clear the orders? All three go to the bottom of the order deck and three new ones are dealt. This is free, once a turn.'
-        : 'Swipe the ability cards? All three go to the bottom of the deck and three new ones are dealt. This is free, once a turn.', [
+        ? 'Clear the orders? All three are discarded and three new ones are dealt. This is free, once a turn.'
+        : 'Swipe the ability cards? All three are discarded and three new ones are dealt. This is free, once a turn.', [
         { label: orders ? 'Clear the orders' : 'Swipe them', onclick: () => act(() => api.refreshCardRow(gameId, position)), kind: 'go' },
         { label: 'Leave them', onclick: () => { ui.prompt = null; render({ force: true }); } },
     ]);

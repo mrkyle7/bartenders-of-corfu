@@ -292,7 +292,8 @@ def deal_market(
     Row 3: three cards off the top of the shuffled ability deck.
 
     Returns (rows, ability_deck, order_deck); both decks are drawn from the
-    front and cleared cards go to the back.
+    front. Cleared cards go on a discard pile, shuffled back in once the deck
+    runs out (see app/actions.py).
     """
     karaoke = [c for c in deck if c.card_type == "karaoke"]
     random.shuffle(karaoke)
