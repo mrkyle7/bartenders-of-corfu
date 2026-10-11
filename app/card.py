@@ -17,12 +17,13 @@ FREE_ACTION_TYPES: dict[str, str] = {
     "GIN": "go_for_a_wee",
 }
 
-# The market: row 1 holds every karaoke card, row 2 the drink orders, row 3
-# the ability cards.
+# The market: row 1 holds three karaoke cards, row 2 the drink orders, row 3
+# the ability cards (the other karaoke cards are shuffled in with them).
 KARAOKE_ROW = 1
 ORDERS_ROW = 2
 ABILITY_ROW = 3
 ROW_SIZE = 3
+KARAOKE_ON_STAGE = 3
 
 
 @dataclass
@@ -285,20 +286,24 @@ def deal_market(
 ) -> tuple[list[CardRow], list[Card], list[Card]]:
     """Lay out the three rows of the market.
 
-    Row 1: every karaoke card, face up (never cleared or replaced).
+    Row 1: three karaoke cards chosen at random, face up (never cleared or
+    replaced). The other karaoke cards are shuffled into the ability deck.
     Row 2: three orders off the top of the shuffled order deck.
-    Row 3: three ability cards off the top of the shuffled ability deck.
+    Row 3: three cards off the top of the shuffled ability deck.
 
     Returns (rows, ability_deck, order_deck); both decks are drawn from the
-    front and cleared cards go to the back.
+    front. Cleared cards go on a discard pile, shuffled back in once the deck
+    runs out (see app/actions.py).
     """
     karaoke = [c for c in deck if c.card_type == "karaoke"]
-    abilities = [c for c in deck if c.card_type != "karaoke"]
+    random.shuffle(karaoke)
+    stage, karaoke = karaoke[:KARAOKE_ON_STAGE], karaoke[KARAOKE_ON_STAGE:]
+    abilities = [c for c in deck if c.card_type != "karaoke"] + karaoke
     random.shuffle(abilities)
     orders = list(orders)
     random.shuffle(orders)
     rows = [
-        CardRow(position=KARAOKE_ROW, cards=karaoke),
+        CardRow(position=KARAOKE_ROW, cards=stage),
         CardRow(position=ORDERS_ROW, cards=orders[:ROW_SIZE]),
         CardRow(position=ABILITY_ROW, cards=abilities[:ROW_SIZE]),
     ]

@@ -60,10 +60,10 @@ def test_bar_lobby_start_lays_out_the_table(
     page.locator(".display .tok").first.wait_for(state="visible", timeout=10000)
     assert page.locator(".display .tok").count() == 5
     assert page.locator(".bag").is_visible()
-    # Every karaoke card, three orders and three ability cards
+    # Three karaoke cards, three orders and three ability cards
     assert page.locator(".market .card-row").count() == 3
-    assert page.locator(".market .row-cards .card").count() == 11
-    assert page.locator(".market .row-cards .kind-karaoke").count() == 5
+    assert page.locator(".market .row-cards .card").count() == 9
+    assert page.locator(".market .card-row.is-karaoke .kind-karaoke").count() == 3
     assert page.locator(".market .row-cards .kind-order").count() == 3
     # Both mats are on show, each with two glasses of five spaces
     assert page.locator(".mat").count() == 2

@@ -21,9 +21,9 @@ You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails t
 
 **The cards** lie in three rows:
 
-- **Karaoke row:** all 5 karaoke songs, one per spirit, face up from the start.
+- **Karaoke row:** 3 of the 5 karaoke songs (one per spirit), chosen at random, face up from the start. The other 2 are shuffled into the ability deck.
 - **Orders row:** 3 drinks the punters are calling for, dealt from 18 order cards.
-- **Ability row:** 3 cards that help you, dealt from 19 ability cards.
+- **Ability row:** 3 cards dealt from the ability deck: 19 ability cards plus the 2 karaoke songs shuffled in with them.
 
 **Your mat** has two glasses, a bladder with 8 spaces, a drunk track and 4 toilet tokens.
 
@@ -99,7 +99,7 @@ Which mixers go with which spirit:
 - +4 for a cocktail
 - +5 for the Long Island Iced Tea
 
-A served order goes to the bottom of the order deck and the next one is dealt. Each glass serves at most one order, so selling both can serve two. Order bonuses aren't doubled by a cup doubler, and no specialist bonus is added to them.
+A served order goes on the order discard pile and the next one is dealt. Each glass serves at most one order, so selling both can serve two. Order bonuses aren't doubled by a cup doubler, and no specialist bonus is added to them.
 
 ## Having a drink
 
@@ -128,14 +128,15 @@ A served order goes to the bottom of the order deck and the next one is dealt. E
 
 - Take a karaoke card or an ability card if your bladder holds its cost. The cost is only checked: those ingredients stay in your bladder. Stored spirits don't count.
 - A karaoke song also needs you to be **drunk 3 or more**.
-- Karaoke cards aren't replaced. A claimed ability card is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
+- Karaoke cards on the karaoke row aren't replaced. A card claimed from the ability row (a karaoke song there included) is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
 - Orders can't be claimed: you serve them by selling the drink.
 
 **Clearing the rows** (free actions, once a turn each):
 
-- **Swipe the ability row** (drunk 2 or more): put all three cards on the bottom of the ability deck and deal three new ones.
-- **Clear the orders row** (drunk 2 or more): put all three orders on the bottom of the order deck and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
+- **Swipe the ability row** (drunk 2 or more): put all three cards on the ability discard pile and deal three new ones.
+- **Clear the orders row** (drunk 2 or more): put all three orders on the order discard pile and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
 - The karaoke row is never cleared.
+- When a deck runs out, shuffle its discard pile to make a new deck.
 
 | Card | Cost (in your bladder) | Points | What it does |
 |---|---|---|---|

@@ -111,6 +111,7 @@ class GameState:
         free_actions_used_this_turn: list[str] | None = None,
         game_modes: list[str] | None = None,
         order_deck: list[dict] | None = None,
+        order_discard: list[dict] | None = None,
         display_specials: list[str | None] | None = None,
         bag_draw_pending_specials: list[str | None] | None = None,
         specials_display: list[Ingredient] | None = None,
@@ -149,7 +150,8 @@ class GameState:
         self.taken_records_this_turn: list[dict] = (
             taken_records_this_turn if taken_records_this_turn is not None else []
         )
-        # Discard pile — cards removed by refresh go here permanently (never reshuffled)
+        # Ability discard pile: swiped cards wait here until the ability deck
+        # runs out, then they're shuffled to make a new deck.
         self.discard: list[dict] = discard if discard is not None else []
         # Last-round flag: set when a player reaches 40+ points.
         # The game continues until the round completes (all players have equal turns).
@@ -165,9 +167,13 @@ class GameState:
         # Optional rule variations selected in the lobby (immutable after start).
         # See app/game_modes.py for valid values.
         self.game_modes: list[str] = list(game_modes) if game_modes else []
-        # Drink orders not on the table, drawn from the front; served or
-        # cleared orders go to the back.
+        # Drink orders not on the table, drawn from the front. Served or
+        # cleared orders go on the order discard pile, shuffled back in once
+        # the deck runs out.
         self.order_deck: list[dict] = order_deck if order_deck is not None else []
+        self.order_discard: list[dict] = (
+            order_discard if order_discard is not None else []
+        )
         # The face each special token shows, lined up with open_display and
         # bag_draw_pending (None for spirits and mixers). See app/specials.py.
         self.display_specials: list[str | None] = _faces_for(
@@ -210,7 +216,7 @@ class GameState:
         random.shuffle(turn_order)
         first_player = turn_order[0]
 
-        # Lay out the market: every karaoke card, three orders, three abilities
+        # Lay out the market: three karaoke cards, three orders, three abilities
         card_rows, ability_deck, order_deck = deal_market(
             build_deck(), build_order_deck()
         )
@@ -267,6 +273,7 @@ class GameState:
             "game_modes": list(self.game_modes),
             "order_deck": self.order_deck,
             "order_deck_size": len(self.order_deck),
+            "order_discard": self.order_discard,
             "display_specials": list(self.display_specials),
             "bag_draw_pending_specials": list(self.bag_draw_pending_specials),
             "score_to_win": self.score_to_win,
@@ -336,6 +343,7 @@ class GameState:
             ),
             game_modes=state_data.get("game_modes", []),
             order_deck=state_data.get("order_deck", []),
+            order_discard=state_data.get("order_discard", []),
             display_specials=state_data.get("display_specials"),
             bag_draw_pending_specials=state_data.get("bag_draw_pending_specials"),
             specials_display=[

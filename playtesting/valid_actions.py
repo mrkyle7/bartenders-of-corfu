@@ -541,7 +541,7 @@ def _add_refresh_card_row(
         if row.position == ABILITY_ROW:
             if swiped or ps.drunk_level < MIN_DRUNK_TO_SWIPE:
                 continue
-            if row.cards or gs._deck_dicts:
+            if row.cards or gs._deck_dicts or gs.discard:
                 result.append(
                     Action(
                         action_type="refresh_card_row",
