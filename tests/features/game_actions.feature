@@ -168,7 +168,7 @@ Feature: Game turn actions
     And player 1 has a drunk level of 3
     When player 1 claims that card
     Then player 1 should have 1 card
-    And row 1 should have 5 cards
+    And row 1 should have 3 cards
     And player 1's bladder should contain 3 ingredients
 
   Scenario: Singing karaoke needs drunk level 3
