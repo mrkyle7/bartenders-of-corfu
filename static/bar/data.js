@@ -194,7 +194,7 @@ export const RULES = [
         items: [
             'The bag holds every ingredient: spirits, mixers, and two each of the purple specials (bitters, cointreau, lemon, sugar, vermouth).',
             'The open display shows five spirits and mixers for anyone to take. A special that comes out while refilling it goes to the specials tray, also for anyone.',
-            'Three rows of cards: the five karaoke songs, three orders the punters are calling for, and three ability cards that help you.',
+            'Three rows of cards: three karaoke songs, three orders the punters are calling for, and three ability cards that help you. The other two songs are shuffled into the ability deck, so they can turn up there too.',
             'Your mat: two glasses, a bladder of 8 spaces, the drunk track and 4 toilet tokens.',
         ],
     },
@@ -248,7 +248,7 @@ export const RULES = [
         lead: 'What you’ve drunk earns them.',
         items: [
             'Claim a card (free, once a turn) if your bladder holds its cost. The cost is only checked: it stays in your bladder. Stored spirits and specials don’t count, except that one special meets the cost of its specialist.',
-            'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more. Sing three and you win.',
+            'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more, wherever it turns up. Sing three and you win.',
             'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), and free-action cards that make taking, selling or weeing free. The card says what it does.',
             'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',
             'Swiping the abilities or clearing the orders (drunk 2 or more) is free, once a turn each: all three go under their deck and three new ones are dealt. The karaoke row is never cleared.',

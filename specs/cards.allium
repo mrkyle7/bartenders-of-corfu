@@ -10,9 +10,11 @@
 --   SellCup            — CupDoubler, Specialist and order bonuses modify points
 --
 -- The market has three rows:
---   Row 1 (karaoke): all 5 KaraokeCards, face up. Never cleared or refilled.
+--   Row 1 (karaoke): 3 of the 5 KaraokeCards, chosen at random, face up.
+--                    Never cleared or refilled.
 --   Row 2 (orders):  3 OrderCards from the shuffled order deck (18 orders).
---   Row 3 (ability): 3 ability cards from the shuffled ability deck (19 cards).
+--   Row 3 (ability): 3 cards from the shuffled ability deck (19 ability
+--                    cards plus the 2 KaraokeCards not on row 1).
 --
 -- Ability deck (19 cards):
 --   5 × StoreCard       (one per spirit type)
@@ -160,6 +162,7 @@ default FreeActionCard weak_bladder     = { spirit_type: GIN,   name: "Weak Blad
 
 config {
     karaoke_card_points:    Integer = 5
+    karaoke_on_stage:       Integer = 3    -- karaoke cards dealt to row 1; the rest join the ability deck
     min_drunk_to_sing:      Integer = 3    -- drunk level needed to claim a karaoke card
     karaoke_spirits:        Integer = 2    -- spirits of the song's type needed to claim it
     store_card_points:      Integer = 1
@@ -222,8 +225,9 @@ rule SellCup {
 rule SetupCardRows {
     when: GameStarted()
     let order_deck   = shuffle(all 18 OrderCards)
-    let ability_deck = shuffle(all 19 ability cards)
-    ensures: game/CardRow.created(position: 1, cards: all 5 KaraokeCards)
+    let songs        = shuffle(all 5 KaraokeCards)
+    let ability_deck = shuffle(all 19 ability cards + songs after the first config.karaoke_on_stage)
+    ensures: game/CardRow.created(position: 1, cards: first config.karaoke_on_stage of songs)
     ensures: game/CardRow.created(position: 2, cards: first config.row_size of order_deck)
     ensures: game/CardRow.created(position: 3, cards: first config.row_size of ability_deck)
     ensures: both decks keep the rest, drawn from the top
@@ -393,8 +397,10 @@ amendment game/BoardState {
 
 -- ─── Guarantees ───────────────────────────────────────────────────────────────
 
-guarantee: row 1 holds all 5 karaoke cards at game start and is never cleared or refilled
-guarantee: row 2 holds only order cards; row 3 holds only ability cards
+guarantee: row 1 holds 3 randomly chosen karaoke cards at game start and is never cleared or refilled
+guarantee: the other 2 karaoke cards start shuffled into the ability deck; one dealt to row 3 is claimed
+           like any karaoke card (drunk 3+ and 2 of its spirit) and its slot refills from the ability deck
+guarantee: row 2 holds only order cards; row 3 holds only ability cards and karaoke cards
 guarantee: cleared cards go to the bottom of their own deck; nothing is discarded for good
 guarantee: order cards are never claimed; a sale serves at most one order per cup
 guarantee: order bonuses are never doubled and never get the specialist bonus

@@ -953,7 +953,7 @@ function cardArt(card) {
 
 // A card laid out like the printed ones: Greek-key border, art panel with the
 // cost badge and points star, name ribbon, kind, and the rule in a frame.
-function cardFace(card, { claimable, owner, index, compact } = {}) {
+function cardFace(card, { claimable, owner, index, compact, pile } = {}) {
     const kind = CARD_KINDS[card.card_type] ?? { label: 'Card', points: 0 };
     const isOrder = card.card_type === 'order';
     const ps = owner || isOrder ? null : (game.status === 'STARTED' && mine()?.status === 'active' ? mine() : null);
@@ -974,7 +974,7 @@ function cardFace(card, { claimable, owner, index, compact } = {}) {
         role: claimable ? undefined : 'group',
         'data-k': claimable ? `card-${card.id}` : undefined,
         'data-m': `card-${card.id}`,
-        'data-pile': owner ? undefined : isOrder ? 'orders' : card.card_type === 'karaoke' ? undefined : 'abilities',
+        'data-pile': pile,
     },
     h('span.card-art', { 'aria-hidden': 'true', style: { '--art': `url("/static/bar/img/cards/${cardArt(card)}.webp")` } },
         subject ? h('span.card-subject', {}, token(subject, { print: true })) : null,
@@ -1023,10 +1023,12 @@ function renderMarket() {
     const claimable = new Set(actionsOf('claim_card').map((a) => a.params.card_id));
     const clearable = new Set(actionsOf('refresh_card_row').map((a) => a.params.row_position));
     const rowOf = (position) => state.card_rows.find((r) => r.position === position) ?? { cards: [] };
+    // New cards in a row are dealt from its pile (the karaoke stage has none)
+    const PILES = { 2: 'orders', 3: 'abilities' };
     const cells = (position, size) => {
         const row = rowOf(position);
         return Array.from({ length: Math.max(size, row.cards.length) }, (_, i) => (row.cards[i]
-            ? cardFace(row.cards[i], { claimable: claimable.has(row.cards[i].id) })
+            ? cardFace(row.cards[i], { claimable: claimable.has(row.cards[i].id), pile: PILES[position] })
             : h('div.card-space', { role: 'img', 'aria-label': 'Empty slot' })));
     };
     const tag = (title, note, position, buttonText) => h('div.row-tag', {},
@@ -1038,7 +1040,7 @@ function renderMarket() {
     return h('section.market', { 'aria-label': 'Cards' },
         h('div.card-row.is-karaoke', { 'aria-label': 'Karaoke stage', role: 'group' },
             tag('Karaoke stage', 'Sing at drunk 3+ with 2 of the song’s spirit. Three songs wins.'),
-            h('div.row-cards', {}, cells(1, 5))),
+            h('div.row-cards', {}, cells(1, 3))),
         h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
             tag('Orders', 'Sell what they want for the bonus. Clear at drunk 2+ (free).', 2, 'Clear (free)'),
             h('div.row-cards', {}, cells(2, 3)),

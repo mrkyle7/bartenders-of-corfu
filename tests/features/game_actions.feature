@@ -445,12 +445,13 @@ Feature: Game turn actions
     When player 1 claims that card
     Then row 3 should have 2 cards
 
-  Scenario: At game start all 5 karaoke cards are out, with 3 ability cards and 18 orders
+  Scenario: At game start 3 karaoke cards are out, the other 2 shuffled into the ability deck
     Given it is player 1's turn
-    Then row 1 should have 5 cards
+    Then row 1 should have 3 cards
     And all cards in row 1 should be karaoke type
     And row 3 should have 3 cards
-    And the deck should have 16 cards remaining
+    And the deck should have 18 cards remaining
+    And row 3 and the ability deck should hold 2 karaoke cards
     And the orders row and order deck should hold 18 orders in all
 
   # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────

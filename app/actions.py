@@ -1189,8 +1189,9 @@ def claim_card(
 ) -> tuple[GameState, dict]:
     """ClaimCard — a free action, once a turn, before or after your main action.
 
-    Karaoke cards come from row 1 (not replaced); ability cards from row 3,
-    replaced from the top of the ability deck. Orders can't be claimed: they
+    Karaoke cards on row 1 aren't replaced; cards in row 3 (abilities, and
+    the karaoke cards shuffled in with them) are replaced from the top of
+    the ability deck. Orders can't be claimed: they
     are served by selling the drink.
 
     cup_index: required for cup_doubler cards (0 or 1).

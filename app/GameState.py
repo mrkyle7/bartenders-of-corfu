@@ -210,7 +210,7 @@ class GameState:
         random.shuffle(turn_order)
         first_player = turn_order[0]
 
-        # Lay out the market: every karaoke card, three orders, three abilities
+        # Lay out the market: three karaoke cards, three orders, three abilities
         card_rows, ability_deck, order_deck = deal_market(
             build_deck(), build_order_deck()
         )

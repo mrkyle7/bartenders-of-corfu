@@ -37,6 +37,28 @@ def _row(gs: GameState, position: int) -> CardRow:
     return next(r for r in gs.card_rows if r.position == position)
 
 
+def _off_stage_songs(gs: GameState) -> list[Card]:
+    """Take the karaoke cards out of the ability deck and row 3."""
+    abilities = _row(gs, 3)
+    songs = [c for c in abilities.cards if c.card_type == "karaoke"]
+    songs += [Card.from_dict(d) for d in gs._deck_dicts if d["card_type"] == "karaoke"]
+    abilities.cards = [c for c in abilities.cards if c.card_type != "karaoke"]
+    gs._deck_dicts = [d for d in gs._deck_dicts if d["card_type"] != "karaoke"]
+    return songs
+
+
+def _stage(gs: GameState, *spirits: str) -> list[Card]:
+    """Put the karaoke cards for `spirits` on stage (row 1) and return them;
+    the songs left over go into the ability deck."""
+    stage = _row(gs, 1)
+    songs = stage.cards + _off_stage_songs(gs)
+    wanted = [next(c for c in songs if c.spirit_type == s) for s in spirits]
+    order = wanted + [c for c in songs if c not in wanted]
+    stage.cards = order[:3]
+    gs._deck_dicts += [c.to_dict() for c in order[3:]]
+    return wanted
+
+
 def _order(name: str, drink: str, bonus: int, **kw) -> Card:
     return Card(
         id=f"o-{name}", card_type="order", name=name, drink=drink, bonus=bonus, **kw
@@ -59,18 +81,52 @@ def test_setup_scales_with_players(players, target):
     assert gs.to_dict()["score_to_win"] == target
 
 
-def test_market_has_every_karaoke_card_then_orders_then_abilities():
+def test_market_has_three_karaoke_cards_then_orders_then_abilities():
     gs = _game()
     karaoke, orders, abilities = (_row(gs, p).cards for p in (1, 2, 3))
-    assert len(karaoke) == 5 and all(c.card_type == "karaoke" for c in karaoke)
+    assert len(karaoke) == 3 and all(c.card_type == "karaoke" for c in karaoke)
     assert len(orders) == 3 and all(c.card_type == "order" for c in orders)
     assert len(abilities) == 3
-    assert all(c.card_type not in ("karaoke", "order") for c in abilities)
-    # 19 ability cards (no Cocktail Shaker) and 18 orders in all
-    assert len(gs._deck_dicts) + len(abilities) == 19
+    assert all(c.card_type != "order" for c in abilities)
+    # 19 ability cards (no Cocktail Shaker) plus the 2 songs not on stage,
+    # and 18 orders in all
+    deck = [Card.from_dict(d) for d in gs._deck_dicts] + abilities
+    assert len(deck) == 21
+    songs = [c for c in deck if c.card_type == "karaoke"]
+    assert len(songs) == 2
+    # One song per spirit across the stage and the deck
+    spirits = {c.spirit_type for c in karaoke + songs}
+    assert spirits == {"RUM", "GIN", "TEQUILA", "VODKA", "WHISKEY"}
     assert len(gs.order_deck) + len(orders) == 18
-    names = {c["name"] for c in gs._deck_dicts} | {c.name for c in abilities}
-    assert "Cocktail Shaker" not in names
+    assert "Cocktail Shaker" not in {c.name for c in deck}
+
+
+def test_which_songs_are_on_stage_is_random():
+    stages = {
+        frozenset(c.spirit_type for c in _row(_game(), 1).cards) for _ in range(40)
+    }
+    assert len(stages) > 1
+
+
+def test_a_song_dealt_to_the_ability_row_is_sung_and_replaced():
+    gs = _game()
+    pid, ps = _me(gs)
+    song, *rest = _off_stage_songs(gs)
+    gs._deck_dicts += [c.to_dict() for c in rest]
+    abilities = _row(gs, 3)
+    abilities.cards = abilities.cards[:2] + [song]
+    deck_before = len(gs._deck_dicts)
+    ps.bladder = [Ingredient[song.spirit_type]] * 2
+    ps.drunk_level = 3
+
+    new, payload = claim_card(gs, pid, song.id)
+
+    me = new.player_states[pid]
+    assert me.karaoke_cards_claimed == 1 and me.points == 5
+    assert payload["row_position"] == 3
+    # Its place is dealt from the ability deck
+    assert len(_row(new, 3).cards) == 3
+    assert len(new._deck_dicts) == deck_before - 1
 
 
 def test_the_display_shows_five_spirits_and_mixers_and_specials_go_aside():
@@ -90,7 +146,7 @@ def test_claiming_is_free_and_leaves_the_main_action():
     pid, ps = _me(gs)
     ps.bladder = [Ingredient.RUM] * 2
     ps.drunk_level = 3
-    sea_shanty = next(c for c in _row(gs, 1).cards if c.spirit_type == "RUM")
+    (sea_shanty,) = _stage(gs, "RUM")
 
     new, payload = claim_card(gs, pid, sea_shanty.id)
 
@@ -98,7 +154,7 @@ def test_claiming_is_free_and_leaves_the_main_action():
     assert new.player_turn == pid
     assert new.main_action_taken_this_turn is False
     # The karaoke row isn't refilled
-    assert len(_row(new, 1).cards) == 4
+    assert len(_row(new, 1).cards) == 2
 
 
 def test_only_one_claim_a_turn():
@@ -106,9 +162,7 @@ def test_only_one_claim_a_turn():
     pid, ps = _me(gs)
     ps.bladder = [Ingredient.RUM] * 2 + [Ingredient.GIN] * 2
     ps.drunk_level = 3
-    karaoke = _row(gs, 1).cards
-    rum = next(c for c in karaoke if c.spirit_type == "RUM")
-    gin = next(c for c in karaoke if c.spirit_type == "GIN")
+    rum, gin = _stage(gs, "RUM", "GIN")
     gs, _ = claim_card(gs, pid, rum.id)
     with pytest.raises(GameException) as exc:
         claim_card(gs, pid, gin.id)
@@ -139,6 +193,7 @@ def test_turn_waits_while_a_claim_is_possible_then_ends_after_it():
     ps.bladder = [Ingredient.RUM] * 2
     ps.drunk_level = 3
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
+    (sea_shanty,) = _stage(gs, "RUM")
     gs.card_rows[1].cards = []  # no orders to muddy the sale
     # nothing to swipe either (drunk 3 could otherwise swipe the abilities)
     _row(gs, 3).cards = []
@@ -146,7 +201,6 @@ def test_turn_waits_while_a_claim_is_possible_then_ends_after_it():
     gs, _ = sell_cup(gs, pid, 0, [])
     # Main action done, but Sea Shanty is affordable: the turn stays open
     assert gs.player_turn == pid
-    sea_shanty = next(c for c in _row(gs, 1).cards if c.spirit_type == "RUM")
     gs, _ = claim_card(gs, pid, sea_shanty.id)
     assert gs.player_turn != pid
 
@@ -808,7 +862,7 @@ def test_the_wrong_special_does_not_pay_for_a_specialist():
 def test_karaoke_needs_drunk_three_and_two_spirits():
     gs = _game()
     pid, ps = _me(gs)
-    card = next(c for c in _row(gs, 1).cards if c.spirit_type == "GIN")
+    (card,) = _stage(gs, "GIN")
     ps.bladder = [Ingredient.GIN] * 3
     ps.drunk_level = 2
     with pytest.raises(GameException):
@@ -825,7 +879,7 @@ def test_karaoke_needs_drunk_three_and_two_spirits():
 def test_one_spirit_does_not_sing_a_song_however_drunk():
     gs = _game()
     pid, ps = _me(gs)
-    card = next(c for c in _row(gs, 1).cards if c.spirit_type == "GIN")
+    (card,) = _stage(gs, "GIN")
     ps.bladder = [Ingredient.GIN]
     ps.drunk_level = 5
     with pytest.raises(GameException):
