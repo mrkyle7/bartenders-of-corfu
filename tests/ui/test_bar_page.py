@@ -113,6 +113,7 @@ def test_bar_take_from_display_into_a_glass(
         gs = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])["game_state"]
     assert gs["player_turn"] == me
 
+    gs = _leave_one_to_take(base_url, new_user, new_game, gs)
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
     display = gs["open_display"]
@@ -127,12 +128,13 @@ def test_bar_take_from_display_into_a_glass(
     # The token lands in glass 1 on the server
     page.wait_for_function(
         "() => !document.querySelector('.mat.is-mine .glass .tok.is-placed')"
-        " && document.querySelectorAll('.mat.is-mine .glass .tok').length === 1",
+        " && document.querySelector('.mat.is-mine .glass').querySelectorAll('.tok').length === 1",
         timeout=10000,
     )
     after = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])["game_state"]
     assert after["player_states"][me]["cups"][0]["ingredients"] == [display[slot]]
-    assert after["ingredients_taken_this_turn"] == 1
+    # That finished the take, so the turn has passed
+    assert after["player_turn"] != me
 
 
 def test_bar_everyone_mat_on_show(
@@ -369,6 +371,39 @@ def _my_turn(base_url, new_user, new_game, other_user_and_jwt):
     return gs
 
 
+def _leave_one_to_take(base_url, new_user, new_game, gs, first="cup"):
+    """Take all but one of this turn's ingredients blind from the bag (the
+    first one drunk if first="drink", the rest into glass 2), so one more
+    from the display finishes the take."""
+    take = gs["player_states"][new_user["user"]["id"]]["take_count"]
+    assignments = [
+        {"source": "bag", "disposition": "cup", "cup_index": 1} for _ in range(take - 1)
+    ]
+    if first == "drink":
+        assignments[0] = {"source": "bag", "disposition": "drink"}
+    _api_post(
+        base_url,
+        f"/v1/games/{new_game}/actions/take-ingredients",
+        new_user["jwt"],
+        {"assignments": assignments},
+    )
+    return _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])["game_state"]
+
+
+_WATCH_BAG = """() => {
+    window.flownOff = 0;
+    window.toBag = 0;
+    new MutationObserver((records) => {
+        for (const r of records) for (const n of r.addedNodes) {
+            if (n.classList?.contains('tok') && r.target.classList.contains('motion-layer')) {
+                window.flownOff += 1;
+                if (n.dataset.dest === 'bag') window.toBag += 1;
+            }
+        }
+    }).observe(document.body, { childList: true, subtree: true });
+}"""
+
+
 def _live_zoom(page):
     return float(
         page.evaluate(
@@ -417,6 +452,7 @@ def test_bar_live_view_animates_a_pick_up(
     """A token picked off the display flies into your hand, and the move
     still goes through."""
     gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    gs = _leave_one_to_take(base_url, new_user, new_game, gs)
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
     slot = next(i for i, name in enumerate(gs["open_display"]) if name != "SPECIAL")
@@ -429,7 +465,7 @@ def test_bar_live_view_animates_a_pick_up(
     page.locator('[data-k="done-placing"]').click()
     page.wait_for_function(
         "() => !document.querySelector('.mat.is-mine .glass .tok.is-placed')"
-        " && document.querySelectorAll('.mat.is-mine .glass .tok').length === 1",
+        " && document.querySelector('.mat.is-mine .glass').querySelectorAll('.tok').length === 1",
         timeout=10000,
     )
     # Nothing is left mid-flight once the moves have played out
@@ -445,6 +481,7 @@ def test_bar_placing_in_a_glass_sends_nothing_to_the_bag(
     """Putting a token into a glass, and sending the take, flies it from the
     hand to the glass: nothing flies back into the bag."""
     gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    gs = _leave_one_to_take(base_url, new_user, new_game, gs)
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
     display = gs["open_display"]
@@ -467,7 +504,7 @@ def test_bar_placing_in_a_glass_sends_nothing_to_the_bag(
     page.locator('[data-k="done-placing"]').click()
     page.wait_for_function(
         "() => !document.querySelector('.mat.is-mine .glass .tok.is-placed')"
-        " && document.querySelectorAll('.mat.is-mine .glass .tok').length === 1",
+        " && document.querySelector('.mat.is-mine .glass').querySelectorAll('.tok').length === 1",
         timeout=10000,
     )
     page.wait_for_timeout(300)
@@ -489,3 +526,91 @@ def test_bar_live_view_stays_still_with_reduced_motion(
     page.locator(f'[data-k="disp-{slot}"]').click()
     assert page.locator(".hand .tok").count() == 1
     assert page.locator(".is-flying, .motion-layer > *").count() == 0
+
+
+def test_bar_done_placing_waits_for_the_whole_take(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """Done placing stays off until every ingredient this turn is taken and
+    placed; one token from the display isn't the whole take."""
+    gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    take = gs["player_states"][new_user["user"]["id"]]["take_count"]
+    assert take > 1
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+    plain = [i for i, n in enumerate(gs["open_display"]) if n != "SPECIAL"]
+
+    page.locator(f'[data-k="disp-{plain[0]}"]').click()
+    page.locator(".mat.is-mine button.glass").first.click()
+    done = page.locator('[data-k="done-placing"]')
+    assert done.is_disabled()
+    assert "more ingredient" in page.locator(".hand .hand-note").inner_text()
+
+    for slot in plain[1:take]:
+        page.locator(f'[data-k="disp-{slot}"]').click()
+        page.locator(".mat.is-mine button.glass").first.click()
+    assert done.is_enabled()
+    done.click()
+    page.locator(".turnbar.tone-you").wait_for(state="detached", timeout=10000)
+
+
+def test_bar_taken_this_turn_is_marked(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """Part way through a take, what has already gone down is marked: the
+    drink at your mouth and in your bladder, and the tokens in your glass."""
+    gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    take = gs["player_states"][new_user["user"]["id"]]["take_count"]
+    _leave_one_to_take(base_url, new_user, new_game, gs, first="drink")
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+
+    mat = page.locator(".mat.is-mine")
+    assert mat.locator(".mouth-tokens .tok.is-fresh").count() == 1
+    assert mat.locator(".bladder-slots .tok.is-fresh").count() == 1
+    assert mat.locator(".glass .tok.is-fresh").count() == take - 2
+    assert mat.locator(".mouth-hint").is_visible()
+    assert "taken this turn" in mat.locator(
+        ".bladder-slots .tok.is-fresh"
+    ).get_attribute("aria-label")
+
+
+def test_bar_drinking_sends_nothing_to_the_bag(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """A token drunk goes to your bladder, not the bag: only selling and
+    weeing put tokens back in the bag."""
+    gs = _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    gs = _leave_one_to_take(base_url, new_user, new_game, gs)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+    page.evaluate(_WATCH_BAG)
+    slot = next(i for i, n in enumerate(gs["open_display"]) if n != "SPECIAL")
+
+    page.locator(f'[data-k="disp-{slot}"]').click()
+    page.locator('[data-k="mouth"]').click()
+    page.locator('[data-k="done-placing"]').click()
+    page.locator(".turnbar.tone-you").wait_for(state="detached", timeout=10000)
+    page.wait_for_timeout(300)
+    assert page.evaluate("window.toBag") == 0
+    assert page.locator(".mat.is-mine .bladder-slots .tok").count() == 1
+
+
+def test_bar_draw_again_puts_down_the_last_draw(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """With a blind draw placed and more to take, drawing again sends what
+    you placed first, then draws; without placing it you can't draw."""
+    _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
+
+    page.locator('[data-k="draw-1"]').click()
+    page.locator(".hand .tok").first.wait_for(state="visible", timeout=10000)
+    assert page.locator('[data-k="draw-1"]').count() == 0
+    page.locator(".mat.is-mine button.glass").first.click()
+    page.locator('[data-k="draw-1"]').click()
+    page.locator(".mat.is-mine .glass .tok.is-fresh").wait_for(timeout=10000)
+    after = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])["game_state"]
+    assert after["ingredients_taken_this_turn"] == 1
+    assert len(after["bag_draw_pending"]) == 1

@@ -13,8 +13,10 @@
 //     are the same token on the move;
 //   - a token that arrives from nowhere came out of the bag (or from the
 //     piece named in its data-from, e.g. the display slot you picked it
-//     from, which has then moved rather than vanished), and one that
-//     vanishes goes back into the bag;
+//     from, which has then moved rather than vanished); only selling,
+//     weeing or going out puts tokens back in the bag, so only one that
+//     vanishes from a glass, a bladder or a mat goes there (a drink gone
+//     from your mouth was swallowed: it just fades);
 //   - a token lifted off the display or tray, or ghosted in your hand once
 //     placed, is only a reminder of where it was: the piece is in your hand
 //     or where you put it;
@@ -29,6 +31,7 @@ const EASE = 'cubic-bezier(.22,.8,.3,1)';
 const FLIGHT = 620;
 const SHIFT = 260;
 const GAP = 70; // between one flying token and the next
+const BAG_FROM = /^(glass|bladder|store|matspec)-/; // where a token can leave for the bag
 
 let layer = null;
 
@@ -65,7 +68,7 @@ export function snapshot(root) {
             seen.set(base, n + 1);
             key = `${base}|${n}`;
         }
-        tokens.push({ el, r: rectOf(el), key, name, from: el.dataset.from, k });
+        tokens.push({ el, r: rectOf(el), key, loc, name, from: el.dataset.from, k });
     }
     for (const el of root.querySelectorAll('[data-k], [data-loc]')) {
         if (el.dataset.k) anchors.set(el.dataset.k, rectOf(el));
@@ -104,9 +107,10 @@ function fly(el, from, to, zoom, { delay = 0, arc = 46, duration = FLIGHT, flip 
 }
 
 // A piece that has left the table: its old element flies off on the layer.
-function ghost(item, to, zoom, { delay = 0, fade = true } = {}) {
+function ghost(item, to, zoom, { delay = 0, fade = true, dest } = {}) {
     const el = item.el;
     const host = ensureLayer();
+    if (dest) el.dataset.dest = dest; // where it's headed: 'bag', say
     el.classList.remove('is-takeable', 'is-flying');
     el.removeAttribute('data-k');
     el.removeAttribute('data-m');
@@ -214,11 +218,13 @@ export function play(before, root, zoom = 1) {
     }
     if (bagUsed) for (let i = 0; i < Math.min(bagUsed, 3); i++) wobble(bagEl, 120 + i * GAP * 1.6);
 
-    // Tokens that left the table go back in the bag (sold, wee'd away).
+    // Tokens sold, wee'd away or given up go back in the bag; anything else
+    // that vanished (a drink swallowed, say) just fades.
     let toBag = 0;
     for (const g of gone) {
-        if (g.name === 'LOO' || !bag) continue;
-        ghost(g, bag, zoom, { delay: toBag++ * 45 });
+        if (g.name === 'LOO') continue;
+        if (bag && BAG_FROM.test(g.loc)) ghost(g, bag, zoom, { delay: toBag++ * 45, dest: 'bag' });
+        else ghost(g, null, zoom);
     }
     if (toBag) wobble(bagEl, FLIGHT * 0.7);
 
