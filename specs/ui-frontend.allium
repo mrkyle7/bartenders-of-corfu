@@ -166,7 +166,15 @@ surface GamePage {
                viewer's own moves and for other players' moves as they arrive: tokens drawn come out of the
                bag, tokens sold or wee'd away go back into it, claimed cards travel to the claimer's mat,
                new market cards are dealt from their pile, pawns slide, and points scored float up;
-               tokens put into a glass or the mouth travel there from the hand and nowhere else
+               tokens put into a glass or the mouth travel there from the hand and nowhere else; only
+               selling, weeing or leaving the game puts tokens back in the bag (a drink goes to the bladder)
+    guarantee: 'Done placing' is enabled only once the whole take (take_count) is in hand and placed;
+               while some are still to take it is disabled and says how many are left
+    guarantee: a blind bag draw must be placed before the next one; with it placed and more to take,
+               drawing again first sends what was placed, then draws
+    guarantee: part way through a take, every ingredient already sent this turn is marked as taken this
+               turn where it now sits (glass, bladder), the drinks so far show at the mouth, and the mouth
+               says whether mixers can still sober the player this turn (only with no spirit drunk)
     guarantee: when the viewer asks for reduced motion, the table keeps its fixed size but animates nothing
     guarantee: animations are decoration only — input is never blocked or delayed while pieces are in flight
     guidance: in-game interactions (ingredient actions, state updates) should respond within 200 ms

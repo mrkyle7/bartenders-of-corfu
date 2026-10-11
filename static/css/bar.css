@@ -250,6 +250,21 @@ button.tok { cursor: pointer; }
 }
 .tok.is-placed { outline: 2px dashed var(--kumquat); outline-offset: 2px; animation: set-down 0.18s ease-out; }
 .tok.is-ghost { opacity: 0.3; box-shadow: none; }
+/* Taken earlier this turn: down for good, but still part of the take. */
+.tok.is-fresh { outline: 2px solid var(--kumquat); outline-offset: 2px; }
+.tok.is-fresh::after {
+    content: '✓';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--kumquat);
+    color: #1f1206;
+    font: 900 10px/14px system-ui, sans-serif;
+    text-align: center;
+}
 .tok.is-lifted { opacity: 0.28; box-shadow: none; }
 .tok.is-selected {
     transform: translateY(-8px) scale(1.06);
@@ -846,6 +861,7 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 .mouth-tokens { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 120px; }
 .mouth-note { font-size: 12px; text-align: center; }
 .mouth-note.is-danger { color: #ffd0c9; font-weight: 800; }
+.mouth-hint { font-size: 11px; text-align: center; color: var(--whitewash-dim); max-width: 130px; }
 
 /* Bladder: one printed space per ingredient; toilet tokens seal from the right. */
 .mat {

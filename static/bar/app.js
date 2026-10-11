@@ -406,6 +406,20 @@ function heldIngredient() {
 }
 
 const takeLeft = () => (mine() ? mine().take_count - gs().ingredients_taken_this_turn - handItems().length : 0);
+// What this turn's take has already put down (a take can come in batches):
+// how many of the last ingredients in each glass, and in the bladder, are new.
+function takenThisTurn(pid) {
+    const records = gs().player_turn === pid ? gs().taken_records_this_turn ?? [] : [];
+    const cups = [0, 0];
+    let drunk = 0;
+    for (const r of records) {
+        if (r.disposition === 'cup') cups[r.cup_index] = (cups[r.cup_index] ?? 0) + 1;
+        else if (r.disposition === 'drink') drunk += 1;
+    }
+    return { cups, drunk };
+}
+const FRESH = ', taken this turn';
+
 const stagedTo = (to, cup) => handItems().filter((it) => ui.staged[it.key]?.to === to
     && (cup === undefined || ui.staged[it.key].cup === cup));
 
@@ -514,6 +528,12 @@ function showHand() {
 }
 
 function drawFromBag(count) {
+    // A blind draw has to be placed before the next one: put down what you
+    // drew, then draw again.
+    if (gs().bag_draw_pending.length) {
+        finishPlacing({ then: () => drawFromBag(count) });
+        return;
+    }
     act(() => api.drawFromBag(gameId, count), {
         after: () => { ui.selected = null; },
     });
@@ -571,7 +591,7 @@ function glassRoom(cup) {
     return { base: CUP_SIZE - (all.length - specials), specials: GLASS_SPECIALS - specials };
 }
 
-function finishPlacing() {
+function finishPlacing({ then } = {}) {
     const items = handItems();
     if (items.some((it) => !ui.staged[it.key])) {
         toast('Put everything in your hand into a glass or your mouth first.', 'error');
@@ -611,7 +631,7 @@ function finishPlacing() {
             if (status === 'hospitalised') toast('You passed out and went to hospital. You are out of the game.', 'error');
             if (status === 'wet') toast('Your bladder gave way. You are out of the game.', 'error');
         },
-    });
+    }).then((result) => { if (result && then && myTurn() && takeLeft() > 0) then(); });
     const ps = mine();
     const overflow = ps.bladder.length + drinks.length > ps.bladder_capacity;
     const hospital = finishing && drunkAfter(drinks) > MAX_DRUNK;
@@ -791,7 +811,8 @@ function turnbar() {
         if (hand.length) {
             const unplaced = hand.filter((it) => !ui.staged[it.key]).length;
             const held = hand.find((it) => it.key === ui.selected);
-            detail = !unplaced ? 'Everything is placed. Press "Done placing" on your mat.'
+            detail = !unplaced && takeLeft() > 0 ? `Take ${plural(takeLeft(), 'more ingredient')}: tap tokens on the display or the specials tray, or draw from the bag.`
+                : !unplaced ? 'Everything is placed. Press "Done placing" on your mat.'
                 : held && isSpecialToken(held) ? 'Decide what to do with the special in your hand.'
                     : `Tap a glass or your mouth to put down the ${held ? ING[held.name].label : 'token'} you're holding.`;
         } else if (takeUnderway()) {
@@ -1038,7 +1059,9 @@ function renderSupply() {
     // Specials that come out of the bag go to the tray, so only spirits and
     // mixers can be drawn.
     const drawable = state.bag_contents.filter((n) => !isSpecial(n)).length;
-    const maxDraw = taking && !pendingDraw ? Math.min(left, drawable) : 0;
+    // With a blind draw all placed, drawing again puts it down first.
+    const pendingPlaced = pendingDraw && handItems().every((it) => ui.staged[it.key]);
+    const maxDraw = taking && (!pendingDraw || pendingPlaced) ? Math.min(left, drawable) : 0;
 
     const display = h('div.display', { role: 'group', 'aria-label': 'Open display', 'data-loc': 'display' },
         Array.from({ length: 5 }, (_, i) => {
@@ -1177,12 +1200,16 @@ function glass(pid, cupIndex, { interactive }) {
     });
     // Spirits and mixers fill the glass; specials have their own two
     // spaces at the top of it.
+    // The last few in the glass may have gone in earlier this turn.
+    const freshFrom = cup.ingredients.length - (takenThisTurn(pid).cups[cupIndex] ?? 0);
+    const sitting = cup.ingredients.map((name, i) => ({ name, fresh: i >= freshFrom }));
+    const settled = ({ name, fresh }) => token(name, fresh ? { state: 'fresh', label: `${tokenLabel(name)}${FRESH}` } : {});
     const contents = [
-        ...cup.ingredients.filter((n) => !isSpecial(n)).map((name) => token(name)),
+        ...sitting.filter((x) => !isSpecial(x.name)).map(settled),
         ...incoming.filter((it) => !isSpecial(it.name)).map(staged),
     ];
     const garnish = [
-        ...cup.ingredients.filter(isSpecial).map((name) => token(name)),
+        ...sitting.filter((x) => isSpecial(x.name)).map(settled),
         ...incoming.filter((it) => isSpecial(it.name)).map(staged),
     ];
     // Each space sits over one of the circles drawn on the glass.
@@ -1266,6 +1293,7 @@ const LIPS_SVG = '<svg viewBox="0 0 64 34" aria-hidden="true">'
 
 function mouth() {
     const drinks = stagedTo('mouth');
+    const already = gs().drunk_ingredients_this_turn ?? [];
     const placing = !!heldIngredient();
     const after = drunkAfter(drinks.map((it) => it.name));
     const node = h(placing ? 'button.mouth' : 'div.mouth', {
@@ -1279,25 +1307,46 @@ function mouth() {
     h('span.mouth-word', { text: 'Drink' }));
     return h('div.mouth-spot', {},
         node,
-        h('div.mouth-tokens', { 'data-loc': 'mouth' }, drinks.map((it) => token(it.name, {
-            state: 'placed', key: `staged-${it.key}`, from: `hand-${it.key}`,
-            label: `${ING[it.name].label} to drink. Tap to pick it back up.`,
-            onclick: () => selectInHand(it.key),
-        }))),
-        drinks.length || gs().drunk_ingredients_this_turn.length
+        h('div.mouth-tokens', { 'data-loc': 'mouth' },
+            // Drunk earlier this turn: already down, but they still count
+            // toward how drunk the take leaves you.
+            already.map((name) => token(name, { state: 'fresh', label: `${tokenLabel(name)}, drunk this turn` })),
+            drinks.map((it) => token(it.name, {
+                state: 'placed', key: `staged-${it.key}`, from: `hand-${it.key}`,
+                label: `${ING[it.name].label} to drink. Tap to pick it back up.`,
+                onclick: () => selectInHand(it.key),
+            }))),
+        drinks.length || already.length
             ? h('span.mouth-note', { cls: after > MAX_DRUNK ? 'is-danger' : '', text: after > MAX_DRUNK ? 'Hospital!' : `Drunk ${after} after this turn` })
-            : null);
+            : null,
+        soberNote(already, drinks.map((it) => it.name)));
+}
+
+// Mixers only sober you up if no spirit goes down in the same take.
+function soberNote(already, drinks) {
+    const all = [...already, ...drinks];
+    if (!all.length) return null;
+    const boozy = (i) => ING[i]?.kind === 'spirit' || BOOZY.includes(i);
+    const spirit = all.find(boozy);
+    const refreshers = mine().cards.some((c) => c.card_type === 'refresher');
+    if (spirit) return h('span.mouth-hint', { text: `${ING[spirit].label} drunk: ${refreshers ? 'only your refresher mixers sober' : "mixers won't sober"} you this turn` });
+    return h('span.mouth-hint', { text: 'No spirits yet: mixers sober you up' });
 }
 
 function bladder(pid, { interactive }) {
     const ps = gs().player_states[pid];
     const incoming = interactive ? stagedTo('mouth') : [];
     const sealed = INITIAL_BLADDER - ps.bladder_capacity;
-    const filled = [...ps.bladder.map((n) => ({ n })), ...incoming.map((it) => ({ n: it.name, staged: true }))];
+    const freshFrom = ps.bladder.length - takenThisTurn(pid).drunk;
+    const filled = [
+        ...ps.bladder.map((n, i) => ({ n, fresh: i >= freshFrom })),
+        ...incoming.map((it) => ({ n: it.name, staged: true })),
+    ];
     const slots = Array.from({ length: INITIAL_BLADDER }, (_, i) => {
         if (i >= ps.bladder_capacity) return slot(h('span.loo', { role: 'img', 'aria-label': 'Sealed by a toilet token' }), 'is-sealed');
         const f = filled[i];
-        return slot(f ? token(f.n, { state: f.staged ? 'placed' : undefined }) : null, f ? '' : 'is-empty');
+        const state = f?.staged ? 'placed' : f?.fresh ? 'fresh' : undefined;
+        return slot(f ? token(f.n, { state, label: f.fresh ? `${tokenLabel(f.n)}${FRESH}` : undefined }) : null, f ? '' : 'is-empty');
     });
     const overflow = filled.length > ps.bladder_capacity;
     const full = filled.length >= ps.bladder_capacity;
@@ -1388,7 +1437,10 @@ function specialChoices(it) {
 
 function hand() {
     const items = handItems();
+    // Done once the whole take is in hand and placed, not part of it.
     const allPlaced = items.length && items.every((it) => ui.staged[it.key]);
+    const left = takeLeft();
+    const ready = allPlaced && left <= 0;
     return h('div.hand', { role: 'group', 'aria-label': 'In your hand' },
         h('div.zone-head', {},
             h('span.zone-name', { text: 'In your hand' }),
@@ -1413,8 +1465,14 @@ function hand() {
         items.some((it) => it.source === 'pending')
             ? h('p.hand-note', { text: 'Bag draws can’t go back. Everything goes in a glass or your mouth.' }) : null,
         items.length
-            ? h('button.btn.go', { type: 'button', disabled: !allPlaced, onclick: finishPlacing, text: 'Done placing', 'data-k': 'done-placing' })
-            : null);
+            ? h('button.btn.go', {
+                type: 'button', disabled: !ready, onclick: () => finishPlacing(), text: 'Done placing', 'data-k': 'done-placing',
+                'aria-label': ready ? 'Done placing: send your take' : allPlaced
+                    ? `Done placing, waiting: take ${plural(left, 'more ingredient')} first` : 'Done placing, waiting: put everything in your hand down first',
+            })
+            : null,
+        items.length && allPlaced && left > 0
+            ? h('p.hand-note', { text: `Take ${plural(left, 'more ingredient')}, then press Done placing.` }) : null);
 }
 
 function mat(pid) {
