@@ -16,6 +16,7 @@ from app.db import db
 from app import push
 from app import presence
 from app import password_reset
+from app import google_sign_in
 from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
@@ -705,6 +706,37 @@ async def confirm_password_reset(body: PasswordResetConfirm):
         return JSONResponse(status_code=400, content={"error": str(e)})
     response = JSONResponse(content=user.to_dict(), status_code=200)
     set_auth_cookie(response, jwt_handler.sign(user))
+    return response
+
+
+class GoogleSignIn(BaseModel):
+    credential: str
+
+
+@app.post("/v1/auth/google")
+async def sign_in_with_google(body: GoogleSignIn):
+    """Signs in with a Google ID token from "Sign in with Google".
+
+    Signs in the account linked to that Google account; failing that, links
+    the account with the same (Google-verified) email; failing that, makes a
+    new account. Answers like /login, plus ``created`` for a new account.
+    """
+    try:
+        identity = await asyncio.to_thread(google_sign_in.verify_token, body.credential)
+        user, created = await asyncio.to_thread(google_sign_in.sign_in, identity)
+    except google_sign_in.GoogleSignInUnavailable:
+        return JSONResponse(
+            status_code=503, content={"error": "Google sign-in is not set up"}
+        )
+    except google_sign_in.GoogleSignInError as e:
+        status = 401 if str(e) == google_sign_in.INVALID_TOKEN else 403
+        return JSONResponse(status_code=status, content={"error": str(e)})
+    response = JSONResponse(
+        content={**user.to_dict(), "created": created},
+        status_code=201 if created else 200,
+    )
+    set_auth_cookie(response, jwt_handler.sign(user))
+    logger.info("User %s signed in with Google", user)
     return response
 
 
