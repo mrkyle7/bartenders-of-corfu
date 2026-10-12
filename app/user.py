@@ -37,6 +37,7 @@ class User:
         self.deactivated_by: Optional[UUID] = None
         self.deleted_at: Optional[str] = None
         self.logged_out_at: Optional[str] = None
+        self.google_id: Optional[str] = None
 
     @classmethod
     def new_bot(cls, username: str, strategy: str) -> "User":
@@ -56,6 +57,17 @@ class User:
         user.deactivated_by = None
         user.deleted_at = None
         user.logged_out_at = None
+        user.google_id = None
+        return user
+
+    @classmethod
+    def new_google(cls, username: str, email: str, google_id: str) -> "User":
+        """A player who signed up with Google: no password until they set one."""
+        user = cls.new_bot(username, "")
+        user.is_bot = False
+        user.bot_strategy = None
+        user.email = user._validate_email(email)
+        user.google_id = google_id
         return user
 
     def _validate_name(self, name: str) -> str:
@@ -168,6 +180,8 @@ class User:
 
         if include_email:
             result["email"] = self.email
+            result["has_password"] = bool(self._password_hash)
+            result["google_linked"] = bool(self.google_id)
 
         return result
 
@@ -189,6 +203,7 @@ class User:
         )
         user.deleted_at = data.get("deleted_at")
         user.logged_out_at = data.get("logged_out_at")
+        user.google_id = data.get("google_id")
 
         password_hash = data.get("password_hash")
         if password_hash:

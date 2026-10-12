@@ -29,6 +29,7 @@ class Db:
         "logged_out_at",
         "is_bot",
         "bot_strategy",
+        "google_id",
     )
 
     @staticmethod
@@ -50,11 +51,12 @@ class Db:
                 "logged_out_at": row.get("logged_out_at"),
                 "is_bot": row.get("is_bot", False),
                 "bot_strategy": row.get("bot_strategy"),
+                "google_id": row.get("google_id"),
             }
         )
 
     def add_user(self, user: User) -> bool:
-        if user.is_bot:
+        if user.is_bot or not user._password_hash:
             password_value = None
         else:
             password_value = bytesToHexString(user._password_hash)
@@ -68,6 +70,8 @@ class Db:
             "is_bot": user.is_bot,
             "bot_strategy": user.bot_strategy,
         }
+        if user.google_id:
+            row["google_id"] = user.google_id
         response = self.supabase.table("users").insert(row).execute()
         return len(response.data) == 1
 
@@ -155,6 +159,7 @@ class Db:
                     "username": None,
                     "email": None,
                     "password": None,
+                    "google_id": None,
                     "deleted_at": self._now(),
                 }
             )
@@ -221,6 +226,29 @@ class Db:
                 }
             )
             .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def get_user_by_google_id(self, google_id: str) -> User | None:
+        response = (
+            self.supabase.table("users")
+            .select(",".join(self._USER_COLUMNS))
+            .eq("google_id", google_id)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        if len(response.data) != 1:
+            return None
+        return self._row_to_user(response.data[0])
+
+    def link_google_id(self, user_id: UUID, google_id: str) -> bool:
+        """Links a Google account to a user. False if it already has one."""
+        response = (
+            self.supabase.table("users")
+            .update({"google_id": google_id})
+            .eq("id", str(user_id))
+            .is_("google_id", "null")
             .execute()
         )
         return len(response.data) == 1
