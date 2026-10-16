@@ -12,6 +12,13 @@ gets a push notification on every device it turned them on for. Everything
 else a player does in between is ignored, so a game night is one
 notification per player, not one per move.
 
+Guests (games that let people play under a typed name, without an account)
+are reported by the game's server itself: ``guest_seen()``, through
+``POST /v1/activity/guest-seen`` with a Google identity token for the game's
+Cloud Run service account (``verify_game()``), which also says which game it
+is. A guest is known only by their name, so the same rule applies per game
+and name (``guest_visits``).
+
 Bots and the owner themselves are never reported. Without ``LOGIN_ALERTS_TO``
 nothing is recorded or sent.
 """
@@ -22,6 +29,8 @@ import re
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+
+import jwt
 
 from app import push
 from app.db import db
@@ -99,11 +108,86 @@ def seen(
                 _last_recorded[key] = now
         if not db.mark_seen(user_id, now, now - AWAY) and not new_account:
             return False
-        _notify(to, user_id, username, describe(place, new_account))
+        _notify(to, str(user_id), f"{username} is here", describe(place, new_account))
         return True
     except Exception:
         logger.exception("Couldn't record that player %s was seen", user_id)
         return False
+
+
+def clean_guest_name(name) -> str:
+    """A guest's name as typed, made safe to show: no control characters,
+    at most 30 characters."""
+    text = "".join(ch for ch in str(name or "") if ch.isprintable())
+    return " ".join(text.split())[:30].strip() or "Guest"
+
+
+def guest_seen(place: str, name: str, *, now: datetime | None = None) -> bool:
+    """Records a guest as seen in a game; notifies the owner if they've come
+    back (or are new). Returns whether the owner was notified. Never raises."""
+    try:
+        to = owner()
+        if not to:
+            return False
+        name = clean_guest_name(name)
+        now = now or datetime.now(timezone.utc)
+        key = f"{place}:{name.lower()}"
+        with _lock:
+            last = _last_recorded.get(f"guest:{key}")
+            if last and now - last < RECORD_EVERY:
+                return False
+            _last_recorded[f"guest:{key}"] = now
+        if not db.mark_guest_seen(key, now, now - AWAY):
+            return False
+        _notify(to, f"guest-{key}", f"Guest {name} is here", describe(place))
+        return True
+    except Exception:
+        logger.exception("Couldn't record that a guest was seen in %s", place)
+        return False
+
+
+def report_guest(place: str, name: str) -> Future:
+    """``guest_seen()`` on a background thread."""
+    return _worker.submit(guest_seen, place, name)
+
+
+# Games vouch for their guests with a Google identity token for their Cloud
+# Run service account, which Cloud Run's metadata server gives them, made out
+# to this audience. Every game's account is "<service>-run@<project>".
+GAME_AUDIENCE = "https://cheetahmoongames.com"
+
+
+def _game_account() -> re.Pattern:
+    project = os.getenv("GCP_PROJECT", "bartenders-464918")
+    return re.compile(
+        rf"^([a-z][a-z0-9-]{{0,39}})-run@{re.escape(project)}\.iam\.gserviceaccount\.com$"
+    )
+
+
+def verify_game(token: str) -> str | None:
+    """The game (its Cloud Run service name) a Google identity token is from,
+    or None if it isn't a valid one from one of our games' servers."""
+    from app import google_sign_in
+
+    if not isinstance(token, str) or not token or len(token) > 4096:
+        return None
+    try:
+        claims = jwt.decode(
+            token,
+            google_sign_in._signing_key(token),
+            algorithms=["RS256"],
+            audience=GAME_AUDIENCE,
+            issuer=google_sign_in.GOOGLE_ISSUERS,
+            options={"require": ["exp", "iat", "iss", "aud", "email"]},
+            leeway=60,
+        )
+    except Exception as e:
+        logger.warning("Refused a game's identity token: %s", e)
+        return None
+    if claims.get("email_verified") not in (True, "true"):
+        return None
+    match = _game_account().match(str(claims.get("email", "")))
+    return match.group(1) if match else None
 
 
 def report(user_id, username: str | None, place: str, **kwargs) -> Future:
@@ -122,22 +206,22 @@ def forget() -> None:
         _last_recorded.clear()
 
 
-def _notify(to: str, user_id, username: str, what: str) -> None:
+def _notify(to: str, tag_id: str, title: str, what: str) -> None:
     recipient = db.get_user_by_username(to)
     if not recipient or recipient.status != "active":
         logger.warning("LOGIN_ALERTS_TO names no active account; not notifying")
         return
-    logger.info("Player %s is back (%s); notifying %s", user_id, what, recipient.id)
+    logger.info("%s (%s); notifying %s", title, what, recipient.id)
     for sub in db.get_push_subscriptions(recipient.id):
         ok = push.send_push(
             subscription_info={
                 "endpoint": sub["endpoint"],
                 "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
             },
-            title=f"{username} is here",
+            title=title,
             body=what,
             url="/",
-            tag=f"seen-{user_id}",
+            tag=f"seen-{tag_id}",
         )
         if not ok:
             db.delete_push_subscription(sub["endpoint"])

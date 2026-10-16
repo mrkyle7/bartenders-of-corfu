@@ -771,6 +771,27 @@ async def activity_seen(body: ActivitySeen, request: Request):
     return JSONResponse(status_code=202, content={"ok": True})
 
 
+class GuestSeen(BaseModel):
+    name: str
+
+
+@app.post("/v1/activity/guest-seen")
+async def activity_guest_seen(body: GuestSeen, request: Request):
+    """A game's server saw a guest (someone playing without an account).
+
+    The game proves it's one of ours with a Google identity token for its
+    Cloud Run service account (``Authorization: Bearer``), which also names
+    the game. cheetahmoongames.com's /api/account/guest-seen passes it on.
+    """
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    place = await asyncio.to_thread(activity.verify_game, token)
+    if not place:
+        return JSONResponse(status_code=401, content={"error": "Not a game"})
+    activity.report_guest(place, body.name)
+    return JSONResponse(status_code=202, content={"ok": True})
+
+
 @app.get("/userDetails")
 async def user_details(request: Request):
     try:

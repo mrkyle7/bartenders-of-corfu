@@ -1,10 +1,13 @@
 """Telling the owner when a player comes back. The database and push are
 faked, so these run without Supabase."""
 
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from app import activity
 from app.user import User
@@ -25,6 +28,9 @@ class FakeDb:
         last = self.last_seen.get(key)
         self.last_seen[key] = max(now, last) if last else now
         return last is None or last < away_since
+
+    def mark_guest_seen(self, key, now, away_since):
+        return self.mark_seen(f"guest:{key}", now, away_since)
 
     def get_user_by_username(self, name):
         return self.owner if name == "kyle" else None
@@ -159,3 +165,106 @@ def test_report_runs_in_the_background(fake):
 )
 def test_places_are_checked(place, ok):
     assert activity.valid_place(place) is ok
+
+
+# ── Guests ─────────────────────────────────────────────────────
+
+
+def test_a_guest_is_reported_by_name_and_game(fake):
+    assert activity.guest_seen("the-boxer", "Bob", now=T0)
+    [msg] = fake.sent
+    assert msg["title"] == "Guest Bob is here"
+    assert msg["body"] == "Opened The Boxer"
+
+
+def test_a_guest_is_reported_once_until_away_six_hours(fake):
+    activity.guest_seen("the-boxer", "Bob", now=T0)
+    for minutes in range(10, 5 * 60, 10):
+        activity.guest_seen("the-boxer", "bob", now=T0 + timedelta(minutes=minutes))
+    assert len(fake.sent) == 1
+    assert activity.guest_seen("the-boxer", "Bob", now=T0 + timedelta(hours=12))
+
+
+def test_the_same_name_in_another_game_or_another_name_counts_on_its_own(fake):
+    activity.guest_seen("the-boxer", "Bob", now=T0)
+    activity.guest_seen("catch-the-flag", "Bob", now=T0)
+    activity.guest_seen("the-boxer", "Ann", now=T0)
+    assert len(fake.sent) == 3
+
+
+@pytest.mark.parametrize(
+    "typed,shown",
+    [("  Bob  ", "Bob"), ("", "Guest"), ("a\nb\x00c", "abc"), ("x" * 50, "x" * 30)],
+)
+def test_guest_names_are_cleaned(typed, shown):
+    assert activity.clean_guest_name(typed) == shown
+
+
+# ── Games vouching for guests ──────────────────────────────────
+
+_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+def game_token(**overrides) -> str:
+    now = int(time.time())
+    claims = {
+        "iss": "https://accounts.google.com",
+        "aud": activity.GAME_AUDIENCE,
+        "email": "the-boxer-run@bartenders-464918.iam.gserviceaccount.com",
+        "email_verified": True,
+        "sub": "1234",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    claims.update(overrides)
+    return jwt.encode(claims, overrides.pop("key", _KEY), algorithm="RS256")
+
+
+@pytest.fixture
+def google_keys(monkeypatch):
+    from app import google_sign_in
+
+    monkeypatch.setattr(google_sign_in, "_signing_key", lambda _t: _KEY.public_key())
+
+
+def test_a_games_identity_token_names_the_game(google_keys):
+    assert activity.verify_game(game_token()) == "the-boxer"
+    email = "catch-the-flag-run@bartenders-464918.iam.gserviceaccount.com"
+    assert activity.verify_game(game_token(email=email)) == "catch-the-flag"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"aud": "https://someone-else.example"},
+        {"iss": "https://evil.example"},
+        {"exp": int(time.time()) - 3600},
+        {"email": "the-boxer-run@another-project.iam.gserviceaccount.com"},
+        {"email": "someone@gmail.com"},
+        {"email": "the-boxer-deploy@bartenders-464918.iam.gserviceaccount.com"},
+        {"email_verified": False},
+    ],
+    ids=[
+        "another audience",
+        "another issuer",
+        "expired",
+        "another project",
+        "a person",
+        "not a run account",
+        "unverified",
+    ],
+)
+def test_other_tokens_are_refused(google_keys, overrides):
+    assert activity.verify_game(game_token(**overrides)) is None
+
+
+def test_a_token_not_signed_by_google_is_refused(google_keys):
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = jwt.encode(
+        jwt.decode(game_token(), options={"verify_signature": False}),
+        other,
+        algorithm="RS256",
+    )
+    assert activity.verify_game(token) is None
+    assert activity.verify_game("") is None
+    assert activity.verify_game("nonsense") is None

@@ -52,3 +52,18 @@ Feature: Telling the owner when players come back
     When the player opens "<b>hello</b>"
     Then the response status should be 400
     And the owner is told nothing
+
+  Scenario: A game reports a guest it vouches for
+    When The Boxer reports a guest called "Bob"
+    Then the response status should be 202
+    And the owner is told "Opened The Boxer" by "Guest Bob is here"
+
+  Scenario: The same guest coming and going within 6 hours is reported once
+    When The Boxer reports a guest called "Bob"
+    And a while later The Boxer reports a guest called "Bob"
+    Then the owner was told once
+
+  Scenario: Only our games can report guests
+    When something that isn't one of our games reports a guest called "Bob"
+    Then the response status should be 401
+    And the owner is told nothing

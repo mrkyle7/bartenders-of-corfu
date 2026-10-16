@@ -10,6 +10,8 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from app import activity
 from app.api import app
 from app.db import db
+from app import google_sign_in
+from tests.test_activity import _KEY, game_token
 
 scenarios("features/login_alerts.feature")
 
@@ -32,6 +34,8 @@ def _register(prefix: str) -> dict:
 
 @pytest.fixture
 def ctx(monkeypatch):
+    # Google's keys, as far as games' identity tokens go, are the test key.
+    monkeypatch.setattr(google_sign_in, "_signing_key", lambda _t: _KEY.public_key())
     sent = []
     monkeypatch.setattr(
         activity.push, "send_push", lambda **kw: sent.append(kw) or True
@@ -140,6 +144,35 @@ def opens_home(ctx):
     _settle(ctx)
 
 
+def _report_guest(ctx, name, email):
+    _client.cookies.clear()
+    token = game_token(email=email)
+    # Guests are known by name: give each scenario's guest its own.
+    ctx["guest"] = ctx.get("guest") or f"{name} {uuid.uuid4().hex[:6]}"
+    ctx["resp"] = _client.post(
+        "/v1/activity/guest-seen",
+        json={"name": ctx["guest"]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _settle(ctx)
+    activity.forget()  # as if each report reached a different server
+
+
+@when(parsers.parse('The Boxer reports a guest called "{name}"'))
+@when(parsers.parse('a while later The Boxer reports a guest called "{name}"'))
+def boxer_guest(ctx, name):
+    _report_guest(ctx, name, "the-boxer-run@bartenders-464918.iam.gserviceaccount.com")
+
+
+@when(
+    parsers.parse(
+        'something that isn\'t one of our games reports a guest called "{name}"'
+    )
+)
+def stranger_guest(ctx, name):
+    _report_guest(ctx, name, "someone@gmail.com")
+
+
 # ── Then ───────────────────────────────────────────────────────
 
 
@@ -151,6 +184,13 @@ def status_is(ctx, status):
 @then(parsers.parse('the owner is told "{what}"'))
 def told(ctx, what):
     assert [m["body"] for m in ctx["sent"]][-1:] == [what], ctx["sent"]
+
+
+@then(parsers.parse('the owner is told "{what}" by "{title}"'))
+def told_with_title(ctx, what, title):
+    assert ctx["sent"], ctx["sent"]
+    assert ctx["sent"][-1]["body"] == what
+    assert ctx["sent"][-1]["title"] == title.replace("Bob", ctx["guest"])
 
 
 @then("the owner was told once")
