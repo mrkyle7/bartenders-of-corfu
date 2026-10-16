@@ -684,6 +684,63 @@ class Db:
         )
         return len(response.data) >= 1
 
+    def mark_seen(self, user_id: UUID, now: datetime, away_since: datetime) -> bool:
+        """Records that a user was seen. True if they had been away since
+        ``away_since`` (or never seen): only one request can get True."""
+        # UTC with a Z: a "+00:00" offset would need escaping in the filter.
+        stamp = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        cutoff = away_since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        back = (
+            self.supabase.table("users")
+            .update({"last_seen_at": stamp})
+            .eq("id", str(user_id))
+            .or_(f"last_seen_at.is.null,last_seen_at.lt.{cutoff}")
+            .execute()
+        )
+        if back.data:
+            return True
+        (
+            self.supabase.table("users")
+            .update({"last_seen_at": stamp})
+            .eq("id", str(user_id))
+            .lt("last_seen_at", stamp)
+            .execute()
+        )
+        return False
+
+    def mark_guest_seen(self, key: str, now: datetime, away_since: datetime) -> bool:
+        """Like ``mark_seen``, for a guest known by ``key`` (game and name)."""
+        stamp = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        cutoff = away_since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        new = (
+            self.supabase.table("guest_visits")
+            .upsert(
+                {"key": key, "last_seen_at": stamp},
+                on_conflict="key",
+                ignore_duplicates=True,
+            )
+            .execute()
+        )
+        if new.data:
+            return True
+        back = (
+            self.supabase.table("guest_visits")
+            .update({"last_seen_at": stamp})
+            .eq("key", key)
+            .lt("last_seen_at", cutoff)
+            .execute()
+        )
+        if back.data:
+            return True
+        (
+            self.supabase.table("guest_visits")
+            .update({"last_seen_at": stamp})
+            .eq("key", key)
+            .lt("last_seen_at", stamp)
+            .execute()
+        )
+        return False
+
     def get_push_subscriptions(self, user_id: UUID) -> list[dict]:
         """Return all push subscriptions for a user."""
         response = (

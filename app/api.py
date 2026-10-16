@@ -17,6 +17,7 @@ from app import push
 from app import presence
 from app import password_reset
 from app import google_sign_in
+from app import activity
 from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
@@ -156,6 +157,9 @@ def _require_auth(request: Request) -> tuple[TokenUser | None, JSONResponse | No
             except (ValueError, TypeError):
                 pass
 
+    # Someone using Bartenders' game API is playing (app/activity.py).
+    if request.url.path.startswith("/v1/games"):
+        activity.report(token_user.id, token_user.username, "bartenders")
     return token_user, None
 
 
@@ -598,6 +602,9 @@ async def register(user: UserCreate):
             "Registered new user with ID %s", getattr(created, "id", "<unknown>")
         )
         token = jwt_handler.sign(created)
+        activity.report(
+            created.id, created.username, activity.SIGN_IN, new_account=True
+        )
         response = JSONResponse(
             content=created.to_dict(), status_code=201, headers={"Location": "/"}
         )
@@ -639,6 +646,7 @@ async def login(userLogin: UserLogin):
         if user:
             token = jwt_handler.sign(user)
             logger.info("User %s logged in successfully", user)
+            activity.report(user.id, user.username, activity.SIGN_IN)
             response = JSONResponse(
                 content=user.to_dict(), status_code=200, headers={"Location": "/"}
             )
@@ -706,6 +714,7 @@ async def confirm_password_reset(body: PasswordResetConfirm):
         return JSONResponse(status_code=400, content={"error": str(e)})
     response = JSONResponse(content=user.to_dict(), status_code=200)
     set_auth_cookie(response, jwt_handler.sign(user))
+    activity.report(user.id, user.username, activity.SIGN_IN)
     return response
 
 
@@ -737,7 +746,50 @@ async def sign_in_with_google(body: GoogleSignIn):
     )
     set_auth_cookie(response, jwt_handler.sign(user))
     logger.info("User %s signed in with Google", user)
+    activity.report(user.id, user.username, activity.SIGN_IN, new_account=created)
     return response
+
+
+class ActivitySeen(BaseModel):
+    place: str
+
+
+@app.post("/v1/activity/seen")
+async def activity_seen(body: ActivitySeen, request: Request):
+    """A signed-in player was seen in another game or on the home page.
+
+    Games report this through cheetahmoongames.com's /api/account/seen, with
+    the player's own login cookie. ``place`` is the game's Cloud Run service
+    name (its subdomain), or "cheetahmoongames" for the home page.
+    """
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    if not activity.valid_place(body.place):
+        return JSONResponse(status_code=400, content={"error": "Unknown place"})
+    activity.report(token_user.id, token_user.username, body.place)
+    return JSONResponse(status_code=202, content={"ok": True})
+
+
+class GuestSeen(BaseModel):
+    name: str
+
+
+@app.post("/v1/activity/guest-seen")
+async def activity_guest_seen(body: GuestSeen, request: Request):
+    """A game's server saw a guest (someone playing without an account).
+
+    The game proves it's one of ours with a Google identity token for its
+    Cloud Run service account (``Authorization: Bearer``), which also names
+    the game. cheetahmoongames.com's /api/account/guest-seen passes it on.
+    """
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    place = await asyncio.to_thread(activity.verify_game, token)
+    if not place:
+        return JSONResponse(status_code=401, content={"error": "Not a game"})
+    activity.report_guest(place, body.name)
+    return JSONResponse(status_code=202, content={"ok": True})
 
 
 @app.get("/userDetails")
@@ -754,6 +806,12 @@ async def user_details(request: Request):
             clear_auth_cookie(response)
             return response
         logger.info("User details for %s", token_user.username)
+        # Every page asks who's signed in as it opens: Bartenders' own pages,
+        # and cheetahmoongames.com's (its server marks its requests).
+        place = (
+            activity.HOME if request.headers.get(activity.HOME_HEADER) else "bartenders"
+        )
+        activity.report(user.id, user.username, place)
         return JSONResponse(
             content=user.to_dict(include_sensitive=True, include_email=True),
             status_code=200,
