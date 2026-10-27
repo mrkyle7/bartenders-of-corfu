@@ -230,6 +230,16 @@ class Db:
         )
         return len(response.data) == 1
 
+    def clear_password(self, user_id: UUID) -> bool:
+        """Removes a user's password, so it can no longer be used to log in."""
+        response = (
+            self.supabase.table("users")
+            .update({"password": None, "password_changed_at": "now()"})
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
     def get_user_by_google_id(self, google_id: str) -> User | None:
         response = (
             self.supabase.table("users")

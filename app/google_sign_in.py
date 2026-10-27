@@ -9,7 +9,10 @@ says who the player is. The page passes it here, and ``sign_in(token)``:
 2. finds the account already linked to that Google account (by Google's user
    ID, ``sub``, which stays the same if the Google email changes);
 3. otherwise links the account that uses the same email, if Google has
-   verified that the email is theirs;
+   verified that the email is theirs. Registering never checks the email, so
+   that account's password may have been set by someone else (who registered
+   with this email first, to wait for the owner to arrive): linking removes the
+   password and signs out everyone using the account;
 4. otherwise makes a new account, with a name taken from the Google profile
    and no password (the player can set one with a reset link).
 """
@@ -131,6 +134,12 @@ def _link(user: User, identity: GoogleIdentity) -> User:
             if not again or again.google_id != identity.sub:
                 raise GoogleSignInError(LINKED_ELSEWHERE)
         user.google_id = identity.sub
+        # Whoever set the password may not own the email. Only Google (or a
+        # reset link, which goes to the email) signs in from now on.
+        if user._password_hash:
+            db.clear_password(user.id)
+            user._password_hash = None
+        db.logout_user(user.id)
         logger.info("Linked a Google account to user %s", user.id)
     return user
 

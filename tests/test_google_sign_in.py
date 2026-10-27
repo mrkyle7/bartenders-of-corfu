@@ -44,6 +44,7 @@ def google(monkeypatch):
 class FakeDb:
     def __init__(self):
         self.users: dict[UUID, User] = {}
+        self.logged_out: list[UUID] = []
 
     def get_user_by_google_id(self, google_id):
         return next((u for u in self.users.values() if u.google_id == google_id), None)
@@ -67,6 +68,14 @@ class FakeDb:
         if user.google_id:
             return False
         user.google_id = google_id
+        return True
+
+    def clear_password(self, user_id):
+        self.users[user_id]._password_hash = None
+        return True
+
+    def logout_user(self, user_id):
+        self.logged_out.append(user_id)
         return True
 
     def add_user(self, user):
@@ -172,8 +181,27 @@ def test_an_account_with_the_same_email_is_linked(fake_db):
     assert not created
     assert existing.google_id == "1234567890"
     assert len(fake_db.users) == 1
-    # The password still works too.
-    assert user.verify_secret("Password1", user._password_hash)
+
+
+def test_linking_removes_the_password_and_signs_everyone_out(fake_db):
+    # Registering doesn't check the email, so the password may be someone
+    # else's: they registered with this email before its owner came along.
+    existing = User("AdaL", "ada@example.com", "Password1")
+    fake_db.add_user(existing)
+    user, _ = google_sign_in.sign_in(identity())
+    assert user._password_hash is None
+    assert existing._password_hash is None
+    assert not user.verify_secret("Password1", existing._password_hash)
+    assert fake_db.logged_out == [existing.id]
+
+
+def test_signing_in_to_a_linked_account_keeps_its_password(fake_db):
+    existing = User("AdaL", "ada@example.com", "Password1")
+    existing.google_id = "1234567890"
+    fake_db.add_user(existing)
+    google_sign_in.sign_in(identity())
+    assert existing.verify_secret("Password1", existing._password_hash)
+    assert fake_db.logged_out == []
 
 
 def test_an_unverified_email_never_links_or_makes_an_account(fake_db):

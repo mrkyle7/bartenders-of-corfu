@@ -23,8 +23,22 @@ Feature: Signing in with Google
     Then the response status should be 200
     And it is the registered player's account
     And the player is signed in
-    And the player can still log in with "Password1"
     And the player's account is linked to Google
+
+  # Registering doesn't check the email, so someone could register with
+  # another person's email and wait for them to sign in with Google.
+  Scenario: Linking to Google removes the password and signs others out
+    Given a registered player with password "Password1"
+    When the player signs in with Google using the same email
+    Then the player can no longer log in with "Password1"
+    And whoever was signed in with the password is signed out
+    And the account has no password
+
+  Scenario: A password set after linking keeps working
+    Given a player has signed in with Google before
+    And the player has set a password "Password2"
+    When the player signs in with Google
+    Then the player can log in with "Password2"
 
   Scenario: Matching email is checked without case
     Given a registered player with password "Password1"
