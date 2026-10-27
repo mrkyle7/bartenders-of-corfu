@@ -6,8 +6,8 @@
    emails have accounts.
 2. ``complete_reset(token, new_password)``: if the token matches an unused,
    unexpired link, set the new password, use up every open link for that
-   account and sign it out everywhere else. Returns the user so the caller can
-   sign them in.
+   account, mark its email verified and sign it out everywhere else. Returns
+   the user so the caller can sign them in.
 """
 
 import hashlib
@@ -123,6 +123,9 @@ def complete_reset(token: str, new_password: str) -> User:
         raise UserValidationError(INVALID_LINK)
     db.update_password(user.id, new_hash)
     db.use_all_password_resets(user.id)
+    # The link went to their email, so it is theirs.
+    if not user.email_verified_at:
+        db.mark_email_verified(user.id, user.email)
     # Anyone signed in with the old password is signed out.
     db.logout_user(user.id)
     logger.info("Password reset for user %s", user.id)

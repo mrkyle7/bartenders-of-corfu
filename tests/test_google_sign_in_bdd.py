@@ -11,6 +11,9 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from app import google_sign_in
 from app.api import app
+from app.db import db
+from app.user import User
+from tests.accounts import register
 from tests.test_google_sign_in import CLIENT_ID, _KEY, google_token
 
 scenarios("features/google_sign_in.feature")
@@ -63,19 +66,38 @@ def signed_in_before(ctx):
     resp = _sign_in(ctx, name=f"Grace {ctx['unique']}")
     assert resp.status_code == 201, resp.text
     ctx["first_id"] = resp.json()["id"]
+    ctx["username"] = resp.json()["username"]
+
+
+@given(parsers.parse('the player has set a password "{password}"'))
+def set_password(ctx, password):
+    new_hash = User.new_bot("hasher", "")._hash_password(password)
+    assert db.update_password(uuid.UUID(ctx["first_id"]), new_hash)
 
 
 @given(parsers.parse('a registered player with password "{password}"'))
 def registered(ctx, password):
     username = f"reg_{ctx['unique']}"
-    resp = _client.post(
-        "/register",
-        json={"username": username, "email": ctx["email"], "password": password},
-    )
-    assert resp.status_code == 201, resp.text
+    resp = register(_client, username, ctx["email"], password)
+    assert resp.status_code == 200, resp.text
     ctx["username"] = username
     ctx["registered_id"] = resp.json()["id"]
     ctx["registered_cookie"] = resp.cookies["userjwt"]
+
+
+@given("a player has registered but not verified their email")
+def registered_unverified(ctx):
+    ctx["username"] = f"reg_{ctx['unique']}"
+    resp = _client.post(
+        "/register",
+        json={
+            "username": ctx["username"],
+            "email": ctx["email"],
+            "password": "Password1",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    ctx["registered_id"] = resp.json()["id"]
 
 
 # ── When ───────────────────────────────────────────────────────
@@ -163,19 +185,37 @@ def registered_account(ctx):
     assert ctx["resp"].json()["created"] is False
 
 
-@then(parsers.parse('the player can still log in with "{password}"'))
-def password_works(ctx, password):
-    resp = _client.post(
+def _log_in(ctx, password):
+    return _client.post(
         "/login", json={"username": ctx["username"], "password": password}
     )
+
+
+@then(parsers.parse('the player can log in with "{password}"'))
+def password_works(ctx, password):
+    resp = _log_in(ctx, password)
     assert resp.status_code == 200, resp.text
+
+
+@then(parsers.parse('the player can no longer log in with "{password}"'))
+def password_gone(ctx, password):
+    assert _log_in(ctx, password).status_code == 401
+
+
+@then("whoever was signed in with the password is signed out")
+def others_signed_out(ctx):
+    resp = _client.get("/userDetails", cookies={"userjwt": ctx["registered_cookie"]})
+    assert resp.status_code == 401, resp.text
 
 
 @then("the player's account is linked to Google")
 def linked(ctx):
-    details = _details(ctx["registered_cookie"])
-    assert details["google_linked"] is True
-    assert details["has_password"] is True
+    assert _details(ctx["resp"].cookies["userjwt"])["google_linked"] is True
+
+
+@then("the account's email is verified")
+def email_verified(ctx):
+    assert _details(ctx["resp"].cookies["userjwt"])["email_verified"] is True
 
 
 @then("the player's account is not linked to Google")

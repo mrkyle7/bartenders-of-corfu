@@ -6,20 +6,14 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from app.api import app
+from tests.accounts import register
 
 
 def _register(client: TestClient) -> tuple[str, str]:
     """Register a throwaway user and return (user_id, jwt_token)."""
     ts = int(time.time() * 1_000_000)
-    resp = client.post(
-        "/register",
-        json={
-            "username": f"pushtest{ts}",
-            "email": f"pushtest{ts}@example.com",
-            "password": "password123",
-        },
-    )
-    assert resp.status_code == 201, resp.text
+    resp = register(client, f"pushtest{ts}", f"pushtest{ts}@example.com", "password123")
+    assert resp.status_code == 200, resp.text
     return resp.json()["id"], resp.cookies["userjwt"]
 
 

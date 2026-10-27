@@ -7,6 +7,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 from app.api import app
+from tests.accounts import register
 from app.db import db
 
 
@@ -19,10 +20,7 @@ class UserManagementTestCase(unittest.TestCase):
         self.client = TestClient(app)
 
     def _register(self, username: str, email: str, password: str = "Password1"):
-        return self.client.post(
-            "/register",
-            json={"username": username, "email": email, "password": password},
-        )
+        return register(self.client, username, email, password)
 
     def _login(self, username: str, password: str = "Password1"):
         return self.client.post(
@@ -49,7 +47,7 @@ class TestUserListRequiresAuth(UserManagementTestCase):
     def test_list_users_authenticated(self):
         username = _unique("listuser")
         reg = self._register(username, f"{username}@example.com")
-        self.assertEqual(reg.status_code, 201)
+        self.assertEqual(reg.status_code, 200)
 
         resp = self.client.get("/v1/users", cookies=self._auth(self._token(reg)))
         self.assertEqual(resp.status_code, 200)
@@ -83,17 +81,24 @@ class TestUserListRequiresAuth(UserManagementTestCase):
         self.assertEqual(user_entry["status"], "active")
 
 
-class TestRegistrationAutoLogin(UserManagementTestCase):
-    def test_register_sets_session_cookie(self):
+class TestRegistrationNeedsVerifiedEmail(UserManagementTestCase):
+    def test_register_does_not_sign_in(self):
         username = _unique("regcookie")
-        resp = self._register(username, f"{username}@example.com")
+        resp = self.client.post(
+            "/register",
+            json={
+                "username": username,
+                "email": f"{username}@example.com",
+                "password": "Password1",
+            },
+        )
         self.assertEqual(resp.status_code, 201)
-        self.assertIsNotNone(self._token(resp))
+        self.assertIsNone(self._token(resp))
 
-    def test_registered_user_can_access_protected_endpoint(self):
+    def test_verified_user_can_access_protected_endpoint(self):
         username = _unique("regaccess")
         reg = self._register(username, f"{username}@example.com")
-        self.assertEqual(reg.status_code, 201)
+        self.assertEqual(reg.status_code, 200)
         resp = self.client.get("/v1/users", cookies=self._auth(self._token(reg)))
         self.assertEqual(resp.status_code, 200)
 

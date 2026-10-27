@@ -9,6 +9,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from app import activity
 from app.api import app
+from tests.accounts import register
 from app.db import db
 from app import google_sign_in
 from tests.test_activity import _KEY, game_token
@@ -20,15 +21,8 @@ _client = TestClient(app)
 
 def _register(prefix: str) -> dict:
     name = f"{prefix}_{uuid.uuid4().hex[:8]}"
-    resp = _client.post(
-        "/register",
-        json={
-            "username": name,
-            "email": f"{name}@example.com",
-            "password": "Password1",
-        },
-    )
-    assert resp.status_code == 201, resp.text
+    resp = register(_client, name, f"{name}@example.com")
+    assert resp.status_code == 200, resp.text
     return {"name": name, "id": resp.json()["id"], "cookie": resp.cookies["userjwt"]}
 
 

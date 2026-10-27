@@ -16,6 +16,7 @@ from app.db import db
 from app import push
 from app import presence
 from app import password_reset
+from app import email_verification
 from app import google_sign_in
 from app import activity
 from app.auth_cookie import clear_auth_cookie, set_auth_cookie
@@ -581,6 +582,8 @@ class UserCreate(BaseModel):
     username: str
     email: str
     password: str
+    # Where the emailed verification link takes the player afterwards.
+    next: Optional[str] = None
 
 
 @app.post("/v1/users")
@@ -595,21 +598,24 @@ async def new_user(user: UserCreate):
 
 
 @app.post("/register")
-async def register(user: UserCreate):
+async def register(user: UserCreate, background_tasks: BackgroundTasks):
+    """Makes an account and emails a link to verify its email.
+
+    It doesn't sign the player in: they can once they've clicked the link.
+    """
     try:
         created = userManager.new_user(user.username, user.email, user.password)
         logger.info(
             "Registered new user with ID %s", getattr(created, "id", "<unknown>")
         )
-        token = jwt_handler.sign(created)
         activity.report(
             created.id, created.username, activity.SIGN_IN, new_account=True
         )
-        response = JSONResponse(
-            content=created.to_dict(), status_code=201, headers={"Location": "/"}
+        background_tasks.add_task(email_verification.send_link, created, user.next)
+        return JSONResponse(
+            content={**created.to_dict(), "email_verification_sent": True},
+            status_code=201,
         )
-        set_auth_cookie(response, token, max_age=None)
-        return response
     except Exception as e:
         logger.exception("Error registering user")
         if os.getenv("DEBUG", "false").lower() in ("1", "true", "yes"):
@@ -623,6 +629,7 @@ async def register(user: UserCreate):
 class UserLogin(BaseModel):
     username: str
     password: str
+    next: Optional[str] = None
 
 
 @app.post("/logout")
@@ -640,9 +647,23 @@ async def logout(request: Request):
 
 
 @app.post("/login")
-async def login(userLogin: UserLogin):
+async def login(userLogin: UserLogin, background_tasks: BackgroundTasks):
     try:
         user = userManager.authenticate_user(userLogin.username, userLogin.password)
+        if user and not user.email_verified_at:
+            # The right password, but they haven't shown the email is theirs:
+            # send a link (again) rather than signing in.
+            logger.info("User %s signed in before verifying their email", user)
+            background_tasks.add_task(
+                email_verification.send_link, user, userLogin.next
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": email_verification.NOT_VERIFIED,
+                    "email_not_verified": True,
+                },
+            )
         if user:
             token = jwt_handler.sign(user)
             logger.info("User %s logged in successfully", user)
@@ -710,6 +731,23 @@ async def confirm_password_reset(body: PasswordResetConfirm):
     """Sets a new password from a reset link and signs the player in."""
     try:
         user = password_reset.complete_reset(body.token, body.new_password)
+    except UserValidationError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    response = JSONResponse(content=user.to_dict(), status_code=200)
+    set_auth_cookie(response, jwt_handler.sign(user))
+    activity.report(user.id, user.username, activity.SIGN_IN)
+    return response
+
+
+class EmailVerificationConfirm(BaseModel):
+    token: str
+
+
+@app.post("/v1/auth/verify-email/confirm")
+async def confirm_email_verification(body: EmailVerificationConfirm):
+    """Verifies an email from an emailed link and signs the player in."""
+    try:
+        user = email_verification.complete(body.token)
     except UserValidationError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     response = JSONResponse(content=user.to_dict(), status_code=200)
@@ -852,13 +890,22 @@ class ChangeEmailRequest(BaseModel):
 
 @app.patch("/v1/users/me/email")
 async def change_email(body: ChangeEmailRequest, request: Request):
+    """Emails a link to the new address; the email changes when it's clicked."""
     token_user, err = _require_auth(request)
     if err:
         return err
     try:
-        userManager.change_email(token_user.id, body.new_email)
-        logger.info("Email changed for user %s", token_user.username)
-        return JSONResponse(content={"message": "Email updated successfully"})
+        user = userManager.get_user(token_user.id)
+        if not user or user.status != "active":
+            raise UserValidationError("User not found or account is not active")
+        sent = await asyncio.to_thread(
+            email_verification.request_email_change, user, body.new_email
+        )
+        if sent:
+            logger.info("Email change asked for by user %s", token_user.username)
+        return JSONResponse(
+            content={"message": "Verification email sent", "pending": sent}
+        )
     except UserValidationError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:

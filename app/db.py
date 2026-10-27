@@ -30,6 +30,7 @@ class Db:
         "is_bot",
         "bot_strategy",
         "google_id",
+        "email_verified_at",
     )
 
     @staticmethod
@@ -52,6 +53,7 @@ class Db:
                 "is_bot": row.get("is_bot", False),
                 "bot_strategy": row.get("bot_strategy"),
                 "google_id": row.get("google_id"),
+                "email_verified_at": row.get("email_verified_at"),
             }
         )
 
@@ -72,6 +74,8 @@ class Db:
         }
         if user.google_id:
             row["google_id"] = user.google_id
+        if user.email_verified_at:
+            row["email_verified_at"] = user.email_verified_at
         response = self.supabase.table("users").insert(row).execute()
         return len(response.data) == 1
 
@@ -207,15 +211,6 @@ class Db:
         )
         return len(response.data) == 1
 
-    def update_email(self, user_id: UUID, new_email: str) -> bool:
-        response = (
-            self.supabase.table("users")
-            .update({"email": new_email})
-            .eq("id", str(user_id))
-            .execute()
-        )
-        return len(response.data) == 1
-
     def update_password(self, user_id: UUID, new_hash: bytes) -> bool:
         response = (
             self.supabase.table("users")
@@ -225,6 +220,16 @@ class Db:
                     "password_changed_at": "now()",
                 }
             )
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def clear_password(self, user_id: UUID) -> bool:
+        """Removes a user's password, so it can no longer be used to log in."""
+        response = (
+            self.supabase.table("users")
+            .update({"password": None, "password_changed_at": "now()"})
             .eq("id", str(user_id))
             .execute()
         )
@@ -317,6 +322,83 @@ class Db:
     def use_all_password_resets(self, user_id: UUID) -> None:
         (
             self.supabase.table("password_resets")
+            .update({"used_at": self._now()})
+            .eq("user_id", str(user_id))
+            .is_("used_at", "null")
+            .execute()
+        )
+
+    def mark_email_verified(self, user_id: UUID, email: str) -> bool:
+        """Records that the player owns ``email``, if it is still their email."""
+        response = (
+            self.supabase.table("users")
+            .update({"email_verified_at": self._now()})
+            .eq("id", str(user_id))
+            .eq("email", email)
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def change_verified_email(self, user_id: UUID, email: str) -> bool:
+        """Changes a player's email to one they have just shown is theirs."""
+        response = (
+            self.supabase.table("users")
+            .update({"email": email, "email_verified_at": self._now()})
+            .eq("id", str(user_id))
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def add_email_verification(
+        self, user_id: UUID, email: str, token_hash: str, expires_at: datetime
+    ) -> bool:
+        response = (
+            self.supabase.table("email_verifications")
+            .insert(
+                {
+                    "user_id": str(user_id),
+                    "email": email,
+                    "token_hash": token_hash,
+                    "expires_at": expires_at.isoformat(),
+                }
+            )
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def count_email_verifications_since(self, user_id: UUID, since: datetime) -> int:
+        response = (
+            self.supabase.table("email_verifications")
+            .select("id")
+            .eq("user_id", str(user_id))
+            .gte("created_at", since.isoformat())
+            .execute()
+        )
+        return len(response.data)
+
+    def get_email_verification(self, token_hash: str) -> dict | None:
+        response = (
+            self.supabase.table("email_verifications")
+            .select("id,user_id,email,expires_at,used_at")
+            .eq("token_hash", token_hash)
+            .execute()
+        )
+        return response.data[0] if len(response.data) == 1 else None
+
+    def use_email_verification(self, verification_id: str) -> bool:
+        """Marks the link used. False if it already was."""
+        response = (
+            self.supabase.table("email_verifications")
+            .update({"used_at": self._now()})
+            .eq("id", str(verification_id))
+            .is_("used_at", "null")
+            .execute()
+        )
+        return len(response.data) == 1
+
+    def use_all_email_verifications(self, user_id: UUID) -> None:
+        (
+            self.supabase.table("email_verifications")
             .update({"used_at": self._now()})
             .eq("user_id", str(user_id))
             .is_("used_at", "null")

@@ -75,31 +75,44 @@ def base_url():
 
 
 def _api_register(base_url: str, username: str) -> tuple[dict, str]:
-    """Register a new user; returns (user_dict, jwt_token)."""
-    body = json.dumps(
-        {
-            "username": username,
-            "email": f"{username}@test.invalid",
-            "password": "Password1",
-        }
-    ).encode()
+    """Register a new user and sign in; returns (user_dict, jwt_token).
+
+    Registering doesn't sign in until the email is verified, so the email is
+    marked verified (as clicking the emailed link would) before logging in.
+    """
+    from uuid import UUID
+
+    from app.db import db
+
+    email = f"{username}@test.invalid"
+    user = _api_json_post(
+        base_url,
+        "/register",
+        {"username": username, "email": email, "password": "Password1"},
+    )[0]
+    assert db.mark_email_verified(UUID(user["id"]), email)
+    user, cookie_header = _api_json_post(
+        base_url, "/login", {"username": username, "password": "Password1"}
+    )
+    jwt = ""
+    for part in cookie_header.split(";"):
+        part = part.strip()
+        if part.startswith("userjwt="):
+            jwt = part[len("userjwt=") :]
+            break
+    return user, jwt
+
+
+def _api_json_post(base_url: str, path: str, body: dict) -> tuple[dict, str]:
+    """POST JSON; returns (response JSON, Set-Cookie header)."""
     req = urllib.request.Request(
-        f"{base_url}/register",
-        data=body,
+        f"{base_url}{path}",
+        data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(req) as resp:
-        user = json.loads(resp.read())
-        # Extract cookie
-        cookie_header = resp.headers.get("Set-Cookie", "")
-        jwt = ""
-        for part in cookie_header.split(";"):
-            part = part.strip()
-            if part.startswith("userjwt="):
-                jwt = part[len("userjwt=") :]
-                break
-        return user, jwt
+        return json.loads(resp.read()), resp.headers.get("Set-Cookie", "")
 
 
 def _api_get(base_url: str, path: str, jwt: str) -> dict:
