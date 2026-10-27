@@ -13,6 +13,7 @@ from app import google_sign_in
 from app.api import app
 from app.db import db
 from app.user import User
+from tests.accounts import register
 from tests.test_google_sign_in import CLIENT_ID, _KEY, google_token
 
 scenarios("features/google_sign_in.feature")
@@ -77,14 +78,26 @@ def set_password(ctx, password):
 @given(parsers.parse('a registered player with password "{password}"'))
 def registered(ctx, password):
     username = f"reg_{ctx['unique']}"
-    resp = _client.post(
-        "/register",
-        json={"username": username, "email": ctx["email"], "password": password},
-    )
-    assert resp.status_code == 201, resp.text
+    resp = register(_client, username, ctx["email"], password)
+    assert resp.status_code == 200, resp.text
     ctx["username"] = username
     ctx["registered_id"] = resp.json()["id"]
     ctx["registered_cookie"] = resp.cookies["userjwt"]
+
+
+@given("a player has registered but not verified their email")
+def registered_unverified(ctx):
+    ctx["username"] = f"reg_{ctx['unique']}"
+    resp = _client.post(
+        "/register",
+        json={
+            "username": ctx["username"],
+            "email": ctx["email"],
+            "password": "Password1",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    ctx["registered_id"] = resp.json()["id"]
 
 
 # ── When ───────────────────────────────────────────────────────
@@ -198,6 +211,11 @@ def others_signed_out(ctx):
 @then("the player's account is linked to Google")
 def linked(ctx):
     assert _details(ctx["resp"].cookies["userjwt"])["google_linked"] is True
+
+
+@then("the account's email is verified")
+def email_verified(ctx):
+    assert _details(ctx["resp"].cookies["userjwt"])["email_verified"] is True
 
 
 @then("the player's account is not linked to Google")

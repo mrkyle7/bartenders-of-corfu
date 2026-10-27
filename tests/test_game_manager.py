@@ -8,6 +8,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 from app.api import app
+from tests.accounts import register
 
 
 def _unique(prefix: str) -> str:
@@ -19,10 +20,7 @@ class GameManagerTestCase(unittest.TestCase):
         self.client = TestClient(app)
 
     def _register(self, username: str, email: str, password: str = "Password1"):
-        return self.client.post(
-            "/register",
-            json={"username": username, "email": email, "password": password},
-        )
+        return register(self.client, username, email, password)
 
     def _token(self, response) -> str:
         return response.cookies.get("userjwt")

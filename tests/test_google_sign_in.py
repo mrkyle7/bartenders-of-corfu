@@ -74,6 +74,13 @@ class FakeDb:
         self.users[user_id]._password_hash = None
         return True
 
+    def mark_email_verified(self, user_id, email):
+        user = self.users[user_id]
+        if user.email != email:
+            return False
+        user.email_verified_at = "now"
+        return True
+
     def logout_user(self, user_id):
         self.logged_out.append(user_id)
         return True
@@ -193,6 +200,19 @@ def test_linking_removes_the_password_and_signs_everyone_out(fake_db):
     assert existing._password_hash is None
     assert not user.verify_secret("Password1", existing._password_hash)
     assert fake_db.logged_out == [existing.id]
+
+
+def test_linking_verifies_the_email(fake_db):
+    existing = User("AdaL", "ada@example.com", "Password1")
+    fake_db.add_user(existing)
+    assert not existing.email_verified_at
+    google_sign_in.sign_in(identity())
+    assert existing.email_verified_at
+
+
+def test_a_new_google_account_has_a_verified_email(fake_db):
+    user, _ = google_sign_in.sign_in(identity())
+    assert user.email_verified_at
 
 
 def test_signing_in_to_a_linked_account_keeps_its_password(fake_db):

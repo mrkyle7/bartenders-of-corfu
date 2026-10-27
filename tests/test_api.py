@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
 from fastapi.testclient import TestClient
 from app.api import app
+from tests.accounts import register
 
 
 class TestAPI(unittest.TestCase):
@@ -118,8 +119,8 @@ class TestAPI(unittest.TestCase):
             "email": f"filteruser{timestamp}@example.com",
             "password": "password123",
         }
-        reg = self.client.post("/register", json=user_data)
-        self.assertEqual(reg.status_code, 201)
+        reg = register(self.client, **user_data)
+        self.assertEqual(reg.status_code, 200)
         token = reg.cookies.get("userjwt")
         user_id = reg.json()["id"]
 
@@ -148,8 +149,8 @@ class TestAPI(unittest.TestCase):
             "email": f"test{timestamp}@example.com",
             "password": "password123",
         }
-        response = self.client.post("/register", json=user_data)
-        self.assertEqual(response.status_code, 201)
+        response = register(self.client, **user_data)
+        self.assertEqual(response.status_code, 200)
 
         # Get the JWT token from the response
         jwt_token = response.cookies.get("userjwt")
@@ -175,9 +176,9 @@ class TestAPI(unittest.TestCase):
             "email": f"test{timestamp}@example.com",
             "password": "password123",
         }
-        response = self.client.post("/register", json=user_data)
+        response = register(self.client, **user_data)
         host_id = response.json().get("id")
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 200)
 
         # Get the JWT token from the response
         jwt_token = response.cookies.get("userjwt")
@@ -198,9 +199,9 @@ class TestAPI(unittest.TestCase):
             "email": f"test{timestamp}@example.com",
             "password": "password123",
         }
-        response = self.client.post("/register", json=user_data)
+        response = register(self.client, **user_data)
         joinee_id = response.json().get("id")
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 200)
 
         # Get the JWT token from the response
         jwt_token = response.cookies.get("userjwt")
@@ -244,8 +245,8 @@ class TestAPI(unittest.TestCase):
             "email": f"test{timestamp}@example.com",
             "password": "password123",
         }
-        response = self.client.post("/register", json=user_data)
-        self.assertEqual(response.status_code, 201)
+        response = register(self.client, **user_data)
+        self.assertEqual(response.status_code, 200)
         jwt_token = response.cookies.get("userjwt")
 
         response = self.client.post(
@@ -296,8 +297,9 @@ class TestAPI(unittest.TestCase):
 
         response = self.client.post("/register", json=user_data)
         self.assertEqual(response.status_code, 201)
-        self.assertIn("userjwt", response.cookies)
-        self.assertEqual(response.headers.get("Location"), "/")
+        self.assertTrue(response.json()["email_verification_sent"])
+        # Not signed in until the email is verified.
+        self.assertNotIn("userjwt", response.cookies)
 
     def test_login_success(self):
         """Test successful login."""
@@ -308,7 +310,7 @@ class TestAPI(unittest.TestCase):
             "email": f"test{timestamp}@example.com",
             "password": "password123",
         }
-        self.client.post("/register", json=user_data)
+        register(self.client, **user_data)
 
         # Now try to login
         login_data = {"username": user_data["username"], "password": "password123"}
@@ -352,7 +354,7 @@ class TestAPI(unittest.TestCase):
             "email": f"listuser{timestamp}@example.com",
             "password": "password123",
         }
-        reg = self.client.post("/register", json=user_data)
+        reg = register(self.client, **user_data)
         token = reg.cookies.get("userjwt")
         response = self.client.get("/v1/users", cookies={"userjwt": token})
         self.assertEqual(response.status_code, 200)

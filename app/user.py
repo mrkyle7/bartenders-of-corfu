@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 from typing import Optional
 import bcrypt
@@ -38,6 +38,7 @@ class User:
         self.deleted_at: Optional[str] = None
         self.logged_out_at: Optional[str] = None
         self.google_id: Optional[str] = None
+        self.email_verified_at: Optional[str] = None
 
     @classmethod
     def new_bot(cls, username: str, strategy: str) -> "User":
@@ -58,6 +59,7 @@ class User:
         user.deleted_at = None
         user.logged_out_at = None
         user.google_id = None
+        user.email_verified_at = None
         return user
 
     @classmethod
@@ -68,6 +70,8 @@ class User:
         user.bot_strategy = None
         user.email = user._validate_email(email)
         user.google_id = google_id
+        # Google has checked that the email is theirs.
+        user.email_verified_at = datetime.now(timezone.utc).isoformat()
         return user
 
     def _validate_name(self, name: str) -> str:
@@ -182,6 +186,7 @@ class User:
             result["email"] = self.email
             result["has_password"] = bool(self._password_hash)
             result["google_linked"] = bool(self.google_id)
+            result["email_verified"] = bool(self.email_verified_at)
 
         return result
 
@@ -204,6 +209,7 @@ class User:
         user.deleted_at = data.get("deleted_at")
         user.logged_out_at = data.get("logged_out_at")
         user.google_id = data.get("google_id")
+        user.email_verified_at = data.get("email_verified_at")
 
         password_hash = data.get("password_hash")
         if password_hash:

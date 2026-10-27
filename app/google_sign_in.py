@@ -22,6 +22,7 @@ import os
 import re
 import secrets
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import jwt
 
@@ -141,6 +142,10 @@ def _link(user: User, identity: GoogleIdentity) -> User:
             user._password_hash = None
         db.logout_user(user.id)
         logger.info("Linked a Google account to user %s", user.id)
+    if not user.email_verified_at:
+        # Google has checked that the email is theirs.
+        db.mark_email_verified(user.id, user.email)
+        user.email_verified_at = datetime.now(timezone.utc).isoformat()
     return user
 
 

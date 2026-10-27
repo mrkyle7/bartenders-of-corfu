@@ -34,6 +34,22 @@ entity User {
     deactivated_by: UUID?   -- ID of the admin who deactivated this account
     deleted_at: Timestamp?
     logged_out_at: Timestamp?   -- Set on logout; tokens issued at or before this are rejected.
+    -- Set once the player has shown they own the email: by clicking an
+    -- emailed link, signing in with Google, or resetting their password.
+    -- Null for accounts from before verification existed, so they verify too.
+    email_verified_at: Timestamp?
+}
+
+-- A one-time link emailed to verify an address. `email` is the account's own
+-- email, or a new one the player is changing to. Only a hash of the token is
+-- stored.
+entity EmailVerification {
+    user: User
+    email: String
+    token_hash: String
+    expires_at: Timestamp   -- created_at + 24.hours
+    used_at: Timestamp?
+    created_at: Timestamp
 }
 
 -- Lightweight identity extracted from a verified session token.
@@ -66,10 +82,11 @@ rule RegisterUser {
         email: email,
         password_hash: bcrypt(password),
         created_at: now,
-        password_changed_at: now
+        password_changed_at: now,
+        email_verified_at: null
     )
-    ensures: SessionIssued(user: new User)
-    -- Session issuance is unconditional on registration; the token is always returned.
+    ensures: VerificationEmailSent(user: new User, email: email)
+    -- No session: the player signs in by clicking the emailed link.
 }
 
 rule LoginUser {
@@ -77,7 +94,52 @@ rule LoginUser {
     requires: user: User where username = username
     requires: user.status = active
     requires: bcrypt_verify(password, user.password_hash)
-    ensures: SessionIssued(user: user)
+    ensures:
+        if user.email_verified_at = null:
+            VerificationEmailSent(user: user, email: user.email)
+            -- Refused with email_not_verified; no session.
+        else:
+            SessionIssued(user: user)
+}
+
+-- At most 3 links per account per hour; more are silently not sent.
+rule VerificationEmailSent {
+    when: VerificationEmailSent(user, email)
+    ensures: EmailVerification.created(
+        user: user, email: email, token_hash: sha256(new_token),
+        expires_at: now + 24.hours, created_at: now
+    )
+    ensures: email with link carrying new_token sent to email
+}
+
+rule VerifyEmail {
+    -- Clicking the link verifies the email (or changes to the new one) and
+    -- signs the player in.
+    when: VerifyEmail(token)
+    requires: link: EmailVerification where token_hash = sha256(token)
+    requires: link.used_at = null and link.expires_at > now
+    requires: link.user.status = active
+    requires: not exists User where email = link.email and id != link.user.id
+    ensures: link.used_at = now
+    ensures: link.user.email = link.email
+    ensures: link.user.email_verified_at = now
+    ensures:
+        if link.email != old(link.user.email):
+            -- Other open links for this account are used up, so an older one
+            -- can't change the email back.
+            for each l: EmailVerification where user = link.user and used_at = null:
+                l.used_at = now
+    ensures: SessionIssued(user: link.user)
+}
+
+rule ChangeEmail {
+    -- The email only changes when the link sent to the new address is clicked.
+    when: ChangeEmail(requester: TokenUser, new_email)
+    requires: u: User where id = requester.id and status = active
+    requires: not exists User where email = new_email and id != u.id
+    ensures:
+        if new_email != u.email or u.email_verified_at = null:
+            VerificationEmailSent(user: u, email: new_email)
 }
 
 -- SessionIssued is chained by registration and login to produce a token cookie.
@@ -170,7 +232,7 @@ surface Registration {
     provides:
         RegisterUser(username, email, password)
 
-    guarantee: registration always issues a session token; the client may use it or discard it
+    guarantee: registration never issues a session token; the player signs in from the emailed link
     guarantee: duplicate username or email is rejected
 }
 
@@ -181,6 +243,7 @@ surface Login {
         LoginUser(username, password)
 
     guarantee: deactivated and deleted accounts cannot log in
+    guarantee: an account whose email isn't verified cannot log in with a password; the right password sends a new link instead
     guarantee: invalid credentials are rejected with no detail on which field failed
     guidance: brute-force protection is an operational concern outside this spec
 }

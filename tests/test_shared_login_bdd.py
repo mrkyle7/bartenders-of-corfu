@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from app.api import app
+from tests.accounts import register
 
 scenarios("features/shared_login.feature")
 
@@ -16,15 +17,8 @@ _HTTPS = {"x-forwarded-proto": "https"}
 
 def _register() -> str:
     username = f"shared_{uuid.uuid4().hex[:8]}"
-    resp = _client.post(
-        "/register",
-        json={
-            "username": username,
-            "email": f"{username}@test.com",
-            "password": "Password1",
-        },
-    )
-    assert resp.status_code == 201, resp.text
+    resp = register(_client, username, f"{username}@test.com")
+    assert resp.status_code == 200, resp.text
     return resp.cookies["userjwt"]
 
 

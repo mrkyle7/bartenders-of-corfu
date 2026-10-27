@@ -10,6 +10,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from app import email_sender, password_reset
 from app.api import app
+from tests.accounts import register
 from app.db import db
 
 scenarios("features/password_reset.feature")
@@ -50,11 +51,9 @@ def registered_player(email, outbox):
     # the scenario's address is mapped onto it.
     unique = f"reset_{uuid.uuid4().hex[:8]}"
     real_email = f"{unique}@example.com"
-    resp = _client.post(
-        "/register",
-        json={"username": unique, "email": real_email, "password": "Password1"},
-    )
-    assert resp.status_code == 201, resp.text
+    resp = register(_client, unique, real_email)
+    assert resp.status_code == 200, resp.text
+    outbox.clear()  # the verification email from registering
     return {
         "username": unique,
         "alias": email,

@@ -21,6 +21,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from app.GameState import GameState
 from app.api import app
+from tests.accounts import register
 from app.Ingredient import Ingredient, SpecialType
 
 # ─── Load scenarios from feature files ────────────────────────────────────────
@@ -41,15 +42,8 @@ def _unique(prefix: str) -> str:
 
 def _register(username: str) -> tuple[str, str]:
     """Register a user and return (token, user_id)."""
-    resp = _client.post(
-        "/register",
-        json={
-            "username": username,
-            "email": f"{username}@bdd.test",
-            "password": "Password1",
-        },
-    )
-    assert resp.status_code == 201, resp.text
+    resp = register(_client, username, f"{username}@bdd.test")
+    assert resp.status_code == 200, resp.text
     return resp.cookies["userjwt"], resp.json()["id"]
 
 
