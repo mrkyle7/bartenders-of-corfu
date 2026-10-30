@@ -29,6 +29,7 @@ _SUPABASE_DEPENDENT_FILES = {
     "test_password_reset_bdd.py",
     "test_google_sign_in_bdd.py",
     "test_login_alerts_bdd.py",
+    "test_family_bdd.py",
     "test_game_manager.py",
     "test_game_actions_bdd.py",
 }
