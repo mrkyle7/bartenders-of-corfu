@@ -19,6 +19,7 @@ from app import password_reset
 from app import email_verification
 from app import google_sign_in
 from app import activity
+from app import family
 from app.auth_cookie import clear_auth_cookie, set_auth_cookie
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
@@ -859,6 +860,110 @@ async def user_details(request: Request):
         response = JSONResponse(content={"error": str(e)}, status_code=400)
         clear_auth_cookie(response)
         return response
+
+
+# --- Families ---------------------------------------------------------------
+# Parents see how their children are doing in the Cheetah Moon games, once each
+# child says yes (app/family.py). cheetahmoongames.com's /family page and its
+# /api/family routes pass these on, with the player's login cookie.
+
+
+def _family_user(request: Request):
+    """(user, None) for the signed-in, active account, or (None, error)."""
+    token_user, err = _require_auth(request)
+    if err:
+        return None, err
+    user = userManager.get_user(token_user.id)
+    if not user or user.status != "active":
+        return None, JSONResponse(status_code=401, content={"error": "Sign in first."})
+    return user, None
+
+
+def _family_answer(user, work=None) -> JSONResponse:
+    try:
+        if work:
+            work()
+        return JSONResponse(content=family.view(user, db))
+    except family.FamilyError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.get("/v1/family")
+async def family_view(request: Request):
+    """Your children, the emails you're asking for, who's asking for you, and
+    your parents."""
+    user, err = _family_user(request)
+    if err:
+        return err
+    return await asyncio.to_thread(_family_answer, user)
+
+
+@app.get("/v1/family/children")
+async def family_children(request: Request):
+    """Your children, for games: ``{children: [{id, name}]}``."""
+    user, err = _family_user(request)
+    if err:
+        return err
+    kids = await asyncio.to_thread(family.children, user, db)
+    return JSONResponse(content={"children": kids})
+
+
+class FamilyEmail(BaseModel):
+    email: str
+
+
+class FamilyAnswer(BaseModel):
+    parent: str
+    allow: bool
+
+
+class FamilyRemove(BaseModel):
+    id: str
+
+
+@app.post("/v1/family/ask")
+async def family_ask(body: FamilyEmail, request: Request):
+    """Ask to be the parent of the account with ``email``."""
+    user, err = _family_user(request)
+    if err:
+        return err
+    return await asyncio.to_thread(
+        _family_answer, user, lambda: family.ask(user, body.email, db)
+    )
+
+
+@app.post("/v1/family/unask")
+async def family_unask(body: FamilyEmail, request: Request):
+    user, err = _family_user(request)
+    if err:
+        return err
+    return await asyncio.to_thread(
+        _family_answer, user, lambda: family.unask(user, body.email, db)
+    )
+
+
+@app.post("/v1/family/answer")
+async def family_answer(body: FamilyAnswer, request: Request):
+    """A child's yes or no to a parent asking for them."""
+    user, err = _family_user(request)
+    if err:
+        return err
+    return await asyncio.to_thread(
+        _family_answer,
+        user,
+        lambda: family.answer(user, body.parent, body.allow, db),
+    )
+
+
+@app.post("/v1/family/remove")
+async def family_remove(body: FamilyRemove, request: Request):
+    """Undo a link with a child or a parent."""
+    user, err = _family_user(request)
+    if err:
+        return err
+    return await asyncio.to_thread(
+        _family_answer, user, lambda: family.remove(user, body.id, db)
+    )
 
 
 class ChangePasswordRequest(BaseModel):

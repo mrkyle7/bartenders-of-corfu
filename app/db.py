@@ -405,6 +405,92 @@ class Db:
             .execute()
         )
 
+    # --- Families (app/family.py) ---
+
+    def get_family_asks_by_parent(self, parent_id: UUID) -> list[str]:
+        """The emails a parent is asking for, oldest first."""
+        response = (
+            self.supabase.table("family_asks")
+            .select("email")
+            .eq("parent_id", str(parent_id))
+            .order("created_at")
+            .execute()
+        )
+        return [row["email"] for row in response.data]
+
+    def get_family_asks_by_email(self, email: str) -> list[UUID]:
+        """The parents asking for ``email`` (lower case), oldest first."""
+        response = (
+            self.supabase.table("family_asks")
+            .select("parent_id")
+            .eq("email", email)
+            .order("created_at")
+            .execute()
+        )
+        return [UUID(row["parent_id"]) for row in response.data]
+
+    def add_family_ask(self, parent_id: UUID, email: str) -> None:
+        (
+            self.supabase.table("family_asks")
+            .upsert(
+                {"parent_id": str(parent_id), "email": email},
+                on_conflict="parent_id,email",
+                ignore_duplicates=True,
+            )
+            .execute()
+        )
+
+    def delete_family_ask(self, parent_id: UUID, email: str) -> bool:
+        response = (
+            self.supabase.table("family_asks")
+            .delete()
+            .eq("parent_id", str(parent_id))
+            .eq("email", email)
+            .execute()
+        )
+        return len(response.data) >= 1
+
+    def get_family_children(self, parent_id: UUID) -> list[UUID]:
+        response = (
+            self.supabase.table("family_links")
+            .select("child_id")
+            .eq("parent_id", str(parent_id))
+            .order("created_at")
+            .execute()
+        )
+        return [UUID(row["child_id"]) for row in response.data]
+
+    def get_family_parents(self, child_id: UUID) -> list[UUID]:
+        response = (
+            self.supabase.table("family_links")
+            .select("parent_id")
+            .eq("child_id", str(child_id))
+            .order("created_at")
+            .execute()
+        )
+        return [UUID(row["parent_id"]) for row in response.data]
+
+    def add_family_link(self, parent_id: UUID, child_id: UUID) -> None:
+        (
+            self.supabase.table("family_links")
+            .upsert(
+                {"parent_id": str(parent_id), "child_id": str(child_id)},
+                on_conflict="parent_id,child_id",
+                ignore_duplicates=True,
+            )
+            .execute()
+        )
+
+    def delete_family_link(self, parent_id: UUID, child_id: UUID) -> bool:
+        response = (
+            self.supabase.table("family_links")
+            .delete()
+            .eq("parent_id", str(parent_id))
+            .eq("child_id", str(child_id))
+            .execute()
+        )
+        return len(response.data) >= 1
+
     def get_public_key(self, kid: str) -> bytes | None:
         response = (
             self.supabase.table("public_keys")
