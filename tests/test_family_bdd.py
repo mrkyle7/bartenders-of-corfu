@@ -92,7 +92,8 @@ def stop_sharing(ctx, child, parent):
 
 @when("someone signed out asks for their family")
 def signed_out(ctx):
-    ctx["resp"] = _client.get("/v1/family")
+    # A client of its own: the shared one keeps the cookies from signing in.
+    ctx["resp"] = TestClient(app).get("/v1/family")
 
 
 @then(parsers.parse("the response status should be {status:d}"))
