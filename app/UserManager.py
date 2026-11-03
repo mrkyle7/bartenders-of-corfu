@@ -19,6 +19,8 @@ class UserManager:
             user
             and user.status == "active"
             and not user.is_bot
+            # A child account can't be signed in to: a parent switches to it.
+            and not getattr(user, "managed_by", None)
             and user.verify_secret(password, user._password_hash)
         ):
             return user

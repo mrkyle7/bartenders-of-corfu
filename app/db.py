@@ -31,6 +31,7 @@ class Db:
         "bot_strategy",
         "google_id",
         "email_verified_at",
+        "managed_by",
     )
 
     @staticmethod
@@ -54,6 +55,7 @@ class Db:
                 "bot_strategy": row.get("bot_strategy"),
                 "google_id": row.get("google_id"),
                 "email_verified_at": row.get("email_verified_at"),
+                "managed_by": row.get("managed_by"),
             }
         )
 
@@ -76,6 +78,8 @@ class Db:
             row["google_id"] = user.google_id
         if user.email_verified_at:
             row["email_verified_at"] = user.email_verified_at
+        if getattr(user, "managed_by", None):
+            row["managed_by"] = str(user.managed_by)
         response = self.supabase.table("users").insert(row).execute()
         return len(response.data) == 1
 
