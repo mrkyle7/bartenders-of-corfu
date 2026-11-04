@@ -851,15 +851,39 @@ async def user_details(request: Request):
             activity.HOME if request.headers.get(activity.HOME_HEADER) else "bartenders"
         )
         activity.report(user.id, user.username, place)
-        return JSONResponse(
-            content=user.to_dict(include_sensitive=True, include_email=True),
-            status_code=200,
-        )
+        details = user.to_dict(include_sensitive=True, include_email=True)
+        # A parent playing as their child account: who the parent is, to
+        # switch back.
+        if token_user.parent_id is not None:
+            parent = userManager.get_user(token_user.parent_id)
+            if parent:
+                details["parent"] = {
+                    "id": str(parent.id),
+                    "name": parent.username,
+                    "has_password": bool(parent._password_hash),
+                }
+        return JSONResponse(content=details, status_code=200)
     except Exception as e:
         logger.error("Error verifying token: %s", str(e))
         response = JSONResponse(content={"error": str(e)}, status_code=400)
         clear_auth_cookie(response)
         return response
+
+
+def _child_account_says_no(token_user) -> JSONResponse | None:
+    """A child account can't change its account: a grown-up does that."""
+    if token_user.parent_id is not None:
+        return JSONResponse(
+            status_code=403,
+            content={"error": "A grown-up needs to do that from their own account."},
+        )
+    user = userManager.get_user(token_user.id)
+    if user and getattr(user, "managed_by", None):
+        return JSONResponse(
+            status_code=403,
+            content={"error": "A grown-up needs to do that from their own account."},
+        )
+    return None
 
 
 # --- Families ---------------------------------------------------------------
@@ -966,6 +990,86 @@ async def family_remove(body: FamilyRemove, request: Request):
     )
 
 
+class FamilyChild(BaseModel):
+    name: str
+
+
+class FamilySwitchBack(BaseModel):
+    password: str
+
+
+@app.post("/v1/family/child")
+async def family_make_child(body: FamilyChild, request: Request):
+    """Make a child account: no email or password, linked to you as your
+    child. You switch to it to let them play."""
+    user, err = _family_user(request)
+    if err:
+        return err
+    return await asyncio.to_thread(
+        _family_answer, user, lambda: family.make_child(user, body.name, db)
+    )
+
+
+@app.post("/v1/family/switch")
+async def family_switch(body: FamilyRemove, request: Request):
+    """Switch to one of your child accounts, to let them play: the login
+    cookie is theirs now, and says it's you, so you can switch back."""
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    if token_user.parent_id is not None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Switch back to your own account first."},
+        )
+    user, err = _family_user(request)
+    if err:
+        return err
+    try:
+        child = await asyncio.to_thread(family.child_to_play, user, body.id, db)
+    except family.FamilyError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    logger.info("User %s switched to their child account %s", user, child)
+    activity.report(child.id, child.username, activity.SIGN_IN)
+    response = JSONResponse(content=child.to_dict())
+    set_auth_cookie(response, jwt_handler.sign(child, parent=user))
+    return response
+
+
+@app.post("/v1/family/switch-back")
+async def family_switch_back(body: FamilySwitchBack, request: Request):
+    """Back from a child account to the parent's own, with the parent's
+    password (so the child can't do it alone)."""
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    if token_user.parent_id is None:
+        return JSONResponse(
+            status_code=400, content={"error": "You're on your own account."}
+        )
+    parent = userManager.get_user(token_user.parent_id)
+    if not parent or parent.status != "active":
+        return JSONResponse(status_code=401, content={"error": "Sign in first."})
+    if not parent._password_hash:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Your account signs in with Google: sign in with Google to switch back.",
+                "google": True,
+            },
+        )
+    signed_in = userManager.authenticate_user(parent.username, body.password)
+    if not signed_in or signed_in.id != parent.id:
+        return JSONResponse(
+            status_code=400, content={"error": "That isn't your password."}
+        )
+    logger.info("User %s switched back from their child account", parent)
+    activity.report(parent.id, parent.username, activity.SIGN_IN)
+    response = JSONResponse(content=parent.to_dict())
+    set_auth_cookie(response, jwt_handler.sign(parent))
+    return response
+
+
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
@@ -976,6 +1080,9 @@ async def change_password(body: ChangePasswordRequest, request: Request):
     token_user, err = _require_auth(request)
     if err:
         return err
+    no = _child_account_says_no(token_user)
+    if no:
+        return no
     try:
         userManager.change_password(token_user.id, body.old_password, body.new_password)
         logger.info("Password changed for user %s", token_user.username)
@@ -999,6 +1106,9 @@ async def change_email(body: ChangeEmailRequest, request: Request):
     token_user, err = _require_auth(request)
     if err:
         return err
+    no = _child_account_says_no(token_user)
+    if no:
+        return no
     try:
         user = userManager.get_user(token_user.id)
         if not user or user.status != "active":
@@ -1025,6 +1135,9 @@ async def delete_account(request: Request):
     token_user, err = _require_auth(request)
     if err:
         return err
+    no = _child_account_says_no(token_user)
+    if no:
+        return no
     try:
         userManager.delete_user(token_user.id)
         logger.info("Account deleted for user %s", token_user.username)

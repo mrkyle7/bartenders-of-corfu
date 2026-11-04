@@ -41,8 +41,12 @@ class JWTHandler:
         )
         self.public_keys[str(self.kid)] = self.public_key
 
-    def sign(self, user: User) -> str:
-        """Sign a JWT token with a User. Returns the JWT string."""
+    def sign(self, user: User, parent: Optional[User] = None) -> str:
+        """Sign a JWT token with a User. Returns the JWT string.
+
+        ``parent``: a parent playing as their child account (``user``); the
+        token says who they are, so they can switch back.
+        """
         now = datetime.now(timezone.utc)
         payload = {
             "sub": user.username,
@@ -52,6 +56,8 @@ class JWTHandler:
             "exp": now + timedelta(hours=self.expiration_hours),
             "kid": str(self.kid),
         }
+        if parent is not None:
+            payload["parent"] = str(parent.id)
         # PyJWT v2 returns a string
         token = jwt.encode(payload, self.private_key, algorithm=self.algorithm)
         return token
@@ -74,7 +80,12 @@ class JWTHandler:
                 if iat_us is not None
                 else None
             )
-            return TokenUser(payload.get("sub"), payload.get("id"), iat=iat)
+            return TokenUser(
+                payload.get("sub"),
+                payload.get("id"),
+                iat=iat,
+                parent_id=payload.get("parent"),
+            )
         except jwt.ExpiredSignatureError:
             return None
         except jwt.InvalidTokenError:

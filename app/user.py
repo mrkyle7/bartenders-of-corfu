@@ -12,10 +12,18 @@ class UserValidationError(Exception):
 
 
 class TokenUser:
-    def __init__(self, username: str, id: str, iat: Optional[datetime] = None):
+    def __init__(
+        self,
+        username: str,
+        id: str,
+        iat: Optional[datetime] = None,
+        parent_id: Optional[str] = None,
+    ):
         self.username = username
         self.id = UUID(id)
         self.iat = iat  # UTC datetime when the token was issued
+        # A parent playing as their child account: the parent's id.
+        self.parent_id = UUID(parent_id) if parent_id else None
 
     def to_dict(self) -> dict:
         return {"username": self.username, "id": str(self.id)}
@@ -39,6 +47,7 @@ class User:
         self.logged_out_at: Optional[str] = None
         self.google_id: Optional[str] = None
         self.email_verified_at: Optional[str] = None
+        self.managed_by: Optional[UUID] = None
 
     @classmethod
     def new_bot(cls, username: str, strategy: str) -> "User":
@@ -60,6 +69,17 @@ class User:
         user.logged_out_at = None
         user.google_id = None
         user.email_verified_at = None
+        user.managed_by = None
+        return user
+
+    @classmethod
+    def new_child(cls, username: str, parent_id: UUID) -> "User":
+        """A child account a parent makes: no email or password, so nobody
+        can sign in to it; the parent switches to it (app/family.py)."""
+        user = cls.new_bot(username, "")
+        user.is_bot = False
+        user.bot_strategy = None
+        user.managed_by = parent_id
         return user
 
     @classmethod
@@ -187,6 +207,7 @@ class User:
             result["has_password"] = bool(self._password_hash)
             result["google_linked"] = bool(self.google_id)
             result["email_verified"] = bool(self.email_verified_at)
+            result["managed"] = bool(getattr(self, "managed_by", None))
 
         return result
 
@@ -210,6 +231,7 @@ class User:
         user.logged_out_at = data.get("logged_out_at")
         user.google_id = data.get("google_id")
         user.email_verified_at = data.get("email_verified_at")
+        user.managed_by = UUID(data["managed_by"]) if data.get("managed_by") else None
 
         password_hash = data.get("password_hash")
         if password_hash:
