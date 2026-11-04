@@ -80,6 +80,8 @@ def cookie_is_childs(ctx, name, parent):
     assert me["id"] == ctx[name]["id"]
     assert me["managed"] is True
     assert me["parent"]["id"] == ctx[parent]["id"]
+    assert me["parent"]["has_password"] is True
+    assert me["parent"]["google"] is False
 
 
 @then(parsers.parse('as "{name}" they can\'t change the password'))
