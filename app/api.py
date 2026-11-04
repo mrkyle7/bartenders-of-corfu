@@ -861,6 +861,9 @@ async def user_details(request: Request):
                     "id": str(parent.id),
                     "name": parent.username,
                     "has_password": bool(parent._password_hash),
+                    # Signs in with Google too (an older account may also
+                    # have a password it no longer uses).
+                    "google": bool(parent.google_id),
                 }
         return JSONResponse(content=details, status_code=200)
     except Exception as e:
