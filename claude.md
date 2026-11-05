@@ -19,6 +19,14 @@ Python FastAPI backend, Supabase DB, HTML/JS frontend, k3s deployment, uv for de
 ## Working with the User
 - Push back when a request looks wrong for the domain. If the user asks for something that conflicts with how the game/UI is naturally structured (e.g. sorting players alphabetically when turn order is the obvious ordering, hiding a control that's needed mid-turn, removing a guardrail), ask a clarifying question before implementing. Cheap to ask, expensive to undo.
 
+## Database security
+Supabase serves every table in `public` over its REST API, and the project's publishable key (the `anon` role) is not a secret: cheetahmoongames.com's games are given it to read login keys. So nothing in the database may be public except the public keys:
+- **Every table has row level security**, enabled in the same migration that creates it. Never disable it.
+- **The public roles (`anon`, `authenticated`) get no grants** on tables, sequences or functions; `20261105000001_public_keys_readable.sql` took Supabase's default ones away and stopped new objects getting them. The server uses the service role key, which needs none of this.
+- **The one exception is `public_keys`:** `anon` may read it (one `SELECT` policy and grant), so games can check a login cookie without waiting for this server to start. Public keys aren't secret. Never let anyone else write to it, and never add another policy or grant for a public role, on any table.
+- **No `SECURITY DEFINER` functions:** they run as their owner, past row level security.
+- `tests/test_database_security.py` enforces this: on the migrations, and against the local Supabase with its publishable key (every other table refuses to be read or written, every function refuses to run, `public_keys` can only be read). Don't weaken or skip it; a new table that fails it needs fixing, not an exception.
+
 ## Architecture
 - `/app` — FastAPI routes (`api.py`), business logic (`actions.py`, `gameManager.py`), domain models (`GameState.py`, `PlayerState.py`, `card.py`, `cocktails.py`)
 - `/static` — frontend assets. Signing in and the account page (email, password) are on cheetahmoongames.com: `/login` and `/profile` here only redirect there. The game page is the bar top, `/bar` (`bar.html`, `bar/`, `css/bar.css`); old `/game` and `/play` links (the classic and table views, now removed) redirect to it. The bar top is the physical box on a table: every mat, card and token on show; you act by touching the piece. The drinks menu and rules open in a panel from the turn bar. As your turn starts, the same panel says what the others did since your last turn (from `/history` and the states at `/history/{turn}`), once a turn; each changed mat says so until your first move. Legality comes from `/valid-actions`.
