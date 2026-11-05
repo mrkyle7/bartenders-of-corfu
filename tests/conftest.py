@@ -59,6 +59,10 @@ def pytest_configure(config):
         status = json.loads(result.stdout)
         os.environ["SUPABASE_URL"] = status["API_URL"]
         os.environ["SUPABASE_KEY"] = status["SECRET_KEY"]
+        # The public (anon) key, for tests/test_database_security.py.
+        publishable = status.get("PUBLISHABLE_KEY") or status.get("ANON_KEY")
+        if publishable:
+            os.environ.setdefault("SUPABASE_PUBLISHABLE_KEY", publishable)
         SUPABASE_AVAILABLE = True
     except Exception:
         # No Supabase available: set placeholders so module imports that
