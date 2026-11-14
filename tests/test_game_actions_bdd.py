@@ -393,15 +393,17 @@ def karaoke_card_in_row(ctx, row):
     def patch(gs):
         for r in gs.card_rows:
             if r.position == row:
-                r.cards.insert(
-                    0,
-                    _Card(
-                        id=new_card_id,
-                        card_type="karaoke",
-                        name="Party Tune",
-                        spirit_type="VODKA",
-                    ),
+                # Replace the first card so the row keeps its size
+                new_card = _Card(
+                    id=new_card_id,
+                    card_type="karaoke",
+                    name="Party Tune",
+                    spirit_type="VODKA",
                 )
+                if r.cards:
+                    r.cards[0] = new_card
+                else:
+                    r.cards.append(new_card)
                 break
         return gs
 
@@ -1392,15 +1394,11 @@ def refreshed_card_not_in_row1(ctx):
     )
 
 
-@then("all cards in row 1 should be karaoke type")
-def row1_all_karaoke(ctx):
+@then("there should be no karaoke row")
+def no_karaoke_row(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
-    rows = game["game_state"]["card_rows"]
-    row1 = next((r for r in rows if r["position"] == 1), None)
-    assert row1 is not None, "Row 1 not found"
-    assert all(c["card_type"] == "karaoke" for c in row1["cards"]), (
-        f"Not all row 1 cards are karaoke: {[c['card_type'] for c in row1['cards']]}"
-    )
+    positions = [r["position"] for r in game["game_state"]["card_rows"]]
+    assert positions == [2, 3], f"Expected rows 2 and 3 only, got {positions}"
 
 
 @then(parsers.parse("the deck should have {count:d} cards remaining"))
@@ -1410,12 +1408,12 @@ def deck_has_cards(ctx, count):
     assert deck_size == count, f"Expected deck_size {count}, got {deck_size}"
 
 
-@then("row 3 and the ability deck should hold 2 karaoke cards")
-def two_songs_off_stage(ctx):
+@then(parsers.parse("row 3 and the ability deck should hold {count:d} karaoke cards"))
+def songs_among_the_abilities(ctx, count):
     gs = _get_game(ctx["p1_token"], ctx["game_id"])["game_state"]
     row3 = next(r for r in gs["card_rows"] if r["position"] == 3)
     cards = row3["cards"] + gs["deck"]
-    assert sum(c["card_type"] == "karaoke" for c in cards) == 2
+    assert sum(c["card_type"] == "karaoke" for c in cards) == count
 
 
 @then(parsers.parse("player {n:d}'s bladder capacity should be {capacity:d}"))

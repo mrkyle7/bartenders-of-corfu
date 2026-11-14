@@ -19,15 +19,14 @@ You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails t
 
 **The open display** shows 5 spirits and mixers drawn from the bag, for anyone to take. **The specials tray** holds specials that came out while refilling the display, also for anyone to take.
 
-**The cards** lie in three rows:
+**The cards** lie in two rows:
 
-- **Karaoke row:** 3 of the 5 karaoke songs (one per spirit), chosen at random, face up from the start. The other 2 are shuffled into the ability deck.
 - **Orders row:** 3 drinks the punters are calling for, dealt from 18 order cards.
-- **Ability row:** 3 cards dealt from the ability deck: 19 ability cards plus the 2 karaoke songs shuffled in with them.
+- **Ability row:** 5 cards dealt from the ability deck: the 19 ability cards and all 5 karaoke songs (one per spirit), shuffled together.
 
 **Your mat** has two glasses, a bladder with 8 spaces, a drunk track and 4 toilet tokens.
 
-**Setting up:** put all the ingredients in the bag and draw onto the open display until it shows 5 spirits and mixers (a special that comes out goes to the specials tray and you keep drawing). Lay out the three rows. Everyone starts sober with an empty bladder, and the turn order is random.
+**Setting up:** put all the ingredients in the bag and draw onto the open display until it shows 5 spirits and mixers (a special that comes out goes to the specials tray and you keep drawing). Lay out the two rows. Everyone starts sober with an empty bladder, and the turn order is random.
 
 ## Your turn
 
@@ -43,7 +42,7 @@ Each turn you take **one main action**, and any **free actions** you have, befor
 **Free actions** (each once a turn):
 
 - Claim a card
-- Swipe the ability row (drunk 2 or more)
+- Swipe the ability row (drunk 3 or more)
 - Clear the orders row (drunk 2 or more)
 - Whatever your free-action cards give you (see "Cards")
 - Pour or drink from a Store card (any number of times)
@@ -108,7 +107,7 @@ A served order goes on the order discard pile and the next one is dealt. Each gl
 - You drink ingredients as you take them, or drink a whole glass as your main action. **Everything you drink goes into your bladder.**
 - **Getting drunker:** each spirit, bitters, cointreau or vermouth drunk in the action raises your drunk level by 1. If you drank **none of those**, you sober up by 1 per mixer, lemon or sugar instead (never below sober).
 - **The drunk track:** 0 Sober, 1 Merry, 2 Tipsy, 3 Squiffy, 4 Sozzled, 5 Legless.
-- **Being drunk has its uses:** you take 3 ingredients plus your drunk level each turn, you can swipe the ability cards or clear the orders at drunk 2 or more, and sing karaoke at drunk 3 or more.
+- **Being drunk has its uses:** you take 3 ingredients plus your drunk level each turn, you can clear the orders at drunk 2 or more, and swipe the ability cards and sing karaoke at drunk 3 or more.
 - **Hospital:** above drunk 5 you're out of the game.
 
 ## Nipping to the loo
@@ -128,14 +127,13 @@ A served order goes on the order discard pile and the next one is dealt. Each gl
 
 - Take a karaoke card or an ability card if your bladder holds its cost. The cost is only checked: those ingredients stay in your bladder. Stored spirits don't count.
 - A karaoke song also needs you to be **drunk 3 or more**.
-- Karaoke cards on the karaoke row aren't replaced. A card claimed from the ability row (a karaoke song there included) is replaced from the top of the ability deck; if the deck is empty, the space stays empty.
+- A claimed card is replaced from the top of the ability deck; if the deck and its discard pile are both empty, the space stays empty.
 - Orders can't be claimed: you serve them by selling the drink.
 
 **Clearing the rows** (free actions, once a turn each):
 
-- **Swipe the ability row** (drunk 2 or more): put all three cards on the ability discard pile and deal three new ones.
+- **Swipe the ability row** (drunk 3 or more): put all five cards on the ability discard pile and deal five new ones.
 - **Clear the orders row** (drunk 2 or more): put all three orders on the order discard pile and deal three new ones. Perfect for wiping out the order a rival was one ingredient away from.
-- The karaoke row is never cleared.
 - When a deck runs out, shuffle its discard pile to make a new deck.
 
 | Card | Cost (in your bladder) | Points | What it does |
