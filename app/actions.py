@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.card import (
     ABILITY_ROW,
+    ABILITY_ROW_SIZE,
     FREE_ACTION_TYPES,
     KARAOKE_ROW,
     ORDERS_ROW,
@@ -56,10 +57,10 @@ _MIXERS = {Ingredient.SODA, Ingredient.TONIC, Ingredient.COLA, Ingredient.CRANBE
 SCORE_TO_WIN = 40
 KARAOKE_CARDS_TO_WIN = 3
 MAX_DRUNK_LEVEL = 5
-# Clearing the orders row is your main action and needs drunk 3+; swiping the
-# ability row is a free action once a turn and needs drunk 2+.
+# Clearing the orders row needs drunk 2+ and swiping the ability row drunk 3+;
+# each is a free action once a turn.
 MIN_DRUNK_TO_REFRESH = 2
-MIN_DRUNK_TO_SWIPE = 2
+MIN_DRUNK_TO_SWIPE = 3
 # Karaoke: sing when you're drunk enough, with 2 of the song's spirit drunk
 MIN_DRUNK_TO_SING = 3
 KARAOKE_SPIRITS = 2
@@ -607,6 +608,14 @@ def _replace_card(gs: GameState, row: CardRow):
         row.cards.append(Card.from_dict(deck.pop(0)))
 
 
+def _row_size(gs: GameState, row: CardRow) -> int:
+    """How many cards a fresh row is dealt: five abilities, three orders.
+    Games dealt with a karaoke row keep their three-card ability row."""
+    if row.position == ABILITY_ROW and _row(gs, KARAOKE_ROW) is None:
+        return ABILITY_ROW_SIZE
+    return ROW_SIZE
+
+
 def _rotate_row(gs: GameState, row: CardRow) -> int:
     """Discard every card in the row and deal a fresh row."""
     if _deck_for_row(gs, row) is None:
@@ -614,7 +623,7 @@ def _rotate_row(gs: GameState, row: CardRow) -> int:
     removed = list(row.cards)
     _discard(gs, row, removed)
     row.cards = []
-    for _ in range(ROW_SIZE):
+    for _ in range(_row_size(gs, row)):
         _replace_card(gs, row)
     return len(removed)
 
@@ -1214,10 +1223,9 @@ def claim_card(
 ) -> tuple[GameState, dict]:
     """ClaimCard — a free action, once a turn, before or after your main action.
 
-    Karaoke cards on row 1 aren't replaced; cards in row 3 (abilities, and
-    the karaoke cards shuffled in with them) are replaced from the top of
-    the ability deck. Orders can't be claimed: they
-    are served by selling the drink.
+    Cards in row 3 (abilities and karaoke) are replaced from the top of the
+    ability deck; karaoke cards on the row 1 of older games aren't replaced.
+    Orders can't be claimed: they are served by selling the drink.
 
     cup_index: required for cup_doubler cards (0 or 1).
     spirit_type: required for cup_doubler cards (declares which spirit type was used to pay).
@@ -1483,10 +1491,10 @@ def refresh_card_row(
 ) -> tuple[GameState, dict]:
     """Clear a row of the market and deal a fresh one.
 
-    Row 1 (karaoke) is never cleared.
-    Row 2 (orders): a free action once a turn, at drunk 3+. Nothing like
+    Row 1 (the karaoke row of older games) is never cleared.
+    Row 2 (orders): a free action once a turn, at drunk 2+. Nothing like
     wiping out the order a rival was one ingredient away from.
-    Row 3 (abilities): a free action once a turn, at drunk 2+.
+    Row 3 (abilities): a free action once a turn, at drunk 3+.
     Cleared cards go on their deck's discard pile, shuffled back in once
     the deck runs out.
     """

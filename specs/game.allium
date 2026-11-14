@@ -25,7 +25,7 @@ config {
     score_to_win: Integer = 40            -- two players; see score_to_win_for
     karaoke_cards_to_win: Integer = 3     -- claiming this many karaoke cards = instant win
     min_drunk_to_refresh: Integer = 2     -- drunk level required to clear the orders row
-    min_drunk_to_swipe: Integer = 2       -- drunk level required to swipe the ability row
+    min_drunk_to_swipe: Integer = 3       -- drunk level required to swipe the ability row
     max_specials_per_player: Integer = 2  -- games with special dice only (see LegacySpecials)
     karaoke_card_total: Integer = 5       -- total karaoke cards in the game
 }
@@ -133,7 +133,7 @@ entity BoardState {
     bag_contents: List<Ingredient>
     open_display: List<Ingredient>           -- spirits and mixers; up to config.open_display_size
     specials_display: List<Special>          -- specials drawn from the bag, for anyone to take
-    card_rows: List<CardRow>                 -- exactly 3 rows; each holds up to 3 cards
+    card_rows: List<CardRow>                 -- the orders row (up to 3 cards) and the ability row (up to 5); see cards.allium
     player_turn: UUID                        -- whose turn it is
 
     -- Derived
@@ -144,7 +144,7 @@ entity BoardState {
 entity CardRow {
     board: BoardState
     position: Integer                        -- 1, 2, or 3
-    cards: List<Card>                        -- 0–3 cards; karaoke cards are never discarded from a row
+    cards: List<Card>                        -- 0–3 orders or 0–5 ability and karaoke cards
 }
 
 entity Card {
@@ -416,7 +416,7 @@ rule ClaimCard {
 rule RefreshCardRow {
     -- Clearing the orders row (drunk min_drunk_to_refresh+) and swiping the
     -- ability row (drunk min_drunk_to_swipe+) are each a free action, once a
-    -- turn. The karaoke row is never cleared. See cards.allium.
+    -- turn. See cards.allium.
     when: RefreshCardRow(player, row)
     requires: player.status = active
     requires: it is player's turn

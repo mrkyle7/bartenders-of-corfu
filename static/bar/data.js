@@ -194,7 +194,7 @@ export const RULES = [
         items: [
             'The bag holds every ingredient: spirits, mixers, and two each of the purple specials (bitters, cointreau, lemon, sugar, vermouth).',
             'The open display shows five spirits and mixers for anyone to take. A special that comes out while refilling it goes to the specials tray, also for anyone.',
-            'Three rows of cards: three karaoke songs, three orders the punters are calling for, and three ability cards that help you. The other two songs are shuffled into the ability deck, so they can turn up there too.',
+            'Two rows of cards: three orders the punters are calling for, and five ability cards that help you. The five karaoke songs are shuffled in with the ability cards, so they turn up there too.',
             'Your mat: two glasses, a bladder of 8 spaces, the drunk track and 4 toilet tokens.',
         ],
     },
@@ -202,7 +202,7 @@ export const RULES = [
         title: 'Your turn',
         items: [
             'One main action: pour (take ingredients), serve (sell one or both glasses), drink a glass, or go for a wee.',
-            'Free actions, each once a turn, before or after: claim a card, swipe the ability cards or clear the orders (drunk 2 or more each), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
+            'Free actions, each once a turn, before or after: claim a card, clear the orders (drunk 2 or more), swipe the ability cards (drunk 3 or more), and whatever your free-action cards give you. Pouring or drinking from a Store card is free too.',
             'Your turn ends when your main action is done and nothing free is left that you could use. You can end it early after your main action.',
         ],
     },
@@ -231,7 +231,7 @@ export const RULES = [
             'Drink ingredients as you take them, or a whole glass as your main action. Everything you drink goes into your bladder.',
             'After each action: +1 drunk for every spirit, bitters, cointreau or vermouth you drank. If you drank none of those, you sober up 1 for each mixer, lemon or sugar instead.',
             'The drunk track: 0 Sober, 1 Merry, 2 Tipsy, 3 Squiffy, 4 Sozzled, 5 Legless. Above 5 it’s hospital, and you’re out of the game.',
-            'Being drunk has its uses: you take more ingredients each turn, can swipe the ability cards or clear the orders at drunk 2, and sing karaoke at drunk 3.',
+            'Being drunk has its uses: you take more ingredients each turn, can clear the orders at drunk 2, and swipe the ability cards and sing karaoke at drunk 3.',
         ],
     },
     {
@@ -251,7 +251,7 @@ export const RULES = [
             'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more, wherever it turns up. Sing three and you win.',
             'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), and free-action cards that make taking, selling or weeing free. The card says what it does.',
             'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',
-            'Swiping the abilities or clearing the orders (drunk 2 or more) is free, once a turn each: all three are discarded and three new ones are dealt. When a deck runs out, its discards are shuffled to make a new one. The karaoke row is never cleared.',
+            'Clearing the orders (drunk 2 or more) or swiping the abilities (drunk 3 or more) is free, once a turn each: the whole row is discarded and a fresh one is dealt. When a deck runs out, its discards are shuffled to make a new one.',
         ],
     },
     {

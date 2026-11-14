@@ -17,13 +17,14 @@ FREE_ACTION_TYPES: dict[str, str] = {
     "GIN": "go_for_a_wee",
 }
 
-# The market: row 1 holds three karaoke cards, row 2 the drink orders, row 3
-# the ability cards (the other karaoke cards are shuffled in with them).
+# The market: row 2 holds the drink orders, row 3 the ability cards, with
+# every karaoke card shuffled in among them. Row 1 is the karaoke row of games
+# dealt before karaoke cards joined the ability deck; new games have none.
 KARAOKE_ROW = 1
 ORDERS_ROW = 2
 ABILITY_ROW = 3
-ROW_SIZE = 3
-KARAOKE_ON_STAGE = 3
+ROW_SIZE = 3  # orders
+ABILITY_ROW_SIZE = 5
 
 
 @dataclass
@@ -284,27 +285,22 @@ def build_order_deck() -> list[Card]:
 def deal_market(
     deck: list[Card], orders: list[Card]
 ) -> tuple[list[CardRow], list[Card], list[Card]]:
-    """Lay out the three rows of the market.
+    """Lay out the two rows of the market.
 
-    Row 1: three karaoke cards chosen at random, face up (never cleared or
-    replaced). The other karaoke cards are shuffled into the ability deck.
     Row 2: three orders off the top of the shuffled order deck.
-    Row 3: three cards off the top of the shuffled ability deck.
+    Row 3: five cards off the top of the ability deck, which is every
+    ability card and every karaoke card shuffled together.
 
     Returns (rows, ability_deck, order_deck); both decks are drawn from the
     front. Cleared cards go on a discard pile, shuffled back in once the deck
     runs out (see app/actions.py).
     """
-    karaoke = [c for c in deck if c.card_type == "karaoke"]
-    random.shuffle(karaoke)
-    stage, karaoke = karaoke[:KARAOKE_ON_STAGE], karaoke[KARAOKE_ON_STAGE:]
-    abilities = [c for c in deck if c.card_type != "karaoke"] + karaoke
+    abilities = list(deck)
     random.shuffle(abilities)
     orders = list(orders)
     random.shuffle(orders)
     rows = [
-        CardRow(position=KARAOKE_ROW, cards=stage),
         CardRow(position=ORDERS_ROW, cards=orders[:ROW_SIZE]),
-        CardRow(position=ABILITY_ROW, cards=abilities[:ROW_SIZE]),
+        CardRow(position=ABILITY_ROW, cards=abilities[:ABILITY_ROW_SIZE]),
     ]
-    return rows, abilities[ROW_SIZE:], orders[ROW_SIZE:]
+    return rows, abilities[ABILITY_ROW_SIZE:], orders[ROW_SIZE:]

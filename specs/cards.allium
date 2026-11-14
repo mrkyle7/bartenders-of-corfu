@@ -9,12 +9,11 @@
 --   ApplyDrunkModifier — Refresher cards modify drunk calculation
 --   SellCup            — CupDoubler, Specialist and order bonuses modify points
 --
--- The market has three rows:
---   Row 1 (karaoke): 3 of the 5 KaraokeCards, chosen at random, face up.
---                    Never cleared or refilled.
+-- The market has two rows (games dealt before karaoke cards joined the
+-- ability deck also kept a row 1 of karaoke cards, never cleared or refilled):
 --   Row 2 (orders):  3 OrderCards from the shuffled order deck (18 orders).
---   Row 3 (ability): 3 cards from the shuffled ability deck (19 ability
---                    cards plus the 2 KaraokeCards not on row 1).
+--   Row 3 (ability): 5 cards from the shuffled ability deck (19 ability
+--                    cards and all 5 KaraokeCards).
 --
 -- Ability deck (19 cards):
 --   5 × StoreCard       (one per spirit type)
@@ -162,7 +161,6 @@ default FreeActionCard weak_bladder     = { spirit_type: GIN,   name: "Weak Blad
 
 config {
     karaoke_card_points:    Integer = 5
-    karaoke_on_stage:       Integer = 3    -- karaoke cards dealt to row 1; the rest join the ability deck
     min_drunk_to_sing:      Integer = 3    -- drunk level needed to claim a karaoke card
     karaoke_spirits:        Integer = 2    -- spirits of the song's type needed to claim it
     store_card_points:      Integer = 1
@@ -175,7 +173,8 @@ config {
     slammer_order_bonus:     Integer = 3
     cocktail_order_bonus:    Integer = 4
     long_island_order_bonus: Integer = 5
-    row_size:                Integer = 3    -- orders and ability rows
+    row_size:                Integer = 3    -- the orders row
+    ability_row_size:        Integer = 5    -- the ability row
 }
 
 -- ─── Cup amendment ────────────────────────────────────────────────────────────
@@ -225,11 +224,10 @@ rule SellCup {
 rule SetupCardRows {
     when: GameStarted()
     let order_deck   = shuffle(all 18 OrderCards)
-    let songs        = shuffle(all 5 KaraokeCards)
-    let ability_deck = shuffle(all 19 ability cards + songs after the first config.karaoke_on_stage)
-    ensures: game/CardRow.created(position: 1, cards: first config.karaoke_on_stage of songs)
+    let ability_deck = shuffle(all 19 ability cards + all 5 KaraokeCards)
     ensures: game/CardRow.created(position: 2, cards: first config.row_size of order_deck)
-    ensures: game/CardRow.created(position: 3, cards: first config.row_size of ability_deck)
+    ensures: game/CardRow.created(position: 3, cards: first config.ability_row_size of ability_deck)
+    -- No row 1: there is no karaoke row.
     ensures: both decks keep the rest, drawn from the top
     ensures: both discard piles (order_discard, ability_discard) start empty
 }
@@ -318,7 +316,7 @@ rule RefreshCardRow {
         player.drunk_level >= game/config.min_drunk_to_swipe
         and "refresh_ability_row" not in free_actions_used_this_turn
     ensures: every card in row goes on its deck's discard pile
-    ensures: config.row_size new cards are dealt from the top (see ReplaceCardSlot)
+    ensures: a fresh row is dealt from the top: config.ability_row_size cards for row 3, config.row_size for row 2 (see ReplaceCardSlot)
     if row.position = 2:
         ensures: free_actions_used_this_turn = free_actions_used_this_turn + ["refresh_orders_row"]
     if row.position = 3:
@@ -354,7 +352,7 @@ rule ApplyDrunkModifier {
 -- plus free actions, each at most once per turn:
 --   claim_card           — always available (ClaimCard)
 --   refresh_orders_row   — always available at drunk 2+ (clearing row 2)
---   refresh_ability_row  — always available at drunk 2+ (swiping row 3)
+--   refresh_ability_row  — always available at drunk 3+ (swiping row 3)
 --   take_ingredients / sell_cup / go_for_a_wee — granted by FreeActionCards
 -- DrinkStoredSpirit and UseStoredSpirit are free and unlimited.
 
@@ -373,7 +371,7 @@ rule FreeActionTurnLogic {
     -- After the action: the turn advances when main_action_taken is true AND no
     -- unused free action could be used right now. claim_card counts only while
     -- the player can afford a card in row 1 or row 3; refresh_orders_row only
-    -- at drunk 2+ with orders to clear; refresh_ability_row only at drunk 2+
+    -- at drunk 2+ with orders to clear; refresh_ability_row only at drunk 3+
     -- with ability cards to swipe. Card-granted free actions count
     -- while unused.
     requires: true  -- applied inline in each action handler
@@ -402,9 +400,10 @@ amendment game/BoardState {
 
 -- ─── Guarantees ───────────────────────────────────────────────────────────────
 
-guarantee: row 1 holds 3 randomly chosen karaoke cards at game start and is never cleared or refilled
-guarantee: the other 2 karaoke cards start shuffled into the ability deck; one dealt to row 3 is claimed
-           like any karaoke card (drunk 3+ and 2 of its spirit) and its slot refills from the ability deck
+guarantee: there is no karaoke row: all 5 karaoke cards start shuffled into the ability deck; one dealt
+           to row 3 is claimed like any karaoke card (drunk 3+ and 2 of its spirit) and its slot refills
+           from the ability deck
+guarantee: a fresh ability row holds 5 cards and a fresh orders row 3
 guarantee: row 2 holds only order cards; row 3 holds only ability cards and karaoke cards
 guarantee: cleared and served cards go on their own deck's discard pile; when the deck runs out the
            discard pile is shuffled to make a new deck, so nothing is discarded for good

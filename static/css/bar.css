@@ -381,6 +381,13 @@ button.tok { cursor: pointer; }
     justify-content: start;
 }
 .card-row.is-karaoke { grid-template-columns: 112px auto; --cw: 146px; }
+/* Five ability cards (karaoke songs among them) in one row: the row names
+   go above the cards to leave them room. */
+.market.has-five .card-row { grid-template-columns: auto auto; row-gap: 6px; }
+.market.has-five .row-tag { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.market.has-five .card-row.is-five { --cw: 142px; }
+.market.has-five .card-row.is-five .pile { --cw: 104px; }
+.card-row.is-five .row-cards { flex-wrap: nowrap; }
 .row-tag { display: grid; gap: 6px; justify-items: start; font: 700 15px/1.15 var(--display); }
 .row-note { font: 400 12px/1.35 var(--ui); color: var(--whitewash-dim); }
 .row-cards { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1319,6 +1326,18 @@ body.live-narrow .table .card-row,
 body.live-narrow .table .card-row.is-karaoke { grid-template-columns: 1fr; gap: 6px; --cw: 152px; }
 body.live-narrow .table .card-row .pile { --cw: 84px; justify-self: start; }
 body.live-narrow .table .row-tag { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+/* On a phone the five ability cards take two rows: the deck and two cards,
+   then three cards. */
+body.live-narrow .table .card-row.is-five {
+    --cw: 152px;
+    grid-template-columns: repeat(3, var(--cw));
+    column-gap: 10px;
+    row-gap: 10px;
+}
+body.live-narrow .table .card-row.is-five .row-tag { grid-column: 1 / -1; }
+body.live-narrow .table .card-row.is-five .row-cards { display: contents; }
+body.live-narrow .table .card-row.is-five .pile { order: 1; --cw: inherit; justify-self: stretch; }
+body.live-narrow .table .card-row.is-five .row-cards > * { order: 2; }
 body.live-narrow .table .mat-cards .card { --cw: 150px; }
 body.live-narrow .table .is-theirs .mat-cards .card { --cw: 110px; }
 body.live-narrow .table .across { grid-template-columns: 1fr; }

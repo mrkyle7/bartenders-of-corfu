@@ -161,19 +161,19 @@ Feature: Game turn actions
     Then player 1 should have 1 card
     And a move record should be created for the game
 
-  Scenario: Claiming a karaoke card leaves its place in the karaoke row empty
+  Scenario: Claiming a karaoke card from the ability row deals a new card in its place
     Given it is player 1's turn
-    And a karaoke card is available in row 1
+    And a karaoke card is available in row 3
     And player 1 has 3 spirits in their bladder
     And player 1 has a drunk level of 3
     When player 1 claims that card
     Then player 1 should have 1 card
-    And row 1 should have 3 cards
+    And row 3 should have 5 cards
     And player 1's bladder should contain 3 ingredients
 
   Scenario: Singing karaoke needs drunk level 3
     Given it is player 1's turn
-    And a karaoke card is available in row 1
+    And a karaoke card is available in row 3
     And player 1 has 3 spirits in their bladder
     And player 1 has a drunk level of 2
     When player 1 tries to claim that card
@@ -181,7 +181,7 @@ Feature: Game turn actions
 
   Scenario: Claiming a card is a free action and keeps the turn
     Given it is player 1's turn
-    And a karaoke card is available in row 1
+    And a karaoke card is available in row 3
     And player 1 has 3 spirits in their bladder
     And player 1 has a drunk level of 3
     When player 1 claims that card
@@ -195,7 +195,7 @@ Feature: Game turn actions
 
   Scenario: Player cannot claim a card they cannot afford
     Given it is player 1's turn
-    And a store card is available in row 1
+    And a store card is available in row 3
     And player 1 has 0 spirits in their bladder
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
@@ -215,16 +215,16 @@ Feature: Game turn actions
     When player 1 tries to refresh card row 2
     Then the action should be rejected with a 400 error
 
-  Scenario: Swiping the ability cards at drunk 2 is a free action
+  Scenario: Swiping the ability cards at drunk 3 is a free action
     Given it is player 1's turn
-    And player 1 has a drunk level of 2
+    And player 1 has a drunk level of 3
     When player 1 refreshes card row 3
-    Then row 3 should have 3 cards
+    Then row 3 should have 5 cards
     And it should still be player 1's turn
 
   Scenario: Player cannot swipe the ability cards when not drunk enough
     Given it is player 1's turn
-    And player 1 has a drunk level of 1
+    And player 1 has a drunk level of 2
     When player 1 tries to refresh card row 3
     Then the action should be rejected with a 400 error
 
@@ -300,7 +300,7 @@ Feature: Game turn actions
     And player 1's cup 0 contains 1 GIN, 1 VODKA, 1 TEQUILA, 1 RUM and 1 COLA
     And player 1 has "sugar" and "lemon" on their player mat
     And player 2 has claimed 2 karaoke cards
-    And a karaoke card is available in row 1
+    And a karaoke card is available in row 3
     And player 2 has 3 spirits in their bladder
     And player 2 has a drunk level of 3
     When player 1 sells cup 0 declaring specials "sugar,lemon"
@@ -332,7 +332,7 @@ Feature: Game turn actions
   Scenario: Player wins by claiming the third karaoke card
     Given it is player 1's turn
     And player 1 has claimed 2 karaoke cards
-    And a karaoke card is available in row 1
+    And a karaoke card is available in row 3
     And player 1 has 3 spirits in their bladder
     And player 1 has a drunk level of 3
     When player 1 claims that card
@@ -403,7 +403,7 @@ Feature: Game turn actions
     And player 1 holds a VODKA store card with 1 stored spirit
     And player 1 has 1 spirit in their bladder
     And player 1 has a drunk level of 3
-    And a karaoke card is available in row 1
+    And a karaoke card is available in row 3
     When player 1 claims that card
     Then the action should be rejected with a 400 error
 
@@ -443,15 +443,14 @@ Feature: Game turn actions
     And a refresher card is available in row 3
     And player 1 has 2 mixers in their bladder
     When player 1 claims that card
-    Then row 3 should have 2 cards
+    Then row 3 should have 4 cards
 
-  Scenario: At game start 3 karaoke cards are out, the other 2 shuffled into the ability deck
+  Scenario: At game start every karaoke card is shuffled into the ability deck and 5 are dealt
     Given it is player 1's turn
-    Then row 1 should have 3 cards
-    And all cards in row 1 should be karaoke type
-    And row 3 should have 3 cards
-    And the deck should have 18 cards remaining
-    And row 3 and the ability deck should hold 2 karaoke cards
+    Then there should be no karaoke row
+    And row 3 should have 5 cards
+    And the deck should have 19 cards remaining
+    And row 3 and the ability deck should hold 5 karaoke cards
     And the orders row and order deck should hold 18 orders in all
 
   # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────

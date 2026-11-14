@@ -720,7 +720,7 @@ function clearRow(position) {
     const orders = position === 2;
     ask(orders
         ? 'Clear the orders? All three are discarded and three new ones are dealt. This is free, once a turn.'
-        : 'Swipe the ability cards? All three are discarded and three new ones are dealt. This is free, once a turn.', [
+        : 'Swipe the ability cards? They are all discarded and a fresh row is dealt. This is free, once a turn.', [
         { label: orders ? 'Clear the orders' : 'Swipe them', onclick: () => act(() => api.refreshCardRow(gameId, position)), kind: 'go' },
         { label: 'Leave them', onclick: () => { ui.prompt = null; render({ force: true }); } },
     ]);
@@ -1037,17 +1037,21 @@ function renderMarket() {
             ? h('button.btn.tiny', { type: 'button', onclick: () => clearRow(position), text: buttonText, 'data-k': `clear-${position}` })
             : h('span.row-note', { text: note }));
 
-    return h('section.market', { 'aria-label': 'Cards' },
-        h('div.card-row.is-karaoke', { 'aria-label': 'Karaoke stage', role: 'group' },
+    // Games dealt before the karaoke cards joined the ability deck keep
+    // their karaoke row.
+    const stage = state.card_rows.some((r) => r.position === 1);
+    const abilitySize = stage ? 3 : 5;
+    return h('section.market', { 'aria-label': 'Cards', cls: stage ? '' : 'has-five' },
+        stage ? h('div.card-row.is-karaoke', { 'aria-label': 'Karaoke stage', role: 'group' },
             tag('Karaoke stage', 'Sing at drunk 3+ with 2 of the song’s spirit. Three songs wins.'),
-            h('div.row-cards', {}, cells(1, 3))),
+            h('div.row-cards', {}, cells(1, 3))) : null,
         h('div.card-row', { 'aria-label': 'Orders', role: 'group' },
             tag('Orders', 'Sell what they want for the bonus. Clear at drunk 2+ (free).', 2, 'Clear (free)'),
             h('div.row-cards', {}, cells(2, 3)),
             cardBack(state.order_deck_size ?? 0, `Order deck, ${plural(state.order_deck_size ?? 0, 'order')}`, 'Orders', 'orders')),
-        h('div.card-row', { 'aria-label': 'Ability cards', role: 'group' },
-            tag('Ability cards', 'Swipe at drunk 2+ (free).', 3, 'Swipe (free)'),
-            h('div.row-cards', {}, cells(3, 3)),
+        h('div.card-row.is-abilities', { 'aria-label': 'Ability and karaoke cards', role: 'group', cls: stage ? '' : 'is-five' },
+            tag('Ability cards', 'Karaoke songs turn up here too. Swipe at drunk 3+ (free).', 3, 'Swipe (free)'),
+            h('div.row-cards', {}, cells(3, abilitySize)),
             cardBack(state.deck_size, `Ability deck, ${plural(state.deck_size, 'card')}`, 'Abilities', 'abilities')));
 }
 

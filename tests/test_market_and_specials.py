@@ -37,7 +37,7 @@ def _row(gs: GameState, position: int) -> CardRow:
     return next(r for r in gs.card_rows if r.position == position)
 
 
-def _off_stage_songs(gs: GameState) -> list[Card]:
+def _take_songs(gs: GameState) -> list[Card]:
     """Take the karaoke cards out of the ability deck and row 3."""
     abilities = _row(gs, 3)
     songs = [c for c in abilities.cards if c.card_type == "karaoke"]
@@ -47,15 +47,18 @@ def _off_stage_songs(gs: GameState) -> list[Card]:
     return songs
 
 
-def _stage(gs: GameState, *spirits: str) -> list[Card]:
-    """Put the karaoke cards for `spirits` on stage (row 1) and return them;
-    the songs left over go into the ability deck."""
-    stage = _row(gs, 1)
-    songs = stage.cards + _off_stage_songs(gs)
+def _deal_songs(gs: GameState, *spirits: str) -> list[Card]:
+    """Put the karaoke cards for `spirits` in the ability row (row 3) and
+    return them; the cards they push out go into the ability deck."""
+    songs = _take_songs(gs)
     wanted = [next(c for c in songs if c.spirit_type == s) for s in spirits]
-    order = wanted + [c for c in songs if c not in wanted]
-    stage.cards = order[:3]
-    gs._deck_dicts += [c.to_dict() for c in order[3:]]
+    abilities = _row(gs, 3)
+    row = wanted + abilities.cards
+    while len(row) < 5:  # the songs taken out of the row leave gaps
+        row.append(Card.from_dict(gs._deck_dicts.pop(0)))
+    abilities.cards = row[:5]
+    gs._deck_dicts += [c.to_dict() for c in row[5:]]
+    gs._deck_dicts += [c.to_dict() for c in songs if c not in wanted]
     return wanted
 
 
@@ -81,40 +84,36 @@ def test_setup_scales_with_players(players, target):
     assert gs.to_dict()["score_to_win"] == target
 
 
-def test_market_has_three_karaoke_cards_then_orders_then_abilities():
+def test_market_has_three_orders_and_five_ability_cards_with_karaoke_mixed_in():
     gs = _game()
-    karaoke, orders, abilities = (_row(gs, p).cards for p in (1, 2, 3))
-    assert len(karaoke) == 3 and all(c.card_type == "karaoke" for c in karaoke)
+    assert [r.position for r in gs.card_rows] == [2, 3]  # no karaoke row
+    orders, abilities = _row(gs, 2).cards, _row(gs, 3).cards
     assert len(orders) == 3 and all(c.card_type == "order" for c in orders)
-    assert len(abilities) == 3
+    assert len(abilities) == 5
     assert all(c.card_type != "order" for c in abilities)
-    # 19 ability cards (no Cocktail Shaker) plus the 2 songs not on stage,
-    # and 18 orders in all
+    # 19 ability cards (no Cocktail Shaker) and all 5 songs, one per spirit,
+    # shuffled together; 18 orders in all
     deck = [Card.from_dict(d) for d in gs._deck_dicts] + abilities
-    assert len(deck) == 21
+    assert len(deck) == 24
     songs = [c for c in deck if c.card_type == "karaoke"]
-    assert len(songs) == 2
-    # One song per spirit across the stage and the deck
-    spirits = {c.spirit_type for c in karaoke + songs}
+    spirits = {c.spirit_type for c in songs}
+    assert len(songs) == 5
     assert spirits == {"RUM", "GIN", "TEQUILA", "VODKA", "WHISKEY"}
     assert len(gs.order_deck) + len(orders) == 18
     assert "Cocktail Shaker" not in {c.name for c in deck}
 
 
-def test_which_songs_are_on_stage_is_random():
-    stages = {
-        frozenset(c.spirit_type for c in _row(_game(), 1).cards) for _ in range(40)
-    }
-    assert len(stages) > 1
+def test_the_ability_deck_is_shuffled_with_the_songs_in_it():
+    rows = {tuple(c.name for c in _row(_game(), 3).cards) for _ in range(20)}
+    assert len(rows) > 1
+    deals = [_row(_game(), 3).cards for _ in range(200)]
+    assert any(c.card_type == "karaoke" for row in deals for c in row)
 
 
 def test_a_song_dealt_to_the_ability_row_is_sung_and_replaced():
     gs = _game()
     pid, ps = _me(gs)
-    song, *rest = _off_stage_songs(gs)
-    gs._deck_dicts += [c.to_dict() for c in rest]
-    abilities = _row(gs, 3)
-    abilities.cards = abilities.cards[:2] + [song]
+    (song,) = _deal_songs(gs, "GIN")
     deck_before = len(gs._deck_dicts)
     ps.bladder = [Ingredient[song.spirit_type]] * 2
     ps.drunk_level = 3
@@ -125,7 +124,7 @@ def test_a_song_dealt_to_the_ability_row_is_sung_and_replaced():
     assert me.karaoke_cards_claimed == 1 and me.points == 5
     assert payload["row_position"] == 3
     # Its place is dealt from the ability deck
-    assert len(_row(new, 3).cards) == 3
+    assert len(_row(new, 3).cards) == 5
     assert len(new._deck_dicts) == deck_before - 1
 
 
@@ -146,15 +145,13 @@ def test_claiming_is_free_and_leaves_the_main_action():
     pid, ps = _me(gs)
     ps.bladder = [Ingredient.RUM] * 2
     ps.drunk_level = 3
-    (sea_shanty,) = _stage(gs, "RUM")
+    (sea_shanty,) = _deal_songs(gs, "RUM")
 
     new, payload = claim_card(gs, pid, sea_shanty.id)
 
     assert payload["is_free_action"] is True
     assert new.player_turn == pid
     assert new.main_action_taken_this_turn is False
-    # The karaoke row isn't refilled
-    assert len(_row(new, 1).cards) == 2
 
 
 def test_only_one_claim_a_turn():
@@ -162,7 +159,7 @@ def test_only_one_claim_a_turn():
     pid, ps = _me(gs)
     ps.bladder = [Ingredient.RUM] * 2 + [Ingredient.GIN] * 2
     ps.drunk_level = 3
-    rum, gin = _stage(gs, "RUM", "GIN")
+    rum, gin = _deal_songs(gs, "RUM", "GIN")
     gs, _ = claim_card(gs, pid, rum.id)
     with pytest.raises(GameException) as exc:
         claim_card(gs, pid, gin.id)
@@ -190,18 +187,17 @@ def test_orders_cannot_be_claimed():
 def test_turn_waits_while_a_claim_is_possible_then_ends_after_it():
     gs = _game()
     pid, ps = _me(gs)
-    ps.bladder = [Ingredient.RUM] * 2
-    ps.drunk_level = 3
+    ps.bladder = [Ingredient.RUM]
+    ps.drunk_level = 2  # too sober to swipe the abilities
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
-    (sea_shanty,) = _stage(gs, "RUM")
-    gs.card_rows[1].cards = []  # no orders to muddy the sale
-    # nothing to swipe either (drunk 3 could otherwise swipe the abilities)
-    _row(gs, 3).cards = []
+    _row(gs, 2).cards = []  # no orders to muddy the sale (or to clear)
+    store = Card(id="c-store", card_type="store", name="Rum Store", spirit_type="RUM")
+    _row(gs, 3).cards = [store]
     gs._deck_dicts = []
     gs, _ = sell_cup(gs, pid, 0, [])
-    # Main action done, but Sea Shanty is affordable: the turn stays open
+    # Main action done, but the Rum Store is affordable: the turn stays open
     assert gs.player_turn == pid
-    gs, _ = claim_card(gs, pid, sea_shanty.id)
+    gs, _ = claim_card(gs, pid, store.id)
     assert gs.player_turn != pid
 
 
@@ -218,7 +214,7 @@ def test_end_turn_gives_up_a_possible_claim():
     pid, ps = _me(gs)
     ps.bladder = [Ingredient.RUM] * 3
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
-    gs.card_rows[1].cards = []
+    _row(gs, 2).cards = []
     # A card the rum can pay for, so a claim is always possible
     _row(gs, 3).cards = [
         Card(id="c-store", card_type="store", name="Rum Store", spirit_type="RUM")
@@ -325,7 +321,7 @@ def test_clearing_orders_after_the_main_action_still_works():
     pid, ps = _me(gs)
     ps.drunk_level = 4  # a wee sobers you up by one
     ps.bladder = [Ingredient.SODA]
-    gs.card_rows[0].cards = []  # nothing to claim
+    _row(gs, 3).cards = []  # nothing to claim
     after_wee, _ = go_for_a_wee(gs, pid)
     # The turn waits: the orders could still be cleared
     assert after_wee.player_turn == pid
@@ -333,18 +329,19 @@ def test_clearing_orders_after_the_main_action_still_works():
     assert payload["is_free_action"] is True
 
 
-def test_swiping_abilities_needs_drunk_two_and_is_free_once_a_turn():
+def test_swiping_abilities_needs_drunk_three_and_is_free_once_a_turn():
     gs = _game()
     pid, ps = _me(gs)
-    ps.drunk_level = 1
+    ps.drunk_level = 2
     with pytest.raises(GameException):
         refresh_card_row(gs, pid, 3)
-    ps.drunk_level = 2
+    ps.drunk_level = 3
     before = [c.id for c in _row(gs, 3).cards]
     new, payload = refresh_card_row(gs, pid, 3)
     assert payload["is_free_action"] is True
     assert new.player_turn == pid and not new.main_action_taken_this_turn
     assert [d["id"] for d in new.discard] == before
+    assert len(_row(new, 3).cards) == 5
     with pytest.raises(GameException) as exc:
         refresh_card_row(new, pid, 3)
     assert exc.value.status_code == 409
@@ -352,7 +349,7 @@ def test_swiping_abilities_needs_drunk_two_and_is_free_once_a_turn():
 
 def _swipe(gs: GameState) -> GameState:
     pid, ps = _me(gs)
-    ps.drunk_level = 2
+    ps.drunk_level = 3
     gs.free_actions_used_this_turn = []
     gs, _ = refresh_card_row(gs, pid, 3)
     return gs
@@ -361,12 +358,11 @@ def _swipe(gs: GameState) -> GameState:
 def test_swiped_cards_wait_on_the_discard_pile_until_the_deck_runs_out():
     gs = _game()
     swiped = {c.id for c in _row(gs, 3).cards}
-    gs = _swipe(gs)
     # Every card left in the deck is dealt before any swiped one comes back
-    while gs._deck_dicts:
-        assert not swiped & {c.id for c in _row(gs, 3).cards}
+    while len(gs._deck_dicts) >= 5:
         gs = _swipe(gs)
-    assert swiped <= {d["id"] for d in gs.discard} | {c.id for c in _row(gs, 3).cards}
+        assert not swiped & {c.id for c in _row(gs, 3).cards}
+    assert swiped <= {d["id"] for d in gs.discard}
 
 
 def test_an_empty_deck_is_made_again_from_the_discard_pile_shuffled():
@@ -374,13 +370,13 @@ def test_an_empty_deck_is_made_again_from_the_discard_pile_shuffled():
     for _ in range(30):
         gs = _game()
         deck = [Card.from_dict(d) for d in gs._deck_dicts]
-        _row(gs, 3).cards = deck[:3]
-        gs.discard = [c.to_dict() for c in deck[3:]]
+        _row(gs, 3).cards = deck[:5]
+        gs.discard = [c.to_dict() for c in deck[5:]]
         gs._deck_dicts = []
         gs = _swipe(gs)
         # A fresh row comes off the reshuffled discards; nothing is lost
-        assert len(_row(gs, 3).cards) == 3
-        assert len(gs._deck_dicts) + len(gs.discard) + 3 == len(deck)
+        assert len(_row(gs, 3).cards) == 5
+        assert len(gs._deck_dicts) + len(gs.discard) + 5 == len(deck)
         orders_seen.add(tuple(d["id"] for d in gs._deck_dicts[:5]))
     # Shuffled, not dealt back in the order they were discarded
     assert len(orders_seen) > 1
@@ -583,7 +579,7 @@ def test_specials_never_pay_for_cards():
 def test_a_cocktail_made_with_specials_in_the_glass():
     gs = _game()
     pid, ps = _me(gs)
-    gs.card_rows[1].cards = []
+    _row(gs, 2).cards = []
     ps.cups[0] = Cup(
         ingredients=[Ingredient.RUM, Ingredient.SUGAR, Ingredient.RUM, Ingredient.SODA]
     )
@@ -744,7 +740,7 @@ def test_rolls_never_show_a_special_that_is_held_or_showing(monkeypatch):
 def test_selling_a_cocktail_returns_its_specials_to_the_supply():
     gs = _game()
     pid, ps = _me(gs)
-    gs.card_rows[1].cards = []
+    _row(gs, 2).cards = []
     ps.special_ingredients = ["sugar"]
     tokens = gs.bag_contents.count(Ingredient.SPECIAL)
     ps.cups[0] = Cup(ingredients=[Ingredient.RUM, Ingredient.RUM, Ingredient.SODA])
@@ -769,7 +765,7 @@ def test_rerolling_is_gone():
 def test_four_players_trigger_the_last_round_at_thirty():
     gs = _game(4)
     pid, ps = _me(gs)
-    gs.card_rows[1].cards = []
+    _row(gs, 2).cards = []
     ps.points = 29
     ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.COLA])
     new, _ = sell_cup(gs, pid, 0, [])
@@ -821,7 +817,6 @@ def _ability(gs: GameState, card: Card) -> None:
 def test_claiming_leaves_the_cost_in_your_bladder():
     gs = _game()
     pid, ps = _me(gs)
-    _row(gs, 1).cards = []
     _ability(
         gs,
         Card(
@@ -842,7 +837,6 @@ def test_claiming_leaves_the_cost_in_your_bladder():
 def test_a_cup_doubler_remembers_which_glass_it_is_on():
     gs = _game()
     pid, ps = _me(gs)
-    _row(gs, 1).cards = []
     _ability(gs, Card(id="umb", card_type="cup_doubler", name="Cocktail Umbrella"))
     ps.bladder = [Ingredient.RUM] * 3
     new, _ = claim_card(gs, pid, "umb", cup_index=1, spirit_type="RUM")
@@ -868,7 +862,6 @@ def test_a_cup_doubler_remembers_which_glass_it_is_on():
 def test_a_specialist_can_be_paid_with_its_special(spirit, special):
     gs = _game()
     pid, ps = _me(gs)
-    _row(gs, 1).cards = []
     _ability(
         gs,
         Card(id="sp", card_type="specialist", name="Specialist", spirit_type=spirit),
@@ -883,7 +876,6 @@ def test_a_specialist_can_be_paid_with_its_special(spirit, special):
 def test_a_specialist_paid_with_spirits_when_you_say_so():
     gs = _game()
     pid, ps = _me(gs)
-    _row(gs, 1).cards = []
     _ability(
         gs,
         Card(id="sp", card_type="specialist", name="Rum Specialist", spirit_type="RUM"),
@@ -909,7 +901,7 @@ def test_the_wrong_special_does_not_pay_for_a_specialist():
 def test_karaoke_needs_drunk_three_and_two_spirits():
     gs = _game()
     pid, ps = _me(gs)
-    (card,) = _stage(gs, "GIN")
+    (card,) = _deal_songs(gs, "GIN")
     ps.bladder = [Ingredient.GIN] * 3
     ps.drunk_level = 2
     with pytest.raises(GameException):
@@ -926,7 +918,7 @@ def test_karaoke_needs_drunk_three_and_two_spirits():
 def test_one_spirit_does_not_sing_a_song_however_drunk():
     gs = _game()
     pid, ps = _me(gs)
-    (card,) = _stage(gs, "GIN")
+    (card,) = _deal_songs(gs, "GIN")
     ps.bladder = [Ingredient.GIN]
     ps.drunk_level = 5
     with pytest.raises(GameException):
@@ -936,7 +928,6 @@ def test_one_spirit_does_not_sing_a_song_however_drunk():
 def test_a_store_card_stores_all_of_its_spirit():
     gs = _game()
     pid, ps = _me(gs)
-    _row(gs, 1).cards = []
     _ability(
         gs,
         Card(id="st", card_type="store", name="Gin Store", spirit_type="GIN"),
