@@ -55,3 +55,7 @@ A task is complete when:
 - `spec-reader` — reads allium specs and returns a precise rule briefing; invoke before implementing any game logic to avoid misreading the spec
 - `bdd-test-writer` — writes BDD scenarios and step definitions matching project style; invoke when adding test coverage for new behaviour
 - `ui-developer` — builds and modifies UI components; enforces the board-game interaction model (clickable elements, state at a glance, guided turn flow), mobile/desktop layout, WCAG 2.1 AA, and the colour rules in `.claude/agents/ui-developer.md` ("Colours and contrast"): there are no colour themes, and the game and home pages share the bar top's tokens.
+
+## The cheetahmoongames home page reads this game's saved data
+
+The home page's "Your games" list (`site/games.js` in mrkyle7/cheetahmoongames) reads this game's Supabase `games` table directly, without waking this game's server, and works out whose turn it is with its own copy of the rule. **When you change core game logic, who the game is waiting on, or the shape of what's saved (`GameState.to_dict()` (`player_turn`, `winner`), `game_status`, the `games` table), check `site/games.js` and its tests in mrkyle7/cheetahmoongames and update them too (a pull request there), or the home page will show the wrong turn or nothing.** Never log or expose any key in this game's data to it either way: the keys it holds are covered in that repo's CLAUDE.md.
