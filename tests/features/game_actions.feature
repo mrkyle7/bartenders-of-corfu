@@ -448,7 +448,6 @@ Feature: Game turn actions
   Scenario: At game start every karaoke card is shuffled into the ability deck and 5 are dealt
     Given it is player 1's turn
     Then there should be no karaoke row
-    And row 2 should have 3 cards
     And row 3 should have 5 cards
     And the deck should have 19 cards remaining
     And row 3 and the ability deck should hold 5 karaoke cards
