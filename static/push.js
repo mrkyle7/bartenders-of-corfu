@@ -2,8 +2,8 @@
  * push.js — Web Push notifications, shared by the home page and every game UI.
  *
  * The server sends a notification when it's your turn or a game ends, unless
- * you're looking at that game (see app/presence.py): game pages only poll
- * while visible, and tell the server when they're hidden.
+ * you're looking at that game (see app/presence.py): game pages tell the
+ * server while they're shown and in focus (watchGame).
  *
  * Exposes window.bocPush:
  *   supported          whether this browser can have notifications
@@ -94,16 +94,35 @@
             }
         },
 
-        /** When the page is hidden, the server stops counting you as watching. */
+        /**
+         * Tells the server whether you're looking at the game (the page shown
+         * and in focus), so you aren't notified about it meanwhile. Says so
+         * again every 15 seconds while you are (the server forgets after 30,
+         * so a locked phone soon stops counting), and straight away when not.
+         */
         watchGame(gameId) {
             if (!gameId) return;
-            document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState !== 'hidden') return;
-                const url = `/v1/games/${encodeURIComponent(gameId)}/away`;
-                if (!(navigator.sendBeacon && navigator.sendBeacon(url))) {
-                    fetch(url, { method: 'POST', keepalive: true }).catch(() => {});
-                }
-            });
+            const url = `/v1/games/${encodeURIComponent(gameId)}/looking`;
+            const tab = (crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2);
+            let told = false;
+            let timer = null;
+            const tell = (looking) => fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tab, looking }),
+                keepalive: true, // still sent as the page goes away
+            }).catch(() => {});
+            const report = () => {
+                const now = document.visibilityState === 'visible' && document.hasFocus();
+                if (told && !now) tell(false);
+                if (now) tell(true);
+                told = now;
+                clearTimeout(timer);
+                timer = now ? setTimeout(report, 15000) : null;
+            };
+            for (const ev of ['focus', 'blur', 'pageshow', 'pagehide']) window.addEventListener(ev, report);
+            document.addEventListener('visibilitychange', report);
+            report();
         },
 
         /** The installed app's icon shows how many games are waiting for you. */

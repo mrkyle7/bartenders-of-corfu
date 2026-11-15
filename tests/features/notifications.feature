@@ -1,7 +1,8 @@
 Feature: Notifications
   Players who turned notifications on hear when it's their turn, unless
-  they're looking at the game: game pages only poll while they're showing,
-  and say when they're hidden.
+  they're looking at the game: its page is shown and in focus, and says so.
+  A page that's merely open, in a background tab or behind another app,
+  doesn't count.
 
   Background:
     Given a started game with 2 players
@@ -16,6 +17,11 @@ Feature: Notifications
     Given player 2 is looking at the game
     And player 1 has completed a turn
     Then player 2 should not be sent a notification
+
+  Scenario: A player with the game open but not looking at it is told
+    Given player 2 has the game open without looking at it
+    And player 1 has completed a turn
+    Then player 2 should be sent a notification saying "It's your turn"
 
   Scenario: Nobody is told while the turn stays with the same player
     Given player 2 is not looking at the game

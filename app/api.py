@@ -399,15 +399,34 @@ async def get_game(game_id: str, request: Request):
                 content={"error": "User is not a member of this game"},
             )
         logger.info(f"{token_user.username} get game info for ID {game_id}")
-        if token_user.id in game.players:
-            # Game pages only poll while showing: this player is watching
-            presence.mark_watching(game.id, token_user.id)
         result = game.to_dict()
         result["pending_undo"] = gameManager.get_pending_undo(game.id)
         return JSONResponse(content=result)
     except Exception:
         logger.exception("Failed to validate user on get game")
         return JSONResponse(status_code=500, content={"error": "Failed to get game"})
+
+
+@app.post("/v1/games/{game_id}/looking")
+async def game_page_looking(game_id: str, request: Request):
+    """A game page says whether its player is looking at it: shown and in focus.
+
+    Body: ``{"tab": "<the page's id>", "looking": true | false}``. Pages say so
+    every 15 seconds while they are, so they aren't notified meanwhile
+    (app/presence.py).
+    """
+    token_user, err = _require_auth(request)
+    if err:
+        return err
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    tab = body.get("tab") if isinstance(body, dict) else None
+    if not isinstance(tab, str) or not tab or len(tab) > 64:
+        return JSONResponse(status_code=400, content={"error": "Which page?"})
+    presence.look(game_id, token_user.id, tab, bool(body.get("looking")))
+    return JSONResponse(content={"ok": True})
 
 
 @app.post("/v1/games/{game_id}/away")
@@ -1267,8 +1286,9 @@ def _send_to_user(user_id, title: str, body: str, game_id) -> None:
 
 def _notify_after_action(game_id, old_turn, cancelled_game=None) -> None:
     """Tell players what an action changed: whose turn it is, or that the game
-    ended. Runs after the response has gone (a background task), so a slow
-    push service never holds up a move.
+    ended. Runs before the reply goes: Cloud Run slows the CPU once a reply
+    has gone (cpu_idle), which could leave a notification unsent. Each push is
+    capped by push.py's timeout.
 
     Reads the game afresh because bots move within the same request: the turn
     may have passed through several bots to the next human since the action.
@@ -1311,8 +1331,9 @@ def _notify_after_action(game_id, old_turn, cancelled_game=None) -> None:
 
 
 def _after_action(background_tasks: BackgroundTasks, game, old_turn) -> None:
-    """Queue the notifications for an action, sent once the reply has gone."""
-    background_tasks.add_task(_notify_after_action, game.id, old_turn)
+    """Send the notifications for an action, before the reply goes (see
+    _notify_after_action). ``background_tasks`` is kept so callers needn't change."""
+    _notify_after_action(game.id, old_turn)
 
 
 class DrawFromBagRequest(BaseModel):
@@ -1683,7 +1704,7 @@ async def action_cancel_game(
         return err
     try:
         new_state, payload = gameManager.cancel_game(game, token_user.id)
-        background_tasks.add_task(_notify_after_action, game.id, None, game)
+        _notify_after_action(game.id, None, game)  # before the reply: see its docstring
         logger.info("%s cancelled game %s", token_user.username, game_id)
         return JSONResponse(
             content={"game_state": new_state.to_dict(), "move": payload}

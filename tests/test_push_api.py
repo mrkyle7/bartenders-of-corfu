@@ -213,16 +213,48 @@ class TestAway(unittest.TestCase):
         resp = self.client.post("/v1/games/abc/away", cookies={"userjwt": "invalid"})
         self.assertEqual(resp.status_code, 401)
 
-    def test_viewing_a_game_counts_as_watching_until_away(self):
+    def test_viewing_a_game_is_not_watching_it(self):
         from app import presence
 
         user_id, token = _register(self.client)
         game_id = self.client.post("/v1/games", cookies={"userjwt": token}).json()["id"]
         self.client.get(f"/v1/games/{game_id}", cookies={"userjwt": token})
+        self.assertFalse(presence.is_watching(game_id, user_id))
+
+    def test_looking_until_the_page_says_not_or_away(self):
+        from app import presence
+
+        user_id, token = _register(self.client)
+        game_id = self.client.post("/v1/games", cookies={"userjwt": token}).json()["id"]
+        url = f"/v1/games/{game_id}/looking"
+        resp = self.client.post(
+            url, json={"tab": "t1", "looking": True}, cookies={"userjwt": token}
+        )
+        self.assertEqual(resp.status_code, 200)
         self.assertTrue(presence.is_watching(game_id, user_id))
+        self.client.post(
+            url, json={"tab": "t1", "looking": False}, cookies={"userjwt": token}
+        )
+        self.assertFalse(presence.is_watching(game_id, user_id))
+        self.client.post(
+            url, json={"tab": "t1", "looking": True}, cookies={"userjwt": token}
+        )
         resp = self.client.post(f"/v1/games/{game_id}/away", cookies={"userjwt": token})
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(presence.is_watching(game_id, user_id))
+
+    def test_looking_needs_a_page_and_a_sign_in(self):
+        resp = self.client.post(
+            "/v1/games/abc/looking",
+            json={"tab": "t1", "looking": True},
+            cookies={"userjwt": "invalid"},
+        )
+        self.assertEqual(resp.status_code, 401)
+        _, token = _register(self.client)
+        resp = self.client.post(
+            "/v1/games/abc/looking", json={"looking": True}, cookies={"userjwt": token}
+        )
+        self.assertEqual(resp.status_code, 400)
 
 
 class TestNotifyAfterAction(unittest.TestCase):
