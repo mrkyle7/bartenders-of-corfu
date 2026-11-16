@@ -221,7 +221,9 @@ rule TakeIngredients {
     -- once across ALL ingredients assigned disposition=drink across all batches.
     let drunk_this_turn = chosen where disposition = drink (across all batches)
     ensures: ApplyDrunkModifier(player, drunk_this_turn)
-    ensures: ReplenishDisplay(board)
+    -- The display is not refilled here: the gaps wait until the next turn
+    -- starts (ReplenishDisplay, as the turn passes on), so the taker never sees what
+    -- comes out of the bag before their free actions.
 }
 
 rule PlaceIngredientInCup {
@@ -434,6 +436,7 @@ rule RefreshCardRow {
 -- ─── Board maintenance ────────────────────────────────────────────────────────
 
 rule ReplenishDisplay {
+    -- Runs as each turn starts, when the turn passes to the next player.
     when: ReplenishDisplay(board)
     requires: board.open_display.count < config.open_display_size
     ensures: DrawToken(board) onto board.open_display until it holds
