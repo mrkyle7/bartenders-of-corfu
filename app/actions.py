@@ -167,7 +167,9 @@ def _reset_take_batch_state(gs: GameState):
 
 
 def _advance_turn(gs: GameState) -> GameState:
-    """Advance player_turn to the next active player in turn_order and reset per-turn state."""
+    """Advance player_turn to the next active player in turn_order and reset
+    per-turn state. The open display is refilled as their turn starts, so
+    nobody sees what comes out of the bag before their own turn."""
     # Reset all per-turn tracking whenever the turn advances
     _reset_take_batch_state(gs)
     gs.main_action_taken_this_turn = False
@@ -187,6 +189,7 @@ def _advance_turn(gs: GameState) -> GameState:
         ps = gs.player_states.get(candidate)
         if ps and not ps.is_eliminated:
             gs.player_turn = candidate
+            _replenish_display(gs)
             return gs
 
     # All players eliminated — leave turn unchanged (game should be ended)
@@ -972,7 +975,8 @@ def take_ingredients(
         # Apply drunk modifier once across all ingredients drunk this whole turn
         if gs.drunk_ingredients_this_turn:
             _apply_drunk_modifier(gs, player_id, gs.drunk_ingredients_this_turn)
-        _replenish_display(gs)
+        # The display is refilled when the next turn starts (_advance_turn),
+        # not now: what comes out isn't seen before this turn's free actions.
         # Reset take batch state before handling turn action (since _advance_turn
         # may or may not be called depending on free actions)
         _reset_take_batch_state(gs)

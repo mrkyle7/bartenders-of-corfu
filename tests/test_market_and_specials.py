@@ -408,6 +408,61 @@ def _bag_of(gs: GameState, tokens: list[Ingredient]) -> None:
     gs.bag_contents = list(tokens)
 
 
+def _take_three_from_the_display(gs: GameState):
+    pid, ps = _me(gs)
+    ps.drunk_level = 0  # takes three
+    gs.open_display = [Ingredient.COLA] * 5
+    gs.display_specials = [None] * 5
+    return take_ingredients(
+        gs,
+        pid,
+        [
+            {
+                "ingredient": "COLA",
+                "source": "display",
+                "disposition": "cup",
+                "cup_index": 0,
+            }
+        ]
+        * 3,
+    )
+
+
+def test_the_display_is_not_refilled_while_the_taker_still_has_free_actions():
+    gs = _game()
+    pid, ps = _me(gs)
+    # A card the bladder can pay for keeps the turn open after the take
+    _row(gs, 3).cards = [
+        Card(id="c-store", card_type="store", name="Rum Store", spirit_type="RUM")
+    ]
+    ps.bladder = [Ingredient.RUM]
+    bag = len(gs.bag_contents)
+
+    gs, payload = _take_three_from_the_display(gs)
+
+    assert payload["turn_complete"] and gs.player_turn == pid
+    # Nothing has come out of the bag yet: the gaps wait for the next turn
+    assert gs.open_display == [Ingredient.COLA] * 2
+    assert len(gs.bag_contents) == bag
+    gs, _ = claim_card(gs, pid, "c-store")
+    assert gs.player_turn != pid
+    assert len(gs.open_display) == 5
+
+
+def test_the_display_is_refilled_as_the_next_turn_starts():
+    gs = _game()
+    pid, _ = _me(gs)
+    _row(gs, 2).cards = []  # nothing free left to do, so the turn ends
+    _row(gs, 3).cards = []
+    gs._deck_dicts = []
+
+    gs, payload = _take_three_from_the_display(gs)
+
+    assert gs.player_turn != pid
+    assert len(gs.open_display) == 5
+    assert gs.open_display[:2] == [Ingredient.COLA] * 2
+
+
 def test_specials_drawn_to_fill_the_display_go_to_the_specials_display(monkeypatch):
     monkeypatch.setattr("app.GameState.random.choice", lambda seq: seq[0])
     gs = _game()

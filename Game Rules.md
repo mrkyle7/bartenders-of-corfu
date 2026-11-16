@@ -60,7 +60,7 @@ Your turn ends once you've taken your main action and have no free action left t
   - **Drink it.** It goes into your bladder (see "Having a drink").
 - Nothing goes back in the bag. A blind draw can hand you anything, specials included, and it's yours to pour or drink.
 - You can't pour if the bag, the display and the specials tray together hold fewer than you need.
-- When you've taken them all, your drunk level changes once for everything you drank, and the display is refilled from the bag.
+- When you've taken them all, your drunk level changes once for everything you drank. The gaps in the display stay empty until the next player's turn starts: they refill it from the bag then, so nobody sees what comes out before their own turn.
 
 **Specials** (bitters, cointreau, lemon, sugar, vermouth) are for cocktails. A glass with a special in it can only be sold as the cocktail it makes. You might drink one instead, so a rival doesn't get it or to claim a specialist card with it.
 
