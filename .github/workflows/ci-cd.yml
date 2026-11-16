@@ -19,7 +19,8 @@ jobs:
 
     - uses: supabase/setup-cli@v1
       with:
-        version: latest
+        # Pinned: resolving "latest" calls the GitHub API and can hit its rate limit
+        version: 3.2.0
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -91,7 +92,8 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: resolving "latest" calls the GitHub API and can hit its rate limit
+          version: 3.2.0
 
       - name: Authenticate to GCP via OIDC
         uses: google-github-actions/auth@v2
