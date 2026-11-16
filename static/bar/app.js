@@ -228,8 +228,8 @@ async function boot() {
         }
         toast(e.message, 'error');
     }
-    // Polls only while the page is showing, so the server counts you as
-    // watching and only notifies you when you're not (static/push.js).
+    // Polls only while the page is showing. Whether you're looking at the
+    // game, for notifications, is reported separately (watchGame in static/push.js).
     setInterval(() => {
         if (!busy && document.visibilityState === 'visible') refresh().catch(() => {});
     }, POLL_MS);

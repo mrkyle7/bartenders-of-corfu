@@ -2127,7 +2127,24 @@ def player_not_looking(ctx, n):
 @given(parsers.parse("player {n:d} is looking at the game"))
 def player_looking(ctx, n):
     token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/looking",
+        json={"tab": f"page-{n}", "looking": True},
+        cookies=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+@given(parsers.parse("player {n:d} has the game open without looking at it"))
+def player_open_not_looking(ctx, n):
+    token, _ = _player(ctx, n)
     _get_game(token, ctx["game_id"])
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/looking",
+        json={"tab": f"page-{n}", "looking": False},
+        cookies=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
 
 
 @when(parsers.parse('player {n:d} turns on notifications for "{endpoint}"'))

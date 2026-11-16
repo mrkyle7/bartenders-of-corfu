@@ -10,7 +10,7 @@ def setup_function():
     presence.clear()
 
 
-def test_a_player_who_polled_just_now_is_watching():
+def test_a_player_whose_page_says_so_is_watching():
     game, player, other = uuid4(), uuid4(), uuid4()
     presence.mark_watching(game, player)
     assert presence.is_watching(game, player)
@@ -26,7 +26,7 @@ def test_watching_ends_when_the_page_is_hidden():
     assert not presence.is_watching(game, player)
 
 
-def test_watching_ends_when_the_polls_stop():
+def test_watching_ends_when_the_page_stops_saying_so():
     game, player = uuid4(), uuid4()
     with patch("app.presence.time.monotonic", return_value=1000.0):
         presence.mark_watching(game, player)
@@ -42,3 +42,13 @@ def test_old_entries_are_forgotten():
     with patch("app.presence.time.monotonic", return_value=1000.0):
         presence.mark_watching(uuid4(), uuid4())
     assert len(presence._seen) == 1
+
+
+def test_each_page_says_for_itself():
+    game, player = uuid4(), uuid4()
+    presence.look(game, player, "t1", True)
+    presence.look(game, player, "t2", True)
+    presence.look(game, player, "t1", False)
+    assert presence.is_watching(game, player), "still looking on t2"
+    presence.look(game, player, "t2", False)
+    assert not presence.is_watching(game, player)
