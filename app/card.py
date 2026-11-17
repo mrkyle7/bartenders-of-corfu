@@ -25,6 +25,9 @@ ORDERS_ROW = 2
 ABILITY_ROW = 3
 ROW_SIZE = 3  # orders
 ABILITY_ROW_SIZE = 5
+# Ice cards in the ability deck, and the ice tokens each holds once claimed
+ICE_CARDS = 3
+ICE_TOKENS_PER_CARD = 2
 
 
 @dataclass
@@ -43,14 +46,18 @@ class IngredientRequirement:
 @dataclass
 class Card:
     id: str  # UUID as string
-    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler" | "specialist" | "free_action" | "order"
+    card_type: str  # "karaoke" | "store" | "refresher" | "cup_doubler" | "specialist" | "free_action" | "ice" | "order"
     name: str = ""
     spirit_type: str | None = None  # "WHISKEY" | "RUM" | "VODKA" | "GIN" | "TEQUILA"
     mixer_type: str | None = None  # "COLA" | "SODA" | "TONIC" | "CRANBERRY"
     stored_spirits: list[str] = field(default_factory=list)
+    # Ice cards only: the ice tokens left on it (each sells one double on the
+    # rocks, then it's gone). Set when the card is claimed.
+    ice_tokens: int = 0
     # Order cards only: what drink is wanted and the bonus for serving it.
-    # drink is "simple" (a spirit and mixer, single or double), "slammer" or
-    # "cocktail" (named by ``cocktail``).
+    # drink is "simple" (a spirit and mixer, single or double), "slammer",
+    # "rocks" (a double of the spirit on the rocks) or "cocktail" (named by
+    # ``cocktail``).
     drink: str | None = None
     cocktail: str | None = None
     bonus: int = 0
@@ -81,7 +88,7 @@ class Card:
             return [IngredientRequirement(kind="spirit", count=2)]
         elif self.card_type == "free_action":
             return [IngredientRequirement(kind="spirit", count=3)]
-        return []
+        return []  # ice: drink a straight double that turn, no bladder cost
 
     def to_dict(self) -> dict:
         d = {
@@ -96,6 +103,8 @@ class Card:
         }
         if self.free_action_type:
             d["free_action_type"] = self.free_action_type
+        if self.card_type == "ice":
+            d["ice_tokens"] = self.ice_tokens
         if self.card_type == "order":
             d.update(drink=self.drink, cocktail=self.cocktail, bonus=self.bonus)
         return d
@@ -114,6 +123,7 @@ class Card:
             spirit_type=d.get("spirit_type"),
             mixer_type=d.get("mixer_type"),
             stored_spirits=list(d.get("stored_spirits", [])),
+            ice_tokens=d.get("ice_tokens", 0),
             drink=d.get("drink"),
             cocktail=d.get("cocktail"),
             bonus=d.get("bonus", 0),
@@ -137,11 +147,12 @@ class CardRow:
 
 
 def build_deck(game_modes: list[str] | None = None) -> list[Card]:
-    """Build the karaoke and ability cards (unshuffled), 24 in all.
+    """Build the karaoke and ability cards (unshuffled), 27 in all.
 
     5 KaraokeCards (one per spirit), 5 StoreCards (one per spirit),
     4 RefresherCards (one per mixer), 2 CupDoublerCards,
-    5 SpecialistCards (one per spirit), 3 FreeActionCards (RUM, VODKA, GIN).
+    5 SpecialistCards (one per spirit), 3 FreeActionCards (RUM, VODKA, GIN),
+    3 IceCards.
 
     ``game_modes`` is accepted for older callers and ignored: there are no
     optional modes that change the deck any more.
@@ -213,6 +224,10 @@ def build_deck(game_modes: list[str] | None = None) -> list[Card]:
             )
         )
 
+    # 3 IceCards — each holds ICE_TOKENS_PER_CARD ice tokens once claimed
+    for _ in range(ICE_CARDS):
+        cards.append(Card(id=str(uuid4()), card_type="ice", name="Ice Bucket"))
+
     return cards
 
 
@@ -227,17 +242,26 @@ _SIMPLE_ORDERS = [
     ("Whisky Soda", "WHISKEY", "SODA"),
     ("Gin and Tonic", "GIN", "TONIC"),
 ]
+# On the rocks orders: a double of this spirit with nothing but ice (every
+# spirit but tequila, which makes a slammer instead).
+_ROCKS_ORDERS = [
+    ("Vodka on the Rocks", "VODKA"),
+    ("Rum on the Rocks", "RUM"),
+    ("Whisky on the Rocks", "WHISKEY"),
+    ("Gin on the Rocks", "GIN"),
+]
 SIMPLE_ORDER_BONUS = 2
+ROCKS_ORDER_BONUS = 2
 SLAMMER_ORDER_BONUS = 3
 COCKTAIL_ORDER_BONUS = 4
 LONG_ISLAND_ORDER_BONUS = 5
 
 
 def build_order_deck() -> list[Card]:
-    """Build the 18 drink orders (unshuffled).
+    """Build the 22 drink orders (unshuffled).
 
-    8 simple drinks (+2), the Tequila Slammer (+3) and one order per
-    cocktail (+4; the Long Island Iced Tea +5).
+    8 simple drinks (+2), 4 doubles on the rocks (+2), the Tequila Slammer
+    (+3) and one order per cocktail (+4; the Long Island Iced Tea +5).
     """
     from app.cocktails import COCKTAIL_NAMES
 
@@ -252,6 +276,17 @@ def build_order_deck() -> list[Card]:
             bonus=SIMPLE_ORDER_BONUS,
         )
         for name, spirit, mixer in _SIMPLE_ORDERS
+    ]
+    orders += [
+        Card(
+            id=str(uuid4()),
+            card_type="order",
+            name=name,
+            spirit_type=spirit,
+            drink="rocks",
+            bonus=ROCKS_ORDER_BONUS,
+        )
+        for name, spirit in _ROCKS_ORDERS
     ]
     orders.append(
         Card(

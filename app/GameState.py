@@ -305,6 +305,7 @@ class GameState:
                 karaoke_cards_claimed=ps_data.get("karaoke_cards_claimed", 0),
                 status=ps_data.get("status", "active"),
                 cards=ps_data.get("cards", []),
+                drank_double_this_turn=ps_data.get("drank_double_this_turn", False),
             )
 
         card_rows = [CardRow.from_dict(r) for r in state_data.get("card_rows", [])]

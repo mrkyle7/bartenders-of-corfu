@@ -5,8 +5,8 @@
 
 import { api } from './api.js';
 import {
-    BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ING, MIXERS, MODES, PAIRINGS,
-    RULES, RULES_INTRO, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isSpecial,
+    BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ICE_TOKENS, ING, MIXERS, MODES, PAIRINGS,
+    RULES, RULES_INTRO, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isOnTheRocks, isSpecial,
     orderRecipe, servesOrder, SPECIALIST_SPECIAL, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
@@ -672,9 +672,10 @@ function drinkCup(cupIndex) {
     const run = () => act(() => api.drinkCup(gameId, cupIndex));
     const overflow = ps.bladder.length + contents.length > ps.bladder_capacity;
     const hospital = drunkAfter(contents) > MAX_DRUNK;
+    const iceAfter = isOnTheRocks(contents) && gs().card_rows.some((r) => r.cards.some((c) => c.card_type === 'ice'));
     ask(overflow ? `Drinking glass ${cupIndex + 1} overflows your bladder and puts you out.`
         : hospital ? `Drinking glass ${cupIndex + 1} puts you in hospital and out of the game.`
-            : `Drink everything in glass ${cupIndex + 1}? That's your action for the turn.`, [
+            : `Drink everything in glass ${cupIndex + 1}? That's your action for the turn.${iceAfter ? ' Then you can claim an Ice card.' : ''}`, [
         { label: 'Drink it', onclick: run, kind: overflow || hospital ? 'danger' : 'go' },
         { label: 'Keep it', onclick: () => { ui.prompt = null; render({ force: true }); } },
     ]);
@@ -709,7 +710,9 @@ function claim(card) {
     const free = isFree('claim_card') ? ' It doesn’t use your action.' : '';
     const extra = card.card_type === 'store'
         ? ` All the ${ING[card.spirit_type].label} in your bladder moves onto the card.`
-        : ' Your bladder keeps what you\u2019ve drunk.';
+        : card.card_type === 'ice'
+            ? ` It comes with ${plural(ICE_TOKENS, 'ice token')}, each for one double on the rocks.`
+            : ' Your bladder keeps what you\u2019ve drunk.';
     ask(`Claim ${card.name} for ${plural(points, 'point')}?${extra}${free}`, [
         { label: 'Claim it', onclick: () => send(options[0].params), kind: 'go' },
         back,
@@ -924,6 +927,8 @@ function costHave(card, ps) {
     if (!ps) return Infinity;
     const have = bladderCounts(ps);
     if (card.card_type === 'cup_doubler') return Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
+    // Ice: claimable the turn you drink a straight double
+    if (card.card_type === 'ice') return ps.drank_double_this_turn ? cardCost(card).length : 0;
     // One of its special meets a specialist's whole cost
     if (card.card_type === 'specialist' && have[SPECIALIST_SPECIAL[card.spirit_type]]) return cardCost(card).length;
     return have[cardCost(card)[0]] ?? 0;
@@ -933,6 +938,7 @@ function costCaption(card) {
     const cost = cardCost(card);
     if (card.card_type === 'order') return 'Wanted';
     if (card.card_type === 'cup_doubler') return '3 of one spirit';
+    if (card.card_type === 'ice') return 'Drink a double';
     return `${cost.length} ${ING[cost[0]]?.label.replace(' water', '') ?? ''}`;
 }
 
@@ -948,6 +954,7 @@ const FREE_ACTION_ART = { Entrepreneur: 'entrepreneur', 'Greedy Bartender': 'gre
 function cardArt(card) {
     if (card.card_type === 'cup_doubler') return /umbrella/i.test(card.name) ? 'doubler-umbrella' : 'doubler-straw';
     if (card.card_type === 'free_action') return FREE_ACTION_ART[card.name] ?? 'entrepreneur';
+    if (card.card_type === 'ice') return 'refresher'; // a glass over ice
     return ['karaoke', 'store', 'refresher', 'specialist', 'order'].includes(card.card_type) ? card.card_type : 'order';
 }
 
@@ -962,7 +969,7 @@ function cardFace(card, { claimable, owner, index, compact, pile } = {}) {
     const short = Math.max(0, cost.length - have);
     const label = isOrder
         ? `Order: ${card.name}. ${cardText(card)}`
-        : `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} Costs ${costCaption(card)} in your bladder${card.card_type === 'karaoke' ? ', and drunk 3 or more' : ''}.${ps && short ? ` You need ${short} more.` : ''}${claimable ? ' You can claim it.' : ''}`;
+        : `${card.name}, ${kind.label} card, ${plural(kind.points, 'point')}. ${cardText(card)} ${card.card_type === 'ice' ? 'A straight double is two of one spirit (not tequila) and nothing else.' : `Costs ${costCaption(card)} in your bladder${card.card_type === 'karaoke' ? ', and drunk 3 or more' : ''}.${ps && short ? ` You need ${short} more.` : ''}`}${claimable ? ' You can claim it.' : ''}`;
     const subject = isOrder ? null : cardSubject(card);
     const specials = isOrder ? orderRecipe(card).specials : [];
 
@@ -1008,6 +1015,12 @@ function cardFace(card, { claimable, owner, index, compact, pile } = {}) {
                     }))));
             }
         }
+    }
+    if (card.card_type === 'ice' && owner) {
+        // The ice left on it: each sells one double on the rocks
+        const left = card.ice_tokens ?? 0;
+        face.append(h('span.card-ice', { role: 'img', 'aria-label': left ? `${plural(left, 'ice token')} left` : 'All the ice is used' },
+            Array.from({ length: ICE_TOKENS }, (_, i) => h('span.ice-cube', { cls: i < left ? '' : 'is-melted' }))));
     }
     return face;
 }
@@ -1254,10 +1267,14 @@ function glass(pid, cupIndex, { interactive }) {
             buttons.push(h('button.btn.go.tiny', {
                 type: 'button', onclick: () => sell(a.params), 'data-k': `sell-${cupIndex}-${specials.join('-')}`,
                 'aria-label': `Sell glass ${cupIndex + 1} as ${name} for ${plural(a.params.points, 'point')}${a.params.order ? `, including +${a.params.order_bonus} for the ${a.params.order} order` : ''}`,
-            }, h('strong', { text: `Sell for ${a.params.points}${freeNote('sell_cup')}` }), h('span', { text: `${name}${order}` })));
+            }, h('strong', { text: `Sell${isOnTheRocks(cup.ingredients, specials) ? ' on the rocks' : ''} for ${a.params.points}${freeNote('sell_cup')}` }), h('span', { text: `${name}${order}` })));
         }
         if (actionsOf('drink_cup').some((a) => a.params.cup_index === cupIndex)) {
-            buttons.push(h('button.btn.tiny', { type: 'button', onclick: () => drinkCup(cupIndex), text: 'Drink it', 'data-k': `drinkcup-${cupIndex}` }));
+            // A straight double drunk lets you claim an Ice card this turn
+            const iceOut = isOnTheRocks(cup.ingredients) && gs().card_rows.some((r) => r.cards.some((c) => c.card_type === 'ice'));
+            buttons.push(h('button.btn.tiny', {
+                type: 'button', onclick: () => drinkCup(cupIndex), text: iceOut ? 'Drink it, then claim Ice' : 'Drink it', 'data-k': `drinkcup-${cupIndex}`,
+            }));
         }
     }
     return h('div.glass-spot', {},
@@ -1614,6 +1631,14 @@ function menu() {
         }
     }
     const slammerOrder = wanted((o) => o.drink === 'slammer');
+    // Doubles with nothing else, over a token from an ice card
+    const rocks = SPIRITS.filter((s) => s !== 'TEQUILA').map((s) => {
+        const order = wanted((o) => o.drink === 'rocks' && o.spirit_type === s);
+        return h('li.menu-long', { cls: order ? 'is-wanted' : '' },
+            h('span.menu-toks', {}, token(s, { print: true }), token(s, { print: true })),
+            h('span.menu-name', { text: `${ING[s].label} on the rocks` }),
+            order ? h('span.menu-wanted', { text: `Wanted +${order.bonus}` }) : null);
+    });
 
     return h('section.menu', { 'aria-label': 'Drinks menu' },
         h('header.menu-head', {},
@@ -1630,7 +1655,10 @@ function menu() {
         h('ul.menu-longs', {}, h('li.menu-long', { cls: slammerOrder ? 'is-wanted' : '' },
             h('span.menu-toks', {}, token('TEQUILA', { print: true }), token('TEQUILA', { print: true })),
             h('span.menu-name', { text: 'Tequila Slammer, 3 points' }),
-            slammerOrder ? h('span.menu-wanted', { text: `Wanted +${slammerOrder.bonus}` }) : null)));
+            slammerOrder ? h('span.menu-wanted', { text: `Wanted +${slammerOrder.bonus}` }) : null)),
+        h('h3.menu-section', { text: 'On the rocks' }),
+        h('p.menu-note', { text: 'Two of the same spirit, nothing else, over a token from an Ice card: 3 points. Not tequila.' }),
+        h('ul.menu-longs', {}, rocks));
 }
 
 // ─── Since your last turn ───────────────────────────────────────────────────

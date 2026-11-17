@@ -20,7 +20,7 @@ from app.actions import (
     card_payment,
 )
 from app.card import ABILITY_ROW, FREE_ACTION_TYPES, KARAOKE_ROW, ORDERS_ROW
-from app.cocktails import drink_points, is_cocktail, matches_order
+from app.cocktails import drink_points, is_cocktail, is_on_the_rocks, matches_order
 
 _SPIRIT_MAP: dict[str, Ingredient] = {
     "WHISKEY": Ingredient.WHISKEY,
@@ -82,7 +82,7 @@ def _full_sell_points(
 ) -> int | None:
     """Calculate full sell points including cup_doubler, specialist and order bonuses."""
     cup = ps.cups[cup_idx]
-    pts = drink_points(cup.ingredients, declared_specials)
+    pts = drink_points(cup.ingredients, declared_specials, with_ice=_ice_tokens(ps) > 0)
     if pts is None:
         return None
 
@@ -108,6 +108,13 @@ def _full_sell_points(
         pts += order.bonus
 
     return pts
+
+
+def _ice_tokens(ps: PlayerState) -> int:
+    """Ice tokens left on the player's ice cards (one per double on the rocks)."""
+    return sum(
+        cd.get("ice_tokens", 0) for cd in ps.cards if cd.get("card_type") == "ice"
+    )
 
 
 def _take_in_progress(gs: GameState) -> bool:
@@ -381,6 +388,10 @@ def _add_sell_both_cups(
         return  # Need both cups sellable to combine
 
     mat = list(ps.special_ingredients)
+    # Two doubles on the rocks need two ice tokens
+    rocks = sum(is_on_the_rocks(ps.cups[ci].ingredients, []) for ci in (0, 1))
+    if rocks > _ice_tokens(ps):
+        return
     for ds0, pts0 in cup0_opts:
         for ds1, pts1 in cup1_opts:
             if not _specials_fit_mat(mat, ds0, ds1):
@@ -503,6 +514,18 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
                             params={"card_id": card.id},
                             is_free=True,
                             description=f"Claim free action '{card.name}' ({card.spirit_type})",
+                        )
+                    )
+
+            elif ct == "ice":
+                # Claimable the turn a straight double was drunk
+                if card_payment(ps, card) is not None:
+                    result.append(
+                        Action(
+                            action_type="claim_card",
+                            params={"card_id": card.id},
+                            is_free=True,
+                            description=f"Claim ice '{card.name}'",
                         )
                     )
 

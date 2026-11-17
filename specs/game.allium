@@ -164,6 +164,9 @@ value IngredientRequirement {
 -- 1. Long Island Iced Tea  exact recipe match (4 spirits allowed)    → 15 pts
 -- 2. Any other cocktail    exact recipe match                        → 10 pts
 -- 3. Tequila Slammer       exactly 2×tequila, no mixers, no specials →  3 pts
+-- 3a. On the rocks         exactly 2 of one spirit other than tequila, no
+--                          mixers, no specials, with an ice token (cards.allium)
+--                                                                   →  3 pts
 --
 -- A cup holding any special is only sellable as the cocktail it makes.
 -- 4. Double spirit drink   2 spirits (same type), ≥1 mixer of exactly one type,
@@ -375,6 +378,11 @@ rule DrinkCup {
         ensures: DrinkIngredient(player, ingredient)
     ensures: ApplyDrunkModifier(player, consumed)
     ensures: cup.ingredients = []
+    -- A straight double (exactly two of one spirit other than tequila, nothing
+    -- else) sets player.drank_double_this_turn: an Ice card may be claimed
+    -- this turn (cards.allium). The flag clears when the turn passes.
+    if consumed is two of one spirit other than TEQUILA and nothing else:
+        ensures: player.drank_double_this_turn = true
     -- Drunk cup ingredients go to the bladder (not the bag).
     -- When the player later GoesForAWee, these are excreted and returned to the bag.
 }

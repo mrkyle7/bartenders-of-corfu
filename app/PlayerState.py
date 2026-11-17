@@ -80,6 +80,7 @@ class PlayerState:
         karaoke_cards_claimed: int = 0,
         status: str = "active",
         cards: list[dict] | None = None,
+        drank_double_this_turn: bool = False,
     ):
         self.player_id: UUID = player_id
         self.points: int = points
@@ -96,6 +97,9 @@ class PlayerState:
         self.status: str = status
         # Claimed ability cards (serialised dicts)
         self.cards: list[dict] = cards if cards is not None else []
+        # Drank a straight double (two of one spirit, not tequila, nothing
+        # else) with DrinkCup this turn: what an Ice card costs to claim.
+        self.drank_double_this_turn: bool = drank_double_this_turn
 
     @property
     def take_count(self) -> int:
@@ -124,4 +128,5 @@ class PlayerState:
             "karaoke_cards_claimed": self.karaoke_cards_claimed,
             "status": self.status,
             "cards": [dict(c) for c in self.cards],
+            "drank_double_this_turn": self.drank_double_this_turn,
         }

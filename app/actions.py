@@ -14,13 +14,14 @@ from app.card import (
     ABILITY_ROW,
     ABILITY_ROW_SIZE,
     FREE_ACTION_TYPES,
+    ICE_TOKENS_PER_CARD,
     KARAOKE_ROW,
     ORDERS_ROW,
     ROW_SIZE,
     Card,
     CardRow,
 )
-from app.cocktails import drink_points, is_cocktail, matches_order
+from app.cocktails import drink_points, is_cocktail, is_on_the_rocks, matches_order
 from app.game import GameException
 from app.GameState import (
     OPEN_DISPLAY_SIZE,
@@ -174,6 +175,8 @@ def _advance_turn(gs: GameState) -> GameState:
     _reset_take_batch_state(gs)
     gs.main_action_taken_this_turn = False
     gs.free_actions_used_this_turn = []
+    for p in gs.player_states.values():
+        p.drank_double_this_turn = False
 
     if not gs.turn_order:
         return gs
@@ -642,6 +645,9 @@ def card_payment(
     the spirit for a cup doubler (any spirit with three will do without it),
     and for a specialist either its spirit (two) or its special (one; the
     special is used by default when held).
+
+    An ice card costs nothing from the bladder: it can be claimed the turn
+    the player drinks a straight double (DrinkCup), so it pays [].
     """
     counts: dict[str, int] = {}
     for i in ps.bladder:
@@ -680,6 +686,8 @@ def card_payment(
             if paid:
                 return paid
         return None
+    if ct == "ice":
+        return [] if ps.drank_double_this_turn else None
     return None
 
 
@@ -1021,11 +1029,33 @@ def _sell_one_cup(
             )
         mat_remaining.remove(s)
 
-    pts = drink_points(cup.ingredients, declared_specials)
+    # A double with nothing else is sold on the rocks, over a token from one
+    # of the player's ice cards (spent for good).
+    ice_card = next(
+        (
+            cd
+            for cd in ps.cards
+            if cd.get("card_type") == "ice" and cd.get("ice_tokens", 0) > 0
+        ),
+        None,
+    )
+    pts = drink_points(
+        cup.ingredients, declared_specials, with_ice=ice_card is not None
+    )
     if pts is None:
+        if is_on_the_rocks(cup.ingredients, declared_specials):
+            raise GameException(
+                "A double with no mixer needs an ice token to sell on the rocks",
+                status_code=400,
+            )
         raise GameException(
             "This combination of ingredients cannot be sold", status_code=400
         )
+    on_the_rocks = ice_card is not None and is_on_the_rocks(
+        cup.ingredients, declared_specials
+    )
+    if on_the_rocks:
+        ice_card["ice_tokens"] -= 1
 
     # CupDoubler doubling: non-cocktail drinks from a bendy-straw cup score double
     cocktail = is_cocktail(cup.ingredients, declared_specials)
@@ -1074,6 +1104,8 @@ def _sell_one_cup(
         "declared_specials": list(declared_specials),
         "points_earned": pts,
     }
+    if on_the_rocks:
+        result["on_the_rocks"] = True
     if served is not None:
         result["order"] = {"name": served.name, "bonus": served.bonus}
     return result
@@ -1137,6 +1169,8 @@ def sell_cup(
         "points_earned": total_points,
         "is_free_action": is_free,
     }
+    if primary.get("on_the_rocks"):
+        payload["on_the_rocks"] = True
     orders_served = [c["order"] for c in sold if "order" in c]
     if orders_served:
         payload["orders"] = orders_served
@@ -1165,6 +1199,9 @@ def drink_cup(
         raise GameException("Cup is empty", status_code=400)
 
     drunk_ingredients = list(cup.ingredients)
+    if is_on_the_rocks(drunk_ingredients, []):
+        # A straight double drunk: an Ice card can be claimed this turn
+        ps.drank_double_this_turn = True
     for ingredient in drunk_ingredients:
         _drink_ingredient(gs, player_id, ingredient)
     # Drunk cup ingredients go to the bladder (not the bag) — handled by _drink_ingredient.
@@ -1282,8 +1319,15 @@ def claim_card(
         "cup_doubler",
         "specialist",
         "free_action",
+        "ice",
     ):
         raise GameException(f"Unknown card type: {card_type}", status_code=500)
+    if card_type == "ice" and not ps.drank_double_this_turn:
+        raise GameException(
+            "Drink a straight double (two of one spirit, not tequila, nothing "
+            "else) this turn to claim an Ice card",
+            status_code=400,
+        )
     needs_spirit = ("karaoke", "store", "specialist", "free_action")
     if card_type in needs_spirit and target_card.spirit_type is None:
         raise GameException("Card has no spirit type", status_code=500)
@@ -1339,6 +1383,12 @@ def claim_card(
     elif card_type == "free_action":
         ps.cards.append(target_card.to_dict())
         ps.points += 2
+
+    elif card_type == "ice":
+        card_dict = target_card.to_dict()
+        card_dict["ice_tokens"] = ICE_TOKENS_PER_CARD
+        ps.cards.append(card_dict)
+        ps.points += 1
 
     # Replace the claimed card's slot from the deck (if any cards remain)
     _replace_card(gs, target_row)
