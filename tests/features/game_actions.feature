@@ -128,6 +128,36 @@ Feature: Game turn actions
     Then player 1 should have 10 points
     And cup 0 should be empty
 
+  Scenario: Player sells a double on the rocks with an ice token
+    Given it is player 1's turn
+    And player 1 holds an ice card with 2 ice tokens
+    And player 1's cup 0 contains 2 GIN
+    When player 1 sells cup 0 with no declared specials
+    Then player 1 should have 3 points
+    And cup 0 should be empty
+    And player 1 should have 1 ice token left
+
+  Scenario: A double with no mixer can't be sold without ice
+    Given it is player 1's turn
+    And player 1's cup 0 contains 2 GIN
+    When player 1 tries to sell cup 0
+    Then the action should be rejected with a 400 error
+
+  Scenario: Tequila can't pay for an ice card
+    Given it is player 1's turn
+    And an ice card is available in row 3
+    And player 1's bladder has 2 TEQUILA spirits
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  Scenario: Claiming an ice card with a double in the bladder gives 2 ice tokens
+    Given it is player 1's turn
+    And an ice card is available in row 3
+    And player 1's bladder has 2 RUM spirits
+    When player 1 claims that card
+    Then player 1 should have 1 point
+    And player 1 should have 2 ice tokens left
+
   Scenario: Selling an invalid cup combination is rejected
     Given it is player 1's turn
     And player 1's cup 0 contains 1 VODKA and 1 TONIC
@@ -449,9 +479,9 @@ Feature: Game turn actions
     Given it is player 1's turn
     Then there should be no karaoke row
     And row 3 should have 5 cards
-    And the deck should have 19 cards remaining
+    And the deck should have 22 cards remaining
     And row 3 and the ability deck should hold 5 karaoke cards
-    And the orders row and order deck should hold 18 orders in all
+    And the orders row and order deck should hold 22 orders in all
 
   # ── Priority 3: StoreCard ongoing effects ────────────────────────────────────
 

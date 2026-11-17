@@ -84,10 +84,21 @@ export function drinkName(glass, declared = []) {
     const mixers = cup.filter((i) => ING[i]?.kind === 'mixer');
     if (spirits.length === 2 && spirits.every((s) => s === 'TEQUILA') && !mixers.length) return 'Tequila Slammer';
     if (!spirits.length) return 'a drink';
+    if (isOnTheRocks(glass, declared)) return `${ING[spirits[0]].label} on the rocks`;
     const spirit = ING[spirits[0]].label;
     const mixer = mixers.length ? ` and ${ING[mixers[0]].label.replace(' water', '')}` : '';
     return `${spirits.length === 2 ? 'Double ' : ''}${spirit}${mixer}`;
 }
+
+// A double that can only be sold on the rocks (over an ice token): two of
+// one spirit other than tequila, nothing else.
+export function isOnTheRocks(glass, declared = []) {
+    return !declared.length && glass.length === 2 && glass[0] === glass[1]
+        && ING[glass[0]]?.kind === 'spirit' && glass[0] !== 'TEQUILA';
+}
+
+// Each ice card holds this many tokens once claimed.
+export const ICE_TOKENS = 2;
 
 export const CARD_KINDS = {
     karaoke: { label: 'Karaoke', points: 5 },
@@ -96,6 +107,7 @@ export const CARD_KINDS = {
     cup_doubler: { label: 'Doubler', points: 2 },
     specialist: { label: 'Specialist', points: 2 },
     free_action: { label: 'Free action', points: 2 },
+    ice: { label: 'Ice', points: 1 },
     order: { label: 'Order', points: 0 },
 };
 
@@ -103,6 +115,7 @@ export const CARD_KINDS = {
 export function orderRecipe(card) {
     if (card.drink === 'simple') return { cup: [card.spirit_type, card.mixer_type], specials: [] };
     if (card.drink === 'slammer') return { cup: ['TEQUILA', 'TEQUILA'], specials: [] };
+    if (card.drink === 'rocks') return { cup: [card.spirit_type, card.spirit_type], specials: [] };
     const c = COCKTAILS.find((x) => x.name === card.cocktail);
     return c ? { cup: c.cup, specials: c.specials } : { cup: [], specials: [] };
 }
@@ -116,6 +129,7 @@ export function servesOrder(card, cup, specials = []) {
     if (COCKTAILS.some((c) => c.name === name)) return false;
     if (cup.some(isSpecial) || specials.length) return false; // not a cocktail, so not sellable
     if (card.drink === 'slammer') return name === 'Tequila Slammer';
+    if (card.drink === 'rocks') return isOnTheRocks(cup) && cup[0] === card.spirit_type;
     return spirits.length === 1 && spirits[0] === card.spirit_type
         && mixers.length === 1 && mixers[0] === card.mixer_type
         && cup.filter((i) => ING[i]?.kind === 'spirit').length <= 2;
@@ -138,15 +152,17 @@ export function cardText(card) {
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
         case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Needs 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'} in your bladder.`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
+        case 'ice': return `${ICE_TOKENS} ice tokens. Each sells a double with no mixer on the rocks for 3 (not tequila), then it’s gone.`;
         case 'order':
             if (card.drink === 'simple') return `Serve a ${card.name}, single or double, for +${card.bonus} on top.`;
+            if (card.drink === 'rocks') return `Serve a double ${ING[card.spirit_type]?.label ?? ''} on the rocks for +${card.bonus} on top.`;
             return `Serve a ${card.name} for +${card.bonus} on top.`;
         default: return '';
     }
 }
 
 // What must be in your bladder to claim a card: a list of token names, where
-// 'ANY_SPIRIT' means three of one spirit of your choice.
+// 'ANY_SPIRIT' means one spirit of your choice (any but tequila for ice).
 export function cardCost(card) {
     switch (card.card_type) {
         case 'karaoke': return Array(2).fill(card.spirit_type); // and drunk 3+
@@ -155,6 +171,7 @@ export function cardCost(card) {
         case 'specialist': return Array(2).fill(card.spirit_type);
         case 'refresher': return Array(2).fill(card.mixer_type);
         case 'cup_doubler': return Array(3).fill('ANY_SPIRIT');
+        case 'ice': return Array(2).fill('ANY_SPIRIT'); // not tequila
         case 'order': return orderRecipe(card).cup;
         default: return [];
     }
@@ -219,9 +236,9 @@ export const RULES = [
         title: 'Serving',
         lead: 'A punter’s waiting at the bar. Hand over the drink and take the money.',
         items: [
-            'Sell one glass or both. One spirit with one kind of mixer: 1 point. Two of the same spirit with one kind of mixer: 3. Tequila slammer (two tequila, nothing else): 3.',
+            'Sell one glass or both. One spirit with one kind of mixer: 1 point. Two of the same spirit with one kind of mixer: 3. Tequila slammer (two tequila, nothing else): 3. A double with nothing else, over a token from an Ice card: 3 (“on the rocks”; not tequila).',
             'Cocktails score 10 (Long Island Iced Tea 15) and must match the recipe exactly, specials included. The Drinks menu lists them all.',
-            'Serve a drink an order is calling for and you get its bonus too: +2 simple drinks, +3 slammer, +4 cocktails, +5 Long Island. Each glass serves one order; bonuses aren’t doubled.',
+            'Serve a drink an order is calling for and you get its bonus too: +2 simple drinks or on the rocks, +3 slammer, +4 cocktails, +5 Long Island. Each glass serves one order; bonuses aren’t doubled.',
         ],
     },
     {
@@ -249,7 +266,7 @@ export const RULES = [
         items: [
             'Claim a card (free, once a turn) if your bladder holds its cost. The cost is only checked: it stays in your bladder. Stored spirits and specials don’t count, except that one special meets the cost of its specialist.',
             'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more, wherever it turns up. Sing three and you win.',
-            'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), and free-action cards that make taking, selling or weeing free. The card says what it does.',
+            'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), Ice (2 ice tokens, each sells a double with no mixer on the rocks, then it’s gone; costs a double of any spirit but tequila), and free-action cards that make taking, selling or weeing free. The card says what it does.',
             'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',
             'Clearing the orders (drunk 2 or more) or swiping the abilities (drunk 3 or more) is free, once a turn each: the whole row is discarded and a fresh one is dealt. When a deck runs out, its discards are shuffled to make a new one.',
         ],

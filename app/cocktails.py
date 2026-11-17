@@ -108,6 +108,27 @@ def _with_glass_specials(
     return list(declared_specials) + [s for s in in_glass if s]
 
 
+# A double on the rocks: two of one spirit (not tequila: that's a slammer),
+# nothing else, served over a token from an ice card. Scores as a double.
+ROCKS_POINTS = 3
+
+
+def is_on_the_rocks(
+    cup_ingredients: list[Ingredient], declared_specials: list[str]
+) -> bool:
+    """Whether the glass is a double that can only be sold on the rocks: two
+    of the same spirit other than tequila, with no mixers and no specials."""
+    if _with_glass_specials(cup_ingredients, declared_specials):
+        return False
+    if any(i not in _SPIRITS for i in cup_ingredients):
+        return False
+    return (
+        len(cup_ingredients) == 2
+        and len(set(cup_ingredients)) == 1
+        and cup_ingredients[0] != Ingredient.TEQUILA
+    )
+
+
 def is_cocktail(
     cup_ingredients: list[Ingredient], declared_specials: list[str]
 ) -> bool:
@@ -144,7 +165,9 @@ def is_cocktail(
 
 
 def drink_points(
-    cup_ingredients: list[Ingredient], declared_specials: list[str]
+    cup_ingredients: list[Ingredient],
+    declared_specials: list[str],
+    with_ice: bool = False,
 ) -> int | None:
     """Return points for selling the cup, or None if the cup is not sellable.
 
@@ -152,8 +175,9 @@ def drink_points(
       1. Long Island Iced Tea  → 15 pts
       2. Any other cocktail    → 10 pts
       3. Tequila Slammer       → 3 pts
-      4. Double spirit drink   → 3 pts
-      5. Single spirit drink   → 1 pt
+      4. Double on the rocks   → 3 pts, only ``with_ice`` (an ice token)
+      5. Double spirit drink   → 3 pts
+      6. Single spirit drink   → 1 pt
     """
     declared_specials = _with_glass_specials(cup_ingredients, declared_specials)
     cup_spirits = [i for i in cup_ingredients if i in _SPIRITS]
@@ -202,6 +226,10 @@ def drink_points(
         and not cup_mixers
     ):
         return 3
+
+    # A double with nothing else goes on the rocks, if there's ice for it
+    if with_ice and is_on_the_rocks(cup_ingredients, declared_specials):
+        return ROCKS_POINTS
 
     # All other non-cocktail drinks require at least one mixer
     if not cup_mixers:
@@ -260,8 +288,9 @@ def matches_order(
     """Whether selling this cup (a sellable drink) serves this order card.
 
     A simple order ("Rum and Cola") takes that spirit and mixer, single or
-    double; a slammer order takes a Tequila Slammer; a cocktail order takes
-    that cocktail.
+    double; a slammer order takes a Tequila Slammer; a rocks order ("Vodka on
+    the Rocks") takes a double of that spirit on the rocks; a cocktail order
+    takes that cocktail.
     """
     drink = order.get("drink")
     name = cocktail_name(cup_ingredients, declared_specials)
@@ -273,6 +302,10 @@ def matches_order(
     mixers = {i.name for i in cup_ingredients if i in _MIXERS}
     if drink == "slammer":
         return spirits == {"TEQUILA"} and not mixers
+    if drink == "rocks":
+        return spirits == {order.get("spirit_type")} and is_on_the_rocks(
+            cup_ingredients, declared_specials
+        )
     if drink == "simple":
         return spirits == {order.get("spirit_type")} and mixers == {
             order.get("mixer_type")

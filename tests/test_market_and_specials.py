@@ -91,15 +91,16 @@ def test_market_has_three_orders_and_five_ability_cards_with_karaoke_mixed_in():
     assert len(orders) == 3 and all(c.card_type == "order" for c in orders)
     assert len(abilities) == 5
     assert all(c.card_type != "order" for c in abilities)
-    # 19 ability cards (no Cocktail Shaker) and all 5 songs, one per spirit,
-    # shuffled together; 18 orders in all
+    # 19 ability cards (no Cocktail Shaker), 3 ice cards and all 5 songs, one
+    # per spirit, shuffled together; 22 orders in all
     deck = [Card.from_dict(d) for d in gs._deck_dicts] + abilities
-    assert len(deck) == 24
+    assert len(deck) == 27
+    assert sum(c.card_type == "ice" for c in deck) == 3
     songs = [c for c in deck if c.card_type == "karaoke"]
     spirits = {c.spirit_type for c in songs}
     assert len(songs) == 5
     assert spirits == {"RUM", "GIN", "TEQUILA", "VODKA", "WHISKEY"}
-    assert len(gs.order_deck) + len(orders) == 18
+    assert len(gs.order_deck) + len(orders) == 22
     assert "Cocktail Shaker" not in {c.name for c in deck}
 
 
@@ -390,7 +391,7 @@ def test_an_empty_order_deck_is_made_again_from_the_served_and_cleared_orders():
     gs, _ = refresh_card_row(gs, pid, 2)
     orders = _row(gs, 2).cards
     assert len(orders) == 3 and all(c.card_type == "order" for c in orders)
-    assert len(gs.order_deck) + len(gs.order_discard) + 3 == 18
+    assert len(gs.order_deck) + len(gs.order_discard) + 3 == 22
 
 
 def test_karaoke_row_is_never_cleared():
@@ -1175,3 +1176,153 @@ def _valid(gs: GameState, pid) -> list:
     from playtesting.valid_actions import get_valid_actions
 
     return get_valid_actions(gs, pid)
+
+
+# ─── Ice: doubles on the rocks ───────────────────────────────────────────────
+
+
+def _ice(gs: GameState) -> Card:
+    card = Card(id="ice-1", card_type="ice", name="Ice Bucket")
+    _ability(gs, card)
+    return card
+
+
+def _holding_ice(ps, tokens: int = 2) -> None:
+    ps.cards.append(
+        {
+            "id": "ice-held",
+            "card_type": "ice",
+            "name": "Ice Bucket",
+            "ice_tokens": tokens,
+        }
+    )
+
+
+def test_an_ice_card_costs_a_double_of_any_spirit_but_tequila_and_holds_two_tokens():
+    gs = _game()
+    pid, ps = _me(gs)
+    _ice(gs)
+    ps.bladder = [Ingredient.TEQUILA] * 2 + [Ingredient.GIN]
+    with pytest.raises(GameException):
+        claim_card(gs, pid, "ice-1")  # tequila doesn't go on the rocks
+    ps.bladder = [Ingredient.GIN] * 2
+    new, payload = claim_card(gs, pid, "ice-1")
+    me = new.player_states[pid]
+    assert me.bladder == [Ingredient.GIN] * 2  # the cost stays
+    assert payload["cost"] == ["GIN", "GIN"]
+    (held,) = me.cards
+    assert held["card_type"] == "ice" and held["ice_tokens"] == 2
+    assert me.points == 1
+
+
+def test_a_double_with_nothing_else_needs_ice():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = []
+    ps.cups[0] = Cup(ingredients=[Ingredient.VODKA, Ingredient.VODKA])
+    with pytest.raises(GameException) as exc:
+        sell_cup(gs, pid, 0, [])
+    assert "ice" in str(exc.value)
+
+
+def test_selling_on_the_rocks_scores_a_double_and_spends_one_ice_token():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = []
+    _holding_ice(ps)
+    ps.cups[0] = Cup(ingredients=[Ingredient.WHISKEY, Ingredient.WHISKEY])
+    new, payload = sell_cup(gs, pid, 0, [])
+    assert payload["points_earned"] == 3
+    assert payload["on_the_rocks"] is True
+    (held,) = new.player_states[pid].cards
+    assert held["ice_tokens"] == 1
+
+
+def test_used_ice_is_gone_for_good():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = []
+    _holding_ice(ps, tokens=1)
+    ps.cups[0] = Cup(ingredients=[Ingredient.GIN, Ingredient.GIN])
+    ps.cups[1] = Cup(ingredients=[Ingredient.RUM, Ingredient.RUM])
+    # One token can't put both glasses on the rocks
+    with pytest.raises(GameException):
+        sell_cup(
+            gs, pid, 0, [], additional_cups=[{"cup_index": 1, "declared_specials": []}]
+        )
+    gs, _ = sell_cup(gs, pid, 0, [])
+    (held,) = gs.player_states[pid].cards
+    assert held["ice_tokens"] == 0
+    # The card stays, empty: no more ice for the rum
+    gs.player_turn = pid
+    gs.main_action_taken_this_turn = False
+    gs.free_actions_used_this_turn = []
+    with pytest.raises(GameException):
+        sell_cup(gs, pid, 1, [])
+
+
+def test_tequila_never_goes_on_the_rocks():
+    from app.cocktails import drink_points
+
+    two_tequila = [Ingredient.TEQUILA, Ingredient.TEQUILA]
+    assert drink_points(two_tequila, [], with_ice=True) == 3  # still a slammer
+    from app.cocktails import is_on_the_rocks
+
+    assert not is_on_the_rocks(two_tequila, [])
+    # Nor does a single, a mixed pair or a double with a mixer
+    assert drink_points([Ingredient.GIN], [], with_ice=True) is None
+    assert drink_points([Ingredient.GIN, Ingredient.RUM], [], with_ice=True) is None
+    assert not is_on_the_rocks([Ingredient.GIN, Ingredient.GIN, Ingredient.TONIC], [])
+
+
+def test_a_cup_doubler_and_specialist_count_on_the_rocks():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = []
+    _holding_ice(ps)
+    ps.cards.append({"id": "sp", "card_type": "specialist", "spirit_type": "VODKA"})
+    ps.cups[0] = Cup(ingredients=[Ingredient.VODKA] * 2, has_cup_doubler=True)
+    _, payload = sell_cup(gs, pid, 0, [])
+    assert payload["points_earned"] == 3 * 2 + 2
+
+
+def test_an_on_the_rocks_order_pays_its_bonus():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = [
+        _order("Vodka and Cola", "simple", 2, spirit_type="VODKA", mixer_type="COLA"),
+        _order("Rum on the Rocks", "rocks", 2, spirit_type="RUM"),
+    ]
+    _holding_ice(ps)
+    ps.cups[0] = Cup(ingredients=[Ingredient.RUM, Ingredient.RUM])
+    _, payload = sell_cup(gs, pid, 0, [])
+    assert payload["points_earned"] == 3 + 2
+    assert payload["orders"] == [{"name": "Rum on the Rocks", "bonus": 2}]
+
+
+def test_there_is_an_on_the_rocks_order_for_every_spirit_but_tequila():
+    from app.card import build_order_deck
+
+    rocks = [c for c in build_order_deck() if c.drink == "rocks"]
+    assert sorted(c.spirit_type for c in rocks) == ["GIN", "RUM", "VODKA", "WHISKEY"]
+    assert all(c.bonus == 2 for c in rocks)
+
+
+def test_bots_see_ice_claims_and_rocks_sales():
+    from playtesting.valid_actions import get_valid_actions
+
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 2).cards = []
+    _ice(gs)
+    ps.bladder = [Ingredient.GIN] * 2
+    ps.cups[0] = Cup(ingredients=[Ingredient.GIN, Ingredient.GIN])
+    acts = get_valid_actions(gs, pid)
+    assert any(
+        a.action_type == "claim_card" and a.params["card_id"] == "ice-1" for a in acts
+    )
+    # No ice yet, so the double can't be sold
+    assert not any(a.action_type == "sell_cup" for a in acts)
+    _holding_ice(ps)
+    sells = [a for a in get_valid_actions(gs, pid) if a.action_type == "sell_cup"]
+    assert [a.params["points"] for a in sells] == [3]

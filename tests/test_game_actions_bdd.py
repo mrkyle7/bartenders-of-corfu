@@ -517,6 +517,59 @@ def player_holds_refresher_card(ctx, n, mixer_type):
     _patch_game_state(ctx["game_id"], patch)
 
 
+@given(parsers.parse("player {n:d} holds an ice card with {count:d} ice tokens"))
+@given(parsers.parse("player {n:d} holds an ice card with {count:d} ice token"))
+def player_holds_ice_card(ctx, n, count):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    _, pid = _player(ctx, n)
+    card = _Card(
+        id=str(_uuid.uuid4()), card_type="ice", name="Ice Bucket", ice_tokens=count
+    )
+
+    def patch(gs):
+        gs.player_states[UUID(pid)].cards.append(card.to_dict())
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+
+
+@given(
+    parsers.parse("an ice card is available in row {row:d}"),
+    target_fixture="available_card_id",
+)
+def ice_card_in_row(ctx, row):
+    import uuid as _uuid
+    from app.card import Card as _Card
+
+    new_card_id = str(_uuid.uuid4())
+
+    def patch(gs):
+        for r in gs.card_rows:
+            if r.position == row:
+                # Replace the first card so the row keeps its size
+                new_card = _Card(id=new_card_id, card_type="ice", name="Ice Bucket")
+                if r.cards:
+                    r.cards[0] = new_card
+                else:
+                    r.cards.append(new_card)
+                break
+        return gs
+
+    _patch_game_state(ctx["game_id"], patch)
+    ctx["target_card_id"] = new_card_id
+    return new_card_id
+
+
+@then(parsers.parse("player {n:d} should have {count:d} ice tokens left"))
+@then(parsers.parse("player {n:d} should have {count:d} ice token left"))
+def player_ice_left(ctx, n, count):
+    ps = _player_state(ctx, n)
+    left = sum(c.get("ice_tokens", 0) for c in ps["cards"] if c["card_type"] == "ice")
+    assert left == count, f"Expected {count} ice token(s) left, got {left}"
+
+
 @given(
     parsers.parse("player {n:d} holds a VODKA store card with {count:d} stored spirits")
 )
@@ -1950,13 +2003,15 @@ def orders_row_holds(ctx, name):
     _patch_game_state(ctx["game_id"], patch)
 
 
-@then("the orders row and order deck should hold 18 orders in all")
-def eighteen_orders(ctx):
+@then(
+    parsers.parse("the orders row and order deck should hold {count:d} orders in all")
+)
+def orders_in_all(ctx, count):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
     gs = game["game_state"]
     on_table = [c for r in gs["card_rows"] if r["position"] == 2 for c in r["cards"]]
     assert all(c["card_type"] == "order" for c in on_table)
-    assert len(on_table) + len(gs["order_deck"]) == 18
+    assert len(on_table) + len(gs["order_deck"]) == count
 
 
 @then(parsers.parse('the list should include "{mode}"'))

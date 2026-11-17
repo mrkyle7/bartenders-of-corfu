@@ -14,13 +14,14 @@ from app.card import (
     ABILITY_ROW,
     ABILITY_ROW_SIZE,
     FREE_ACTION_TYPES,
+    ICE_TOKENS_PER_CARD,
     KARAOKE_ROW,
     ORDERS_ROW,
     ROW_SIZE,
     Card,
     CardRow,
 )
-from app.cocktails import drink_points, is_cocktail, matches_order
+from app.cocktails import drink_points, is_cocktail, is_on_the_rocks, matches_order
 from app.game import GameException
 from app.GameState import (
     OPEN_DISPLAY_SIZE,
@@ -639,9 +640,10 @@ def card_payment(
     The cost is only checked: claiming leaves it in the bladder. A karaoke
     song also needs drunk 3+. ``pay_with`` picks what meets the cost where
     there's a choice:
-    the spirit for a cup doubler (any spirit with three will do without it),
-    and for a specialist either its spirit (two) or its special (one; the
-    special is used by default when held).
+    the spirit for a cup doubler (any spirit with three will do without it)
+    or an ice card (any spirit but tequila with two), and for a specialist
+    either its spirit (two) or its special (one; the special is used by
+    default when held).
     """
     counts: dict[str, int] = {}
     for i in ps.bladder:
@@ -677,6 +679,16 @@ def card_payment(
             return take(pay_with.upper(), 3)
         for s in _SPIRITS:
             paid = take(s.name, 3)
+            if paid:
+                return paid
+        return None
+    if ct == "ice":
+        # A double of any spirit but tequila
+        spirits = [s.name for s in _SPIRITS if s != Ingredient.TEQUILA]
+        if pay_with:
+            return take(pay_with.upper(), 2) if pay_with.upper() in spirits else None
+        for name in sorted(spirits):
+            paid = take(name, 2)
             if paid:
                 return paid
         return None
@@ -1021,11 +1033,33 @@ def _sell_one_cup(
             )
         mat_remaining.remove(s)
 
-    pts = drink_points(cup.ingredients, declared_specials)
+    # A double with nothing else is sold on the rocks, over a token from one
+    # of the player's ice cards (spent for good).
+    ice_card = next(
+        (
+            cd
+            for cd in ps.cards
+            if cd.get("card_type") == "ice" and cd.get("ice_tokens", 0) > 0
+        ),
+        None,
+    )
+    pts = drink_points(
+        cup.ingredients, declared_specials, with_ice=ice_card is not None
+    )
     if pts is None:
+        if is_on_the_rocks(cup.ingredients, declared_specials):
+            raise GameException(
+                "A double with no mixer needs an ice token to sell on the rocks",
+                status_code=400,
+            )
         raise GameException(
             "This combination of ingredients cannot be sold", status_code=400
         )
+    on_the_rocks = ice_card is not None and is_on_the_rocks(
+        cup.ingredients, declared_specials
+    )
+    if on_the_rocks:
+        ice_card["ice_tokens"] -= 1
 
     # CupDoubler doubling: non-cocktail drinks from a bendy-straw cup score double
     cocktail = is_cocktail(cup.ingredients, declared_specials)
@@ -1074,6 +1108,8 @@ def _sell_one_cup(
         "declared_specials": list(declared_specials),
         "points_earned": pts,
     }
+    if on_the_rocks:
+        result["on_the_rocks"] = True
     if served is not None:
         result["order"] = {"name": served.name, "bonus": served.bonus}
     return result
@@ -1137,6 +1173,8 @@ def sell_cup(
         "points_earned": total_points,
         "is_free_action": is_free,
     }
+    if primary.get("on_the_rocks"):
+        payload["on_the_rocks"] = True
     orders_served = [c["order"] for c in sold if "order" in c]
     if orders_served:
         payload["orders"] = orders_served
@@ -1282,8 +1320,14 @@ def claim_card(
         "cup_doubler",
         "specialist",
         "free_action",
+        "ice",
     ):
         raise GameException(f"Unknown card type: {card_type}", status_code=500)
+    if card_type == "ice" and spirit_type and spirit_type.upper() == "TEQUILA":
+        raise GameException(
+            "Tequila doesn't go on the rocks: pay for ice with another spirit",
+            status_code=400,
+        )
     needs_spirit = ("karaoke", "store", "specialist", "free_action")
     if card_type in needs_spirit and target_card.spirit_type is None:
         raise GameException("Card has no spirit type", status_code=500)
@@ -1339,6 +1383,12 @@ def claim_card(
     elif card_type == "free_action":
         ps.cards.append(target_card.to_dict())
         ps.points += 2
+
+    elif card_type == "ice":
+        card_dict = target_card.to_dict()
+        card_dict["ice_tokens"] = ICE_TOKENS_PER_CARD
+        ps.cards.append(card_dict)
+        ps.points += 1
 
     # Replace the claimed card's slot from the deck (if any cards remain)
     _replace_card(gs, target_row)

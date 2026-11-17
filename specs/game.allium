@@ -164,6 +164,9 @@ value IngredientRequirement {
 -- 1. Long Island Iced Tea  exact recipe match (4 spirits allowed)    → 15 pts
 -- 2. Any other cocktail    exact recipe match                        → 10 pts
 -- 3. Tequila Slammer       exactly 2×tequila, no mixers, no specials →  3 pts
+-- 3a. On the rocks         exactly 2 of one spirit other than tequila, no
+--                          mixers, no specials, with an ice token (cards.allium)
+--                                                                   →  3 pts
 --
 -- A cup holding any special is only sellable as the cocktail it makes.
 -- 4. Double spirit drink   2 spirits (same type), ≥1 mixer of exactly one type,

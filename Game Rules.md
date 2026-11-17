@@ -21,8 +21,8 @@ You are a busy bartender in a bustling bar in Corfu. Make drinks and cocktails t
 
 **The cards** lie in two rows:
 
-- **Orders row:** 3 drinks the punters are calling for, dealt from 18 order cards.
-- **Ability row:** 5 cards dealt from the ability deck: the 19 ability cards and all 5 karaoke songs (one per spirit), shuffled together.
+- **Orders row:** 3 drinks the punters are calling for, dealt from 22 order cards.
+- **Ability row:** 5 cards dealt from the ability deck: the 22 ability cards and all 5 karaoke songs (one per spirit), shuffled together.
 
 **Your mat** has two glasses, a bladder with 8 spaces, a drunk track and 4 toilet tokens.
 
@@ -76,6 +76,7 @@ Your turn ends once you've taken your main action and have no free action left t
 | One spirit with one kind of mixer | 1 |
 | Two of the **same** spirit with one kind of mixer | 3 |
 | Tequila slammer: two tequila, nothing else | 3 |
+| On the rocks: two of the **same** spirit (not tequila), nothing else, using an ice token | 3 |
 | A cocktail from the menu | 10 |
 | Long Island Iced Tea | 15 |
 
@@ -89,11 +90,13 @@ Which mixers go with which spirit:
 | Cranberry | ✓ | | | | |
 
 - **Simple drinks:** at most two spirits, and only one kind of mixer (any number of it).
+- **On the rocks:** a double with no mixer can only be sold over an ice token from an Ice card you hold (see the cards below). Each token sells one drink and is then gone for good. A cup doubler and a specialist count as for any double.
 - **Cocktails:** the glass must hold exactly the recipe (see "Cocktail menu"): its spirits, mixers and specials, nothing extra.
 
 **Orders.** Three punters are calling for drinks in the orders row. Sell a drink an order asks for and you collect its bonus on top of the drink's points:
 
 - +2 for a simple drink such as "Rum and Cola" (single or double)
+- +2 for a double on the rocks, such as "Gin on the Rocks" (vodka, rum, whisky or gin)
 - +3 for a Tequila Slammer
 - +4 for a cocktail
 - +5 for the Long Island Iced Tea
@@ -146,6 +149,7 @@ A served order goes on the order discard pile and the next one is dealt. Each gl
 | Greedy Bartender | 3 rum | 2 | Taking ingredients is free. |
 | Entrepreneur | 3 vodka | 2 | Selling is free. |
 | Weak Bladder | 3 gin | 2 | Going for a wee is free. |
+| Ice Bucket (three of them) | 2 of any one spirit except tequila | 1 | Comes with 2 ice tokens. Each sells a double with no mixer "on the rocks" (see Serving), then it's gone. |
 
 **Free-action cards** (Greedy Bartender, Entrepreneur, Weak Bladder) all work the same way. With the card, that action is a free action: do it before or after your main action, but still only once a turn, so your main action can't be the same thing again. If you do it first, you can take a different main action too, or end your turn there.
 
