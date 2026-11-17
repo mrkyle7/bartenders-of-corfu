@@ -143,17 +143,19 @@ Feature: Game turn actions
     When player 1 tries to sell cup 0
     Then the action should be rejected with a 400 error
 
-  Scenario: Tequila can't pay for an ice card
-    Given it is player 1's turn
-    And an ice card is available in row 3
-    And player 1's bladder has 2 TEQUILA spirits
-    When player 1 tries to claim that card
-    Then the action should be rejected with a 400 error
-
-  Scenario: Claiming an ice card with a double in the bladder gives 2 ice tokens
+  Scenario: An ice card can't be claimed without drinking a straight double that turn
     Given it is player 1's turn
     And an ice card is available in row 3
     And player 1's bladder has 2 RUM spirits
+    When player 1 tries to claim that card
+    Then the action should be rejected with a 400 error
+
+  Scenario: Drinking a straight double lets the player claim an ice card with 2 ice tokens
+    Given it is player 1's turn
+    And an ice card is available in row 3
+    And player 1's cup 0 contains 2 RUM
+    When player 1 drinks cup 0
+    Then it should still be player 1's turn
     When player 1 claims that card
     Then player 1 should have 1 point
     And player 1 should have 2 ice tokens left

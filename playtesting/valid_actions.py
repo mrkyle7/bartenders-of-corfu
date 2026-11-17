@@ -518,7 +518,7 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
                     )
 
             elif ct == "ice":
-                # A double of any spirit but tequila in the bladder
+                # Claimable the turn a straight double was drunk
                 if card_payment(ps, card) is not None:
                     result.append(
                         Action(

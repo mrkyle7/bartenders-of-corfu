@@ -378,6 +378,11 @@ rule DrinkCup {
         ensures: DrinkIngredient(player, ingredient)
     ensures: ApplyDrunkModifier(player, consumed)
     ensures: cup.ingredients = []
+    -- A straight double (exactly two of one spirit other than tequila, nothing
+    -- else) sets player.drank_double_this_turn: an Ice card may be claimed
+    -- this turn (cards.allium). The flag clears when the turn passes.
+    if consumed is two of one spirit other than TEQUILA and nothing else:
+        ensures: player.drank_double_this_turn = true
     -- Drunk cup ingredients go to the bladder (not the bag).
     -- When the player later GoesForAWee, these are excreted and returned to the bag.
 }

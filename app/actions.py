@@ -175,6 +175,8 @@ def _advance_turn(gs: GameState) -> GameState:
     _reset_take_batch_state(gs)
     gs.main_action_taken_this_turn = False
     gs.free_actions_used_this_turn = []
+    for p in gs.player_states.values():
+        p.drank_double_this_turn = False
 
     if not gs.turn_order:
         return gs
@@ -640,10 +642,12 @@ def card_payment(
     The cost is only checked: claiming leaves it in the bladder. A karaoke
     song also needs drunk 3+. ``pay_with`` picks what meets the cost where
     there's a choice:
-    the spirit for a cup doubler (any spirit with three will do without it)
-    or an ice card (any spirit but tequila with two), and for a specialist
-    either its spirit (two) or its special (one; the special is used by
-    default when held).
+    the spirit for a cup doubler (any spirit with three will do without it),
+    and for a specialist either its spirit (two) or its special (one; the
+    special is used by default when held).
+
+    An ice card costs nothing from the bladder: it can be claimed the turn
+    the player drinks a straight double (DrinkCup), so it pays [].
     """
     counts: dict[str, int] = {}
     for i in ps.bladder:
@@ -683,15 +687,7 @@ def card_payment(
                 return paid
         return None
     if ct == "ice":
-        # A double of any spirit but tequila
-        spirits = [s.name for s in _SPIRITS if s != Ingredient.TEQUILA]
-        if pay_with:
-            return take(pay_with.upper(), 2) if pay_with.upper() in spirits else None
-        for name in sorted(spirits):
-            paid = take(name, 2)
-            if paid:
-                return paid
-        return None
+        return [] if ps.drank_double_this_turn else None
     return None
 
 
@@ -1203,6 +1199,9 @@ def drink_cup(
         raise GameException("Cup is empty", status_code=400)
 
     drunk_ingredients = list(cup.ingredients)
+    if is_on_the_rocks(drunk_ingredients, []):
+        # A straight double drunk: an Ice card can be claimed this turn
+        ps.drank_double_this_turn = True
     for ingredient in drunk_ingredients:
         _drink_ingredient(gs, player_id, ingredient)
     # Drunk cup ingredients go to the bladder (not the bag) — handled by _drink_ingredient.
@@ -1323,9 +1322,10 @@ def claim_card(
         "ice",
     ):
         raise GameException(f"Unknown card type: {card_type}", status_code=500)
-    if card_type == "ice" and spirit_type and spirit_type.upper() == "TEQUILA":
+    if card_type == "ice" and not ps.drank_double_this_turn:
         raise GameException(
-            "Tequila doesn't go on the rocks: pay for ice with another spirit",
+            "Drink a straight double (two of one spirit, not tequila, nothing "
+            "else) this turn to claim an Ice card",
             status_code=400,
         )
     needs_spirit = ("karaoke", "store", "specialist", "free_action")

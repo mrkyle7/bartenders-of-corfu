@@ -107,7 +107,10 @@ variant FreeActionCard : Card {
 variant IceCard : Card {
     name: String
     ice_tokens: Integer                      -- config.ice_tokens_per_card once claimed
-    -- cost: 2 bladder spirits of one type, any but TEQUILA (only checked)
+    -- cost: nothing from the bladder. It can be claimed (the usual free claim)
+    --   only in a turn where the player drank a straight double with DrinkCup:
+    --   a cup of exactly two of one spirit other than TEQUILA, nothing else
+    --   (PlayerState.drank_double_this_turn, cleared when the turn passes)
     -- worth 1 point when claimed
     -- each ice token sells one double on the rocks (see SellCup), then it is
     --   gone for good; the card stays with the player when empty
@@ -296,7 +299,7 @@ rule ClaimCard {
     requires card.kind = FreeAction:
         player.bladder where spirit_type = card.spirit_type has count >= 3
     requires card.kind = Ice:
-        player.bladder has 2 or more spirits of one spirit_type other than TEQUILA
+        player.drank_double_this_turn
     -- The cost is only checked: its ingredients stay in the bladder and the
     -- bag is unchanged.
     if card.kind = Karaoke:

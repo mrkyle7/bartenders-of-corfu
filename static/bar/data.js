@@ -152,7 +152,7 @@ export function cardText(card) {
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
         case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Needs 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'} in your bladder.`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
-        case 'ice': return `${ICE_TOKENS} ice tokens. Each sells a double with no mixer on the rocks for 3 (not tequila), then it’s gone.`;
+        case 'ice': return `Claim it the turn you drink a straight double. ${ICE_TOKENS} ice tokens: each sells a double with no mixer on the rocks for 3, then it’s gone.`;
         case 'order':
             if (card.drink === 'simple') return `Serve a ${card.name}, single or double, for +${card.bonus} on top.`;
             if (card.drink === 'rocks') return `Serve a double ${ING[card.spirit_type]?.label ?? ''} on the rocks for +${card.bonus} on top.`;
@@ -171,7 +171,7 @@ export function cardCost(card) {
         case 'specialist': return Array(2).fill(card.spirit_type);
         case 'refresher': return Array(2).fill(card.mixer_type);
         case 'cup_doubler': return Array(3).fill('ANY_SPIRIT');
-        case 'ice': return Array(2).fill('ANY_SPIRIT'); // not tequila
+        case 'ice': return Array(2).fill('ANY_SPIRIT'); // drunk as a straight double, not tequila
         case 'order': return orderRecipe(card).cup;
         default: return [];
     }
@@ -266,7 +266,7 @@ export const RULES = [
         items: [
             'Claim a card (free, once a turn) if your bladder holds its cost. The cost is only checked: it stays in your bladder. Stored spirits and specials don’t count, except that one special meets the cost of its specialist.',
             'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more, wherever it turns up. Sing three and you win.',
-            'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), Ice (2 ice tokens, each sells a double with no mixer on the rocks, then it’s gone; costs a double of any spirit but tequila), and free-action cards that make taking, selling or weeing free. The card says what it does.',
+            'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), Ice (claim it the turn you drink a straight double, two of one spirit but tequila and nothing else; 2 ice tokens, each sells a double with no mixer on the rocks, then it’s gone), and free-action cards that make taking, selling or weeing free. The card says what it does.',
             'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',
             'Clearing the orders (drunk 2 or more) or swiping the abilities (drunk 3 or more) is free, once a turn each: the whole row is discarded and a fresh one is dealt. When a deck runs out, its discards are shuffled to make a new one.',
         ],

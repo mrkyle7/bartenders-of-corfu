@@ -88,9 +88,7 @@ class Card:
             return [IngredientRequirement(kind="spirit", count=2)]
         elif self.card_type == "free_action":
             return [IngredientRequirement(kind="spirit", count=3)]
-        elif self.card_type == "ice":
-            return [IngredientRequirement(kind="spirit", count=2)]
-        return []
+        return []  # ice: drink a straight double that turn, no bladder cost
 
     def to_dict(self) -> dict:
         d = {

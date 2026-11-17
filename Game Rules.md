@@ -149,7 +149,7 @@ A served order goes on the order discard pile and the next one is dealt. Each gl
 | Greedy Bartender | 3 rum | 2 | Taking ingredients is free. |
 | Entrepreneur | 3 vodka | 2 | Selling is free. |
 | Weak Bladder | 3 gin | 2 | Going for a wee is free. |
-| Ice Bucket (three of them) | 2 of any one spirit except tequila | 1 | Comes with 2 ice tokens. Each sells a double with no mixer "on the rocks" (see Serving), then it's gone. |
+| Ice Bucket (three of them) | Nothing in your bladder: claim it in a turn where you **drank a straight double** (two of one spirit, not tequila, nothing else) with "Drink a glass" | 1 | Comes with 2 ice tokens. Each sells a double with no mixer "on the rocks" (see Serving), then it's gone. |
 
 **Free-action cards** (Greedy Bartender, Entrepreneur, Weak Bladder) all work the same way. With the card, that action is a free action: do it before or after your main action, but still only once a turn, so your main action can't be the same thing again. If you do it first, you can take a different main action too, or end your turn there.
 

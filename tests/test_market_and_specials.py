@@ -1198,21 +1198,70 @@ def _holding_ice(ps, tokens: int = 2) -> None:
     )
 
 
-def test_an_ice_card_costs_a_double_of_any_spirit_but_tequila_and_holds_two_tokens():
+def _drink(gs: GameState, *glass: Ingredient) -> GameState:
+    """The player drinks a glass holding `glass` with the DrinkCup action."""
+    pid, ps = _me(gs)
+    ps.cups[0] = Cup(ingredients=list(glass))
+    gs, _ = actions.drink_cup(gs, pid, 0)
+    return gs
+
+
+def test_drinking_a_straight_double_lets_you_claim_an_ice_card_that_turn():
     gs = _game()
     pid, ps = _me(gs)
     _ice(gs)
-    ps.bladder = [Ingredient.TEQUILA] * 2 + [Ingredient.GIN]
+    _row(gs, 2).cards = []  # drunk 2 could clear orders, holding the turn open
     with pytest.raises(GameException):
-        claim_card(gs, pid, "ice-1")  # tequila doesn't go on the rocks
-    ps.bladder = [Ingredient.GIN] * 2
+        claim_card(gs, pid, "ice-1")  # nothing drunk yet
+    gs = _drink(gs, Ingredient.GIN, Ingredient.GIN)
+    # The claim is still to come, so the turn waits for it
+    assert gs.player_turn == pid
     new, payload = claim_card(gs, pid, "ice-1")
     me = new.player_states[pid]
-    assert me.bladder == [Ingredient.GIN] * 2  # the cost stays
-    assert payload["cost"] == ["GIN", "GIN"]
+    assert payload["cost"] == []
     (held,) = me.cards
     assert held["card_type"] == "ice" and held["ice_tokens"] == 2
     assert me.points == 1
+    assert new.player_turn != pid
+    assert not me.drank_double_this_turn  # used up with the turn
+
+
+@pytest.mark.parametrize(
+    "glass",
+    [
+        [Ingredient.TEQUILA, Ingredient.TEQUILA],  # tequila never goes on ice
+        [Ingredient.GIN, Ingredient.GIN, Ingredient.TONIC],  # not straight
+        [Ingredient.GIN, Ingredient.RUM],  # not a double of one spirit
+        [Ingredient.GIN],  # a single
+    ],
+)
+def test_only_a_straight_double_of_a_spirit_but_tequila_counts(glass):
+    gs = _game()
+    pid, _ = _me(gs)
+    _ice(gs)
+    _row(gs, 2).cards = []
+    gs = _drink(gs, *glass)
+    assert not gs.player_states[pid].drank_double_this_turn
+
+
+def test_a_double_in_the_bladder_is_not_enough():
+    gs = _game()
+    pid, ps = _me(gs)
+    _ice(gs)
+    ps.bladder = [Ingredient.GIN] * 2
+    with pytest.raises(GameException) as exc:
+        claim_card(gs, pid, "ice-1")
+    assert "double" in str(exc.value)
+
+
+def test_the_chance_to_claim_ice_ends_with_the_turn():
+    gs = _game()
+    pid, ps = _me(gs)
+    _row(gs, 3).cards = []  # no ice out: nothing holds the turn open
+    _row(gs, 2).cards = []
+    gs = _drink(gs, Ingredient.VODKA, Ingredient.VODKA)
+    assert gs.player_turn != pid
+    assert not gs.player_states[pid].drank_double_this_turn
 
 
 def test_a_double_with_nothing_else_needs_ice():
@@ -1315,14 +1364,22 @@ def test_bots_see_ice_claims_and_rocks_sales():
     pid, ps = _me(gs)
     _row(gs, 2).cards = []
     _ice(gs)
-    ps.bladder = [Ingredient.GIN] * 2
     ps.cups[0] = Cup(ingredients=[Ingredient.GIN, Ingredient.GIN])
+    acts = get_valid_actions(gs, pid)
+    assert not any(
+        a.action_type == "claim_card" and a.params["card_id"] == "ice-1" for a in acts
+    )
+    # No ice yet, so the double can't be sold, but it can be drunk
+    assert not any(a.action_type == "sell_cup" for a in acts)
+    assert any(a.action_type == "drink_cup" for a in acts)
+    gs = _drink(gs, Ingredient.GIN, Ingredient.GIN)
     acts = get_valid_actions(gs, pid)
     assert any(
         a.action_type == "claim_card" and a.params["card_id"] == "ice-1" for a in acts
     )
-    # No ice yet, so the double can't be sold
-    assert not any(a.action_type == "sell_cup" for a in acts)
+    pid, ps = _me(gs)
     _holding_ice(ps)
+    ps.cups[1] = Cup(ingredients=[Ingredient.RUM, Ingredient.RUM])
+    gs.main_action_taken_this_turn = False
     sells = [a for a in get_valid_actions(gs, pid) if a.action_type == "sell_cup"]
     assert [a.params["points"] for a in sells] == [3]
