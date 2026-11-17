@@ -587,11 +587,21 @@ def test_bar_drinking_sends_nothing_to_the_bag(
     page.goto(f"{base_url}/bar?id={new_game}")
     page.locator(".turnbar.tone-you").wait_for(state="visible", timeout=10000)
     page.evaluate(_WATCH_BAG)
-    slot = next(i for i, n in enumerate(gs["open_display"]) if n != "SPECIAL")
+    # Drink a mixer if there is one: one mixer pays for no card, so the turn
+    # ends with the take. (One spirit can pay for its Store card, which keeps
+    # the turn open for the claim.)
+    display = gs["open_display"]
+    plain = [i for i, n in enumerate(display) if n != "SPECIAL"]
+    mixers = [i for i in plain if display[i] in ("COLA", "SODA", "TONIC", "CRANBERRY")]
+    slot = (mixers or plain)[0]
 
     page.locator(f'[data-k="disp-{slot}"]').click()
     page.locator('[data-k="mouth"]').click()
     page.locator('[data-k="done-placing"]').click()
+    end_turn = page.locator('[data-k="end-turn"]')
+    end_turn.or_(page.locator(".turnbar:not(.tone-you)")).first.wait_for(timeout=10000)
+    if end_turn.count():
+        end_turn.click()  # a claim is still open: give it up
     page.locator(".turnbar.tone-you").wait_for(state="detached", timeout=10000)
     page.wait_for_timeout(300)
     assert page.evaluate("window.toBag") == 0
