@@ -1982,7 +1982,7 @@ function winReason(state) {
     const w = state.player_states[state.winner];
     const you = state.winner === me.id;
     if ((w.karaoke_cards_claimed ?? songsSung(w)) >= 3) {
-        return { kind: 'karaoke', text: `${you ? 'You' : seatName(state.winner)} sang three karaoke songs and won on the spot, whatever the points.` };
+        return { kind: 'karaoke', text: `${you ? 'You' : seatName(state.winner)} sang three karaoke songs and won on the spot.` };
     }
     const others = Object.entries(state.player_states).filter(([pid]) => pid !== state.winner);
     if (others.length && others.every(([, ps]) => ps.status !== 'active')) {

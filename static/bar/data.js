@@ -148,7 +148,7 @@ export function cardText(card) {
         case 'store': return `Keeps your ${spirit} out of your bladder. Pour it or drink it whenever you like.`;
         case 'refresher': return `Every ${mixer} you drink sobers you up by one, even with spirits.`;
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
-        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Needs 2 ${spirit} in your bladder.`;
+        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails).`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
         case 'ice': return `Claim it the turn you drink a straight double. ${ICE_TOKENS} ice tokens: each sells a double with no mixer on the rocks for 3, then it’s gone.`;
         case 'order':
