@@ -7,7 +7,7 @@ import { api } from './api.js';
 import {
     BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ICE_TOKENS, ING, MIXERS, MODES, PAIRINGS,
     RULES, RULES_INTRO, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isOnTheRocks, isSpecial,
-    orderRecipe, servesOrder, SPECIALIST_SPECIAL, splitGlass,
+    orderRecipe, servesOrder, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
 import { initLive, layout, liveZoom } from './live.js';
@@ -938,8 +938,6 @@ function costHave(card, ps) {
     if (card.card_type === 'cup_doubler') return Math.max(0, ...SPIRITS.map((s) => have[s] ?? 0));
     // Ice: claimable the turn you drink a straight double
     if (card.card_type === 'ice') return ps.drank_double_this_turn ? cardCost(card).length : 0;
-    // One of its special meets a specialist's whole cost
-    if (card.card_type === 'specialist' && have[SPECIALIST_SPECIAL[card.spirit_type]]) return cardCost(card).length;
     return have[cardCost(card)[0]] ?? 0;
 }
 

@@ -29,8 +29,6 @@ export const ING = {
 export const isSpecial = (name) => !!ING[name]?.special;
 // Drunk, these specials count like a spirit; lemon and sugar like a mixer.
 export const BOOZY = ['BITTERS', 'COINTREAU', 'VERMOUTH'];
-// One of these meets the cost of the specialist card of that spirit.
-export const SPECIALIST_SPECIAL = { WHISKEY: 'BITTERS', TEQUILA: 'COINTREAU', VODKA: 'VERMOUTH', RUM: 'SUGAR', GIN: 'LEMON' };
 // Max specials that sit in one glass, on top of its five spirits and mixers.
 export const GLASS_SPECIALS = 2;
 
@@ -150,7 +148,7 @@ export function cardText(card) {
         case 'store': return `Keeps your ${spirit} out of your bladder. Pour it or drink it whenever you like.`;
         case 'refresher': return `Every ${mixer} you drink sobers you up by one, even with spirits.`;
         case 'cup_doubler': return 'Goes on one glass for good: drinks from it score double (not cocktails).';
-        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Needs 2 ${spirit} or 1 ${ING[SPECIALIST_SPECIAL[card.spirit_type]]?.label ?? 'special'} in your bladder.`;
+        case 'specialist': return `+2 points on every drink with ${spirit} in it (not cocktails). Needs 2 ${spirit} in your bladder.`;
         case 'free_action': return FREE_ACTION_TEXT[card.free_action_type] ?? 'A free extra action every turn.';
         case 'ice': return `Claim it the turn you drink a straight double. ${ICE_TOKENS} ice tokens: each sells a double with no mixer on the rocks for 3, then it’s gone.`;
         case 'order':
@@ -229,7 +227,7 @@ export const RULES = [
         items: [
             'Take exactly 3 plus your drunk level, from the display, the specials tray, blind from the bag, or any mix.',
             'Put each one in a glass or drink it before you take more. A glass holds five spirits and mixers, plus two specials in the specials spaces at its top. Nothing goes back, and a blind draw can hand you anything, specials included.',
-            'Specials are for cocktails: a glass with one in it only sells as the cocktail it makes. You might drink one so a rival can’t have it, or to claim a specialist with it.',
+            'Specials are for cocktails: a glass with one in it only sells as the cocktail it makes. You might drink one so a rival can’t have it.',
         ],
     },
     {
@@ -264,7 +262,7 @@ export const RULES = [
         title: 'Cards',
         lead: 'What you’ve drunk earns them.',
         items: [
-            'Claim a card (free, once a turn) if your bladder holds its cost. The cost is only checked: it stays in your bladder. Stored spirits and specials don’t count, except that one special meets the cost of its specialist.',
+            'Claim a card (free, once a turn) if your bladder holds its cost. The cost is only checked: it stays in your bladder. Stored spirits and specials don’t count.',
             'Karaoke: get up and sing! A song needs 2 of its spirit and you drunk 3 or more, wherever it turns up. Sing three and you win.',
             'Ability cards: Store (keep a spirit on the card to pour or drink later), Refresher (a mixer that always sobers you), Cup doubler (a glass that scores double), Specialist (+2 on drinks with its spirit), Ice (claim it the turn you drink a straight double, two of one spirit but tequila and nothing else; 2 ice tokens, each sells a double with no mixer on the rocks, then it’s gone), and free-action cards that make taking, selling or weeing free. The card says what it does.',
             'Free-action cards: that action becomes free, before or after your main action, still once a turn. Done first, it can stand in for your main action.',

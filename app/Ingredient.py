@@ -81,13 +81,3 @@ def special_type_of(ingredient: Ingredient) -> str | None:
 BOOZY_SPECIALS: frozenset[Ingredient] = frozenset(
     {Ingredient.BITTERS, Ingredient.COINTREAU, Ingredient.VERMOUTH}
 )
-
-# A specialist card can be claimed with one of its spirit's special instead
-# of two of the spirit.
-SPECIALIST_SPECIAL: dict[str, Ingredient] = {
-    "WHISKEY": Ingredient.BITTERS,
-    "TEQUILA": Ingredient.COINTREAU,
-    "VODKA": Ingredient.VERMOUTH,
-    "RUM": Ingredient.SUGAR,
-    "GIN": Ingredient.LEMON,
-}

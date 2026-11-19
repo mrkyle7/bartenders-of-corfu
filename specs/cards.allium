@@ -77,9 +77,7 @@ variant CupDoublerCard : Card {
 variant SpecialistCard : Card {
     spirit_type: WHISKEY | RUM | VODKA | GIN | TEQUILA
     name: String
-    -- cost: 2 bladder spirits of this card's spirit_type, OR 1 of its special
-    --   (WHISKEY: bitters, TEQUILA: cointreau, VODKA: vermouth, RUM: sugar,
-    --   GIN: lemon); the player chooses when they could pay either way
+    -- cost: 2 bladder spirits of this card's spirit_type (specials never count)
     -- worth 2 points when claimed
     -- ongoing: all non-cocktail drinks containing this spirit_type score +2 bonus points
     -- the specialist bonus is applied after cup doubler doubling:
@@ -295,7 +293,6 @@ rule ClaimCard {
         -- player declares the spirit type and the cup at claim time
     requires card.kind = Specialist:
         player.bladder where spirit_type = card.spirit_type has count >= 2
-        or player.bladder contains specialist_special(card.spirit_type)
     requires card.kind = FreeAction:
         player.bladder where spirit_type = card.spirit_type has count >= 3
     requires card.kind = Ice:
@@ -440,7 +437,7 @@ guarantee: cleared and served cards go on their own deck's discard pile; when th
 guarantee: order cards are never claimed; a sale serves at most one order per cup
 guarantee: order bonuses are never doubled and never get the specialist bonus
 guarantee: claiming a card checks its cost against the bladder and leaves the bladder unchanged (a Store then moves its spirit onto the card)
-guarantee: stored spirits never count toward a card cost; specials only meet a specialist's cost
+guarantee: stored spirits and specials never count toward a card cost
 guarantee: the Store card effect (transferring spirits to stored_spirits) is not a cost consumption
 guarantee: ClaimCard for a CupDoubler card requires a cup parameter; invalid without one
 guarantee: cup.has_cup_doubler is set at claim time and never cleared; persists through sell/refill cycles

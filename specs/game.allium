@@ -712,7 +712,7 @@ surface PlayerTurn {
     guarantee: a cup never holds more than config.max_cup_ingredients spirits and mixers, or config.max_cup_specials specials
     guarantee: drunk_level never goes below 0
     guarantee: bladder_capacity never goes below config.min_bladder_capacity
-    guarantee: a special never counts toward a card's cost, except one meets the cost of its specialist (see cards.allium)
+    guarantee: a special never counts toward a card's cost (see cards.allium)
     guarantee: TakeIngredients is unavailable when the bag's spirits and mixers, the display and the specials display together hold fewer than take_count ingredients
     guarantee: a player may not cast a VoteOnUndoMove vote if they already voted on the same request
     guarantee: the proposer of an UndoRequest is already recorded as agree and cannot vote again
