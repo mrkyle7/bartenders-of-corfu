@@ -776,9 +776,18 @@ function proposeUndo() {
     act(async () => {
         await api.proposeUndo(gameId);
         await refresh();
-        toast('Asked the table to take back the last turn.');
+        toast('Asked the table to take back the last move.');
         return null;
     });
+}
+
+// "Ana asked to take back: Ben drew 2 from the bag."
+function undoQuestion(undo) {
+    const who = nameOf(undo.proposed_by);
+    const target = undo.target_move_number == null ? null
+        : moves.find((m) => m.turn_number === undo.target_turn_number && m.move_number === undo.target_move_number);
+    if (!target) return `${who} asked to take back the last move.`;
+    return `${who} asked to take back: ${describeMove(target, nameOf)}.`;
 }
 
 function voteUndo(vote) {
@@ -872,7 +881,7 @@ function turnbar() {
     if (undo && undo.status === 'pending') {
         const voted = (undo.votes ?? {})[me.id] !== undefined;
         kids.push(h('div.prompt', { role: 'group', 'aria-label': 'Undo request' },
-            h('p', { text: `${nameOf(undo.proposed_by)} asked to take back the last turn.` }),
+            h('p', { text: undoQuestion(undo) }),
             voted ? h('p.prompt-note', { text: 'Waiting for everyone to answer.' })
                 : h('div.prompt-choices', {},
                     h('button.btn.go', { type: 'button', onclick: () => voteUndo('agree'), text: 'Agree', 'data-k': 'undo-yes' }),
@@ -1943,7 +1952,7 @@ function housekeeping() {
         const ps = mine();
         const undoOpen = game.pending_undo && game.pending_undo.status === 'pending';
         if (moves.length && !undoOpen && ps?.status === 'active') {
-            bits.push(h('button.btn.tiny', { type: 'button', onclick: proposeUndo, text: 'Ask to take back the last turn', 'data-k': 'undo' }));
+            bits.push(h('button.btn.tiny', { type: 'button', onclick: proposeUndo, text: 'Ask to take back the last move', 'aria-label': 'Ask everyone to take back the last move', 'data-k': 'undo' }));
         }
         if (ps?.status === 'active') {
             bits.push(h('button.btn.tiny.quiet', { type: 'button', onclick: () => askLeave('quit'), text: 'Leave the game', 'data-k': 'leave' }));

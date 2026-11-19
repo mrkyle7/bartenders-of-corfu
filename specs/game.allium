@@ -527,8 +527,11 @@ guarantee: the system maintains sufficient history to reconstruct the full game 
            start of any recorded turn — via stored per-turn snapshots or deterministic replay
            from the initial state captured at StartGame
 
--- ─── Undo turn ────────────────────────────────────────────────────────────────
--- Any active player may propose to undo the most recently completed turn.
+-- ─── Undo moves ───────────────────────────────────────────────────────────────
+-- Any active player may propose to take back the latest move nobody has taken
+-- back yet (not a whole turn). Undoing again and again walks back a move at a
+-- time. Bots don't ask for their moves back: the target is the latest standing
+-- move a person made, and any bot moves since are taken back with it.
 -- The undo is applied only when all active (non-eliminated) players have agreed.
 -- The proposing player implicitly votes agree at proposal time.
 -- At most one undo proposal may be pending per game at any time.
@@ -536,24 +539,29 @@ guarantee: the system maintains sufficient history to reconstruct the full game 
 entity UndoRequest {
     id: UUID
     game: session/Game
-    target_turn_number: Integer         -- turn_number of the MoveRecord being undone
+    target_turn_number: Integer         -- turn_number of the MoveRecord being taken back
+    target_move_number: Integer?        -- its move_number (null on old whole-turn requests)
     proposed_by: UUID                   -- player_id of the proposer
     proposed_at: Timestamp
     votes: Map<UUID, agree | disagree>  -- keyed by player_id; only active players vote
     status: pending | approved | rejected
 }
 
-rule ProposeUndoTurn {
-    when: ProposeUndoTurn(player)
+-- The standing moves: every MoveRecord in order, except undo moves and the
+-- moves each undo took back (its target and every standing move after it).
+
+rule ProposeUndoMove {
+    when: ProposeUndoMove(player)
     requires: player.status = active
     requires: game.status = started
-    requires: at least one MoveRecord exists for this game
+    requires: a standing MoveRecord made by a person (not a bot) exists for this game
     requires: no UndoRequest with status = pending exists for this game
-    let last_turn = MoveRecord with the highest turn_number for this game
+    let target = the latest standing MoveRecord made by a person
     ensures: UndoRequest.created(
         id: new_uuid,
         game: game,
-        target_turn_number: last_turn.turn_number,
+        target_turn_number: target.turn_number,
+        target_move_number: target.move_number,
         proposed_by: player.player_id,
         proposed_at: now,
         votes: { player.player_id → agree },    -- proposer implicitly agrees
@@ -561,8 +569,8 @@ rule ProposeUndoTurn {
     )
 }
 
-rule VoteOnUndoTurn {
-    when: VoteOnUndoTurn(player, request_id, vote: agree | disagree)
+rule VoteOnUndoMove {
+    when: VoteOnUndoMove(player, request_id, vote: agree | disagree)
     requires: player.status = active
     requires: request: UndoRequest where id = request_id
               and request.game = game
@@ -573,27 +581,39 @@ rule VoteOnUndoTurn {
         ensures: request.status = rejected
     if all active players are present in request.votes and all values are agree:
         ensures: request.status = approved
-        ensures: ExecuteUndoTurn(request)
+        ensures: ExecuteUndoMove(request)
 }
 
-rule ExecuteUndoTurn {
-    -- Triggered automatically when VoteOnUndoTurn causes all active players to agree.
-    when: ExecuteUndoTurn(request: UndoRequest)
+rule ExecuteUndoMove {
+    -- Triggered automatically when VoteOnUndoMove causes all active players to agree.
+    when: ExecuteUndoMove(request: UndoRequest)
     requires: request.status = approved
-    -- Restore the full game state (BoardState and all PlayerState) to what it was
-    -- immediately before the target turn began.
-    ensures: BoardState is restored to its state at the start of request.target_turn_number
-    ensures: all PlayerState records are restored to their state at the start of request.target_turn_number
-    ensures: BoardState.player_turn is restored to the player who performed the undone turn
-    -- The MoveRecord for the undone turn is NOT removed; it is retained for audit purposes.
-    -- Subsequent actions will produce new MoveRecords continuing from the restored state.
+    -- Restore the full game state to what it was immediately before the target move.
+    ensures: BoardState and all PlayerState records are restored to the state_before of the target move
+    -- Blind bag draws: making a taken-back move again gets the same tokens.
+    ensures: BoardState.bag_redraws = the tokens the target's player drew blind in the moves
+             taken back (in order), then, if the undo stays within their turn, the
+             bag_redraws not yet drawn again
+    -- The MoveRecords taken back are NOT removed; they are retained for audit purposes,
+    -- and an "undo" MoveRecord is added naming the target.
 }
+
+rule MoveCancelsPendingUndo {
+    -- An undo asked for before a move would take back the wrong one.
+    when: any MoveRecord is created while an UndoRequest is pending
+    ensures: request.status = rejected
+}
+
+-- A blind draw from the bag (DrawFromBag, or TakeIngredients from the bag)
+-- hands out bag_redraws first, skipping any no longer in the bag; then random.
+-- bag_redraws is emptied when the turn advances, before the display is refilled,
+-- so the next player's draws are random again.
 
 guarantee: at most one UndoRequest may be in status = pending per game at any time
 guarantee: an eliminated player (hospitalised or wet) does not vote and is not counted
            in the "all active players agree" threshold
 guarantee: a rejected or approved UndoRequest does not block future undo proposals
-guarantee: ProposeUndoTurn is unavailable when there are no MoveRecords for the game
+guarantee: ProposeUndoMove is unavailable when no standing move made by a person remains
 
 -- ─── Victory and elimination ──────────────────────────────────────────────────
 
@@ -646,6 +666,7 @@ surface PlayerTurn {
             pending_undo.proposed_by
             pending_undo.proposed_at
             pending_undo.target_turn_number
+            pending_undo.target_move_number -- with target_turn_number, the move being taken back
             pending_undo.votes              -- so each player can see who has and has not voted
             pending_undo.status
 
@@ -675,12 +696,12 @@ surface PlayerTurn {
             and board.player_turn = player.id
             and (row is the orders row and state.drunk_level >= config.min_drunk_to_refresh
                  or row is the ability row and state.drunk_level >= config.min_drunk_to_swipe)
-        ProposeUndoTurn(player)
+        ProposeUndoMove(player)
             when state.status = active
             and game.status = started
             and pending_undo is null
             and at least one MoveRecord exists for this game
-        VoteOnUndoTurn(player, request_id, vote: agree | disagree)
+        VoteOnUndoMove(player, request_id, vote: agree | disagree)
             when state.status = active
             and pending_undo is not null
             and pending_undo.status = pending
@@ -693,7 +714,7 @@ surface PlayerTurn {
     guarantee: bladder_capacity never goes below config.min_bladder_capacity
     guarantee: a special never counts toward a card's cost, except one meets the cost of its specialist (see cards.allium)
     guarantee: TakeIngredients is unavailable when the bag's spirits and mixers, the display and the specials display together hold fewer than take_count ingredients
-    guarantee: a player may not cast a VoteOnUndoTurn vote if they already voted on the same request
+    guarantee: a player may not cast a VoteOnUndoMove vote if they already voted on the same request
     guarantee: the proposer of an UndoRequest is already recorded as agree and cannot vote again
 }
 

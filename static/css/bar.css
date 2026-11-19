@@ -1356,33 +1356,6 @@ body.live-narrow .table .mat-cards .card { --cw: 150px; }
 body.live-narrow .table .is-theirs .mat-cards .card { --cw: 110px; }
 body.live-narrow .table .across { grid-template-columns: 1fr; }
 
-/* Zoom, like the magnifiers on a Board Game Arena table. */
-.zoomer {
-    position: fixed;
-    right: 14px;
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px;
-    border-radius: 999px;
-    background: rgba(18, 55, 84, 0.92);
-    box-shadow: 0 0 0 2px var(--line), 0 6px 14px rgba(0, 0, 0, 0.5);
-}
-.zoom-btn {
-    width: 40px;
-    height: 40px;
-    border: 0;
-    border-radius: 50%;
-    background: var(--whitewash);
-    color: var(--aegean-ink);
-    font: 800 24px/1 var(--ui);
-    cursor: pointer;
-}
-.zoom-btn:disabled { opacity: 0.4; cursor: default; }
-.zoom-level { min-width: 46px; text-align: center; font: 700 13px/1 var(--ui); color: var(--whitewash); }
-
 /* Pieces in flight ride above the table; pieces leaving it (and points
    scored) fly on a layer zoomed like the table. */
 /* Above the table's pieces, below the turn bar (20) and the panel. */

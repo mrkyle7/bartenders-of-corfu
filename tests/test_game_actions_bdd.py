@@ -485,7 +485,7 @@ def player_is_eliminated(ctx, n):
     _patch_game_state(ctx["game_id"], patch)
 
 
-@given(parsers.parse("player {n:d} has proposed to undo the last turn"))
+@given(parsers.parse("player {n:d} has proposed to undo the last move"))
 def player_proposed_undo(ctx, n):
     token, _ = _player(ctx, n)
     resp = _client.post(
@@ -1017,7 +1017,7 @@ def player_try_take_ingredient(ctx, n):
     ctx["last_status"] = resp.status_code
 
 
-@when(parsers.parse("player {n:d} proposes to undo the last turn"))
+@when(parsers.parse("player {n:d} proposes to undo the last move"))
 def player_propose_undo(ctx, n):
     token, _ = _player(ctx, n)
     resp = _client.post(
@@ -1028,6 +1028,92 @@ def player_propose_undo(ctx, n):
     ctx["last_status"] = resp.status_code
     if resp.status_code == 200:
         ctx["undo_request_id"] = resp.json()["undo_request"]["id"]
+
+
+@when(parsers.parse("player {n:d} draws {count:d} ingredients from the bag"))
+def player_draws_from_bag(ctx, n, count):
+    """Draw blind, leaving the tokens pending; remembers what came out."""
+    token, _ = _player(ctx, n)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/draw-from-bag",
+        json={"count": count},
+        cookies=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    ctx.setdefault("draws", []).append(resp.json()["drawn"])
+    ctx["moves_made"] = ctx.get("moves_made", 0) + 1
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+
+
+@when(parsers.parse("player {n:d} drinks the drawn ingredients"))
+def player_drinks_drawn(ctx, n):
+    token, _ = _player(ctx, n)
+    pending = _get_game(token, ctx["game_id"])["game_state"]["bag_draw_pending"]
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/actions/take-ingredients",
+        json={
+            "assignments": [
+                {"source": "pending", "disposition": "drink"} for _ in pending
+            ]
+        },
+        cookies=_auth(token),
+    )
+    ctx["last_resp"] = resp
+    ctx["last_status"] = resp.status_code
+    if resp.status_code == 200:
+        ctx["moves_made"] = ctx.get("moves_made", 0) + 1
+
+
+@when(parsers.parse("player {n:d} ends their turn if it is still open"))
+def player_ends_turn_if_open(ctx, n):
+    token, pid = _player(ctx, n)
+    if _get_game(token, ctx["game_id"])["game_state"]["player_turn"] == pid:
+        resp = _client.post(
+            f"/v1/games/{ctx['game_id']}/actions/end-turn", cookies=_auth(token)
+        )
+        assert resp.status_code == 200, resp.text
+        ctx["moves_made"] = ctx.get("moves_made", 0) + 1
+
+
+@when("the game state is recorded")
+def record_game_state(ctx):
+    ctx["recorded_state"] = _get_game(ctx["p1_token"], ctx["game_id"])["game_state"]
+
+
+def _undo_with_agreement(ctx, n, m):
+    token, _ = _player(ctx, n)
+    resp = _client.post(f"/v1/games/{ctx['game_id']}/undo", cookies=_auth(token))
+    assert resp.status_code == 200, resp.text
+    request_id = resp.json()["undo_request"]["id"]
+    other, _ = _player(ctx, m)
+    resp = _client.post(
+        f"/v1/games/{ctx['game_id']}/undo/vote",
+        json={"request_id": request_id, "vote": "agree"},
+        cookies=_auth(other),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "approved", resp.text
+
+
+@when(parsers.parse("player {n:d} proposes an undo and player {m:d} agrees"))
+def propose_and_agree(ctx, n, m):
+    _undo_with_agreement(ctx, n, m)
+
+
+@when(
+    parsers.parse(
+        "player {n:d} takes back each of those moves one at a time, "
+        "with player {m:d} agreeing"
+    )
+)
+def undo_every_move_made(ctx, n, m):
+    """One undo per move made in the scenario (the turn may have needed an
+    end-turn or not), so it takes several undos in a row."""
+    assert ctx.get("moves_made", 0) >= 2
+    for _ in range(ctx["moves_made"]):
+        _undo_with_agreement(ctx, n, m)
+    ctx["moves_made"] = 0
 
 
 @when(parsers.parse("player {n:d} votes {vote} on the undo"))
@@ -1369,7 +1455,7 @@ def undo_approved(ctx):
     assert data.get("status") == "approved"
 
 
-@then("the game state should be restored to before the last turn")
+@then("the game state should be restored to before the last move")
 def state_restored(ctx):
     game = _get_game(ctx["p1_token"], ctx["game_id"])
     # After undoing player 1's turn, it should be player 1's turn again.
@@ -1380,6 +1466,44 @@ def state_restored(ctx):
     assert player_turn == p1_id, (
         f"Expected player_turn to be restored to p1 ({p1_id}), got {player_turn}"
     )
+
+
+@then("the game should be back to the recorded state")
+def back_to_recorded_state(ctx):
+    """Everything as it was, bar the turn counter (never reused) and the
+    draws the bag will hand out again."""
+    now = dict(_get_game(ctx["p1_token"], ctx["game_id"])["game_state"])
+    before = dict(ctx["recorded_state"])
+    for key in ("turn_number", "bag_redraws"):
+        now.pop(key, None)
+        before.pop(key, None)
+    assert now == before
+
+
+@then(parsers.parse("player {n:d} should have no ingredients waiting to be assigned"))
+def no_pending_draw(ctx, n):
+    token, pid = _player(ctx, n)
+    state = _get_game(token, ctx["game_id"])["game_state"]
+    assert state["player_turn"] == pid
+    assert state["bag_draw_pending"] == []
+
+
+@then("the second draw should match the first")
+def second_draw_matches(ctx):
+    first, second = ctx["draws"][-2], ctx["draws"][-1]
+    assert second == first, f"First draw {first}, second {second}"
+
+
+@then("the bag should not remember any draws")
+def bag_remembers_nothing(ctx):
+    state = _get_game(ctx["p1_token"], ctx["game_id"])["game_state"]
+    assert state["bag_redraws"] == []
+
+
+@then("the undo request should no longer be pending")
+def undo_not_pending(ctx):
+    game = _get_game(ctx["p1_token"], ctx["game_id"])
+    assert game.get("pending_undo") is None, game.get("pending_undo")
 
 
 @then("the undo request should be rejected")

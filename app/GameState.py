@@ -63,7 +63,16 @@ def draw_blind(gs: "GameState") -> Ingredient | None:
     A special drawn blind is the player's to deal with, like a spirit or a
     mixer: onto a glass rim or drunk. (Specials drawn to refill the open
     display go to the specials display instead; see ``draw_token``.)
+
+    Straight after an undo the bag hands out ``bag_redraws`` first: what the
+    taken-back move drew, so making that move again gets the same tokens.
     """
+    # After an undo, the draws the taken-back move made come out again
+    while gs.bag_redraws:
+        token = gs.bag_redraws.pop(0)
+        if token in gs.bag_contents:
+            gs.bag_contents.remove(token)
+            return token
     if not gs.bag_contents:
         return None
     token = random.choice(gs.bag_contents)
@@ -115,6 +124,7 @@ class GameState:
         display_specials: list[str | None] | None = None,
         bag_draw_pending_specials: list[str | None] | None = None,
         specials_display: list[Ingredient] | None = None,
+        bag_redraws: list[Ingredient] | None = None,
     ):
         self.winner: Optional[UUID] = winner
         self.bag_contents: list[Ingredient] = bag_contents
@@ -185,6 +195,13 @@ class GameState:
         # Specials drawn from the bag, waiting for anyone to take them.
         self.specials_display: list[Ingredient] = (
             list(specials_display) if specials_display is not None else []
+        )
+        # After an undo: what the next blind draws from the bag hand out, in
+        # order, so a player taking a move back and making it again gets what
+        # they got before. Cleared when the turn advances, so the next turn's
+        # draws are random again. See app/undo.py.
+        self.bag_redraws: list[Ingredient] = (
+            list(bag_redraws) if bag_redraws is not None else []
         )
 
     @property
@@ -278,6 +295,7 @@ class GameState:
             "bag_draw_pending_specials": list(self.bag_draw_pending_specials),
             "score_to_win": self.score_to_win,
             "specials_display": [i.name for i in self.specials_display],
+            "bag_redraws": [i.name for i in self.bag_redraws],
         }
 
     @classmethod
@@ -350,4 +368,5 @@ class GameState:
             specials_display=[
                 Ingredient[i] for i in state_data.get("specials_display", [])
             ],
+            bag_redraws=[Ingredient[i] for i in state_data.get("bag_redraws", [])],
         )

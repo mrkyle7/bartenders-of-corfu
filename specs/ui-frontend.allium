@@ -118,6 +118,7 @@ surface GamePage {
             pending_undo.proposed_by    -- resolved to username for display
             pending_undo.proposed_at
             pending_undo.target_turn_number
+            pending_undo.target_move_number -- the prompt names the move being taken back
             pending_undo.votes          -- so players can see who has and has not yet voted
 
     provides:
@@ -125,13 +126,13 @@ surface GamePage {
             when viewer.id = game.host
             and target_id in game.players
             and target_id != viewer.id
-        -- Undo turn
-        ProposeUndoTurn(viewer)
+        -- Undo a move
+        ProposeUndoMove(viewer)
             when viewer.id in game.players
             and game.status = started
             and pending_undo is null
             and at least one move has been recorded for this game
-        VoteOnUndoTurn(viewer, request_id, agree | disagree)
+        VoteOnUndoMove(viewer, request_id, agree | disagree)
             when viewer.id in game.players
             and pending_undo is not null
             and pending_undo.status = pending
@@ -142,7 +143,6 @@ surface GamePage {
             -- turn_number = 0 shows the initial state; turn_number = N shows state after turn N.
             when viewer.id in game.players
         -- The table is drawn at a fixed size, zoomed to fit, with animated moves
-        ZoomTable(viewer, in | out)
 
     guarantee: a 401 or 403 response triggers an alert and redirects to HomePage
     guarantee: all operation failures display a clear, non-technical error message inline
@@ -160,8 +160,8 @@ surface GamePage {
     guarantee: the replay controls allow stepping to any recorded turn; the reconstructed state is fetched
                from the API and displayed without requiring a full page reload
     guarantee: the table is always laid out at one fixed size (a wide layout for desktops, a narrow
-               one for phones) and zoomed to fit the screen; ZoomTable steps between 60% and 160% of the fit,
-               remembered per layout; opening the side panel never changes the zoom
+               one for phones) and zoomed to fit the screen, with no zoom controls of its own;
+               opening the side panel never changes the zoom
     guarantee: every move is animated from where its pieces were to where they are now, for the
                viewer's own moves and for other players' moves as they arrive: tokens drawn come out of the
                bag, tokens sold or wee'd away go back into it, claimed cards travel to the claimer's mat,

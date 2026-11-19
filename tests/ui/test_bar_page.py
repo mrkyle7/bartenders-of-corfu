@@ -418,34 +418,33 @@ def test_bar_table_is_fixed_size_by_default(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
     """The table is always drawn at a fixed size and fitted to the screen,
-    with the zoom controls showing and no button to switch it off."""
+    with no zoom buttons and no button to switch it off."""
     _started_game(base_url, new_user, new_game, other_user_and_jwt)
     page.goto(f"{base_url}/bar?id={new_game}")
-    page.locator(".zoomer").wait_for(state="visible", timeout=10000)
+    page.locator(".table").first.wait_for(state="visible", timeout=10000)
     assert _live_zoom(page) > 0
     assert "live-wide" in page.evaluate("document.body.className")
     assert page.locator('[data-k="live-view"]').count() == 0
+    assert page.locator(".zoomer, [data-k^='zoom-']").count() == 0
 
 
-def test_bar_live_view_zoom_buttons(
+def test_bar_undo_prompt_names_the_move(
     page, base_url, new_user, new_game, other_user_and_jwt
 ):
-    """The zoom buttons scale the table, and stop at their limits."""
-    _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    """Asking to take back a move: the others are asked about that move."""
+    _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    _api_post(
+        base_url,
+        f"/v1/games/{new_game}/actions/draw-from-bag",
+        new_user["jwt"],
+        {"count": 1},
+    )
+    _api_post(base_url, f"/v1/games/{new_game}/undo", new_user["jwt"], {})
     page.goto(f"{base_url}/bar?id={new_game}")
-    page.locator(".zoomer").wait_for(state="visible", timeout=10000)
-    start = _live_zoom(page)
-    assert page.locator(".zoom-level").inner_text() == "100%"
-
-    page.locator('[data-k="zoom-in"]').click()
-    assert _live_zoom(page) > start
-    assert page.locator(".zoom-level").inner_text() == "110%"
-
-    zoom_out = page.locator('[data-k="zoom-out"]')
-    while not zoom_out.is_disabled():
-        zoom_out.click()
-    assert page.locator(".zoom-level").inner_text() == "60%"
-    assert _live_zoom(page) < start
+    prompt = page.get_by_role("group", name="Undo request")
+    prompt.wait_for(state="visible", timeout=10000)
+    assert "asked to take back:" in prompt.inner_text()
+    assert "drew 1 from the bag" in prompt.inner_text()
 
 
 def test_bar_live_view_animates_a_pick_up(
