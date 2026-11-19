@@ -290,6 +290,32 @@ const list = (names) => {
         .join(', ') || 'nothing';
 };
 
+// What a move changed, for the history: cards off and onto the table, and
+// drunk levels and points that went up or down. One line each; [] if
+// nothing changed (or the move is from before moves kept this).
+export function describeChanges(move, nameOf) {
+    const c = move.action?.changes;
+    if (!c) return [];
+    const lines = [];
+    const names = (cards) => cards.map((k) => k.name).join(', ');
+    if (c.cards_out?.length) lines.push(`Off the table: ${names(c.cards_out)}`);
+    if (c.cards_in?.length) lines.push(`Dealt in: ${names(c.cards_in)}`);
+    const players = Object.entries(c.players ?? {});
+    // The player who moved first
+    players.sort(([a], [b]) => (b === move.player_id) - (a === move.player_id));
+    for (const [pid, d] of players) {
+        const bits = [];
+        if (d.drunk) bits.push(`drunk ${d.drunk[0]} → ${d.drunk[1]}`);
+        if (d.points) {
+            const gain = d.points[1] - d.points[0];
+            bits.push(`points ${d.points[0]} → ${d.points[1]} (${gain > 0 ? '+' : ''}${gain})`);
+        }
+        const text = bits.join(', ');
+        lines.push(`${nameOf(pid)}: ${text}`);
+    }
+    return lines;
+}
+
 export function describeMove(move, nameOf) {
     const a = move.action ?? {};
     const who = nameOf(move.player_id);

@@ -6,7 +6,7 @@
 import { api } from './api.js';
 import {
     BOOZY, CARD_KINDS, COCKTAILS, DRUNK_LABELS, FREE_ACTIONS, GLASS_SPECIALS, ICE_TOKENS, ING, MIXERS, MODES, PAIRINGS,
-    RULES, RULES_INTRO, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeMove, drinkName, isOnTheRocks, isSpecial,
+    RULES, RULES_INTRO, SEAT_COLOURS, SPECIALS, SPIRITS, cardCost, cardText, describeChanges, describeMove, drinkName, isOnTheRocks, isSpecial,
     orderRecipe, servesOrder, splitGlass,
 } from './data.js';
 import { inviteBox } from '/static/invite.js';
@@ -1917,12 +1917,16 @@ function renderSheet() {
 const RECENT_MOVES = 8;
 
 function chalkboard() {
-    const all = moves.map((m, i) => ({ n: i + 1, text: describeMove(m, nameOf), mine: m.player_id === me.id })).reverse();
+    const all = moves.map((m, i) => ({
+        n: i + 1, text: describeMove(m, nameOf), changes: describeChanges(m, nameOf), mine: m.player_id === me.id,
+    })).reverse();
     const shown = ui.historyOpen ? all : all.slice(0, RECENT_MOVES);
     return h('section.chalk', { 'aria-label': 'What happened' },
         h('h2.chalk-title', { text: 'What happened' }),
         shown.length
-            ? h('ol.chalk-list', { reversed: true, start: all.length }, shown.map((m) => h('li', { cls: m.mine ? 'is-mine' : '', value: m.n, text: m.text })))
+            ? h('ol.chalk-list', { reversed: true, start: all.length }, shown.map((m) => h('li', { cls: m.mine ? 'is-mine' : '', value: m.n },
+                h('span.chalk-move', { text: m.text }),
+                m.changes.length ? h('ul.chalk-changes', {}, m.changes.map((t) => h('li', { text: t }))) : null)))
             : h('p.chalk-empty', { text: 'Nothing yet. First round’s on the house.' }),
         all.length > RECENT_MOVES
             ? h('button.btn.tiny.chalk-more', {

@@ -44,6 +44,17 @@ Feature: Undo moves
     Then the history should contain the completed turn's moves
     And the moves should record the action type and player
 
+  Scenario: The history shows the cards, points and drunk levels a move changed
+    Given player 2 has completed a turn
+    And it is player 1's turn
+    And a store card is available in row 3
+    And player 1 has 3 spirits in their bladder
+    When player 1 claims that card
+    Then the last move in the history should show Vodka Store off the table and player 1's points going from 0 to 1
+
+  Scenario: The history shows a drunk level change from drinking
+    Then the last move in the history should show the drunk level change
+
   Scenario: Game state can be replayed to any turn
     When player 1 requests the state at turn 0
     Then the returned state should be the initial game state

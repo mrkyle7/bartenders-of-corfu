@@ -8,6 +8,7 @@ from app.game import Game, GameException, Status
 from app.game_modes import normalise_modes
 from app.GameState import GameState
 from app.Ingredient import Ingredient
+from app.move_changes import move_changes
 
 
 class GameManager:
@@ -194,13 +195,15 @@ class GameManager:
         state_before = game.game_state.to_dict()
         turn_number = game.game_state.turn_number  # pre-action, shared across the turn
         move_number = db.get_next_move_number(game.id, turn_number)
+        # The history shows what the move changed: cards, drunk levels, points
+        changes = move_changes(game.game_state, new_state)
         db.add_game_move(
             game.id,
             turn_number,
             move_number,
             player_id,
             action_type,
-            payload,
+            {**payload, "changes": changes} if changes else payload,
             state_before,
         )
         db.update_game_state(game.id, new_state)

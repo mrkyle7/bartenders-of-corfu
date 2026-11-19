@@ -678,3 +678,44 @@ def test_bar_win_screen_says_last_one_standing(
     assert "Last one standing" in text
     assert "Left the game" in text
     assert "karaoke" not in text
+
+
+def test_bar_history_shows_cards_points_and_drunk_changes(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """Each line of the history says what changed: cards, drunk level, points."""
+    from uuid import UUID
+
+    from app.card import Card
+    from app.Ingredient import Ingredient
+
+    _my_turn(base_url, new_user, new_game, other_user_and_jwt)
+    me = UUID(new_user["user"]["id"])
+
+    def patch(gs):
+        row = next(r for r in gs.card_rows if r.position == 3)
+        row.cards.insert(
+            0,
+            Card(
+                id="hist-store",
+                card_type="store",
+                name="Vodka Store",
+                spirit_type="VODKA",
+            ),
+        )
+        gs.player_states[me].bladder = [Ingredient.VODKA]
+
+    _set_state(new_game, patch)
+    _api_post(
+        base_url,
+        f"/v1/games/{new_game}/actions/claim-card",
+        new_user["jwt"],
+        {"card_id": "hist-store"},
+    )
+    page.goto(f"{base_url}/bar?id={new_game}")
+    chalk = page.locator(".chalk")
+    chalk.wait_for(state="visible", timeout=10000)
+    text = chalk.inner_text()
+    assert "Off the table: Vodka Store" in text
+    assert "Dealt in:" in text
+    assert "points 0 → 1 (+1)" in text

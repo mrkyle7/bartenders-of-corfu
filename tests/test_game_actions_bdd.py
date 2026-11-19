@@ -1523,6 +1523,39 @@ def state_unchanged(ctx):
     )
 
 
+@then(
+    parsers.parse(
+        "the last move in the history should show {card} off the table "
+        "and player {n:d}'s points going from {before:d} to {after:d}"
+    )
+)
+def history_shows_changes(ctx, card, n, before, after):
+    _, pid = _player(ctx, n)
+    resp = _client.get(
+        f"/v1/games/{ctx['game_id']}/history", cookies=_auth(ctx["p1_token"])
+    )
+    assert resp.status_code == 200, resp.text
+    changes = resp.json()["moves"][-1]["action"]["changes"]
+    assert card in [c["name"] for c in changes["cards_out"]], changes
+    assert changes["players"][pid]["points"] == [before, after], changes
+
+
+@then("the last move in the history should show the drunk level change")
+def history_shows_drunk_change(ctx):
+    resp = _client.get(
+        f"/v1/games/{ctx['game_id']}/history", cookies=_auth(ctx["p1_token"])
+    )
+    moves = resp.json()["moves"]
+    take = next(m for m in reversed(moves) if m["action"]["type"] == "take_ingredients")
+    state = _get_game(ctx["p1_token"], ctx["game_id"])["game_state"]
+    pid = take["player_id"]
+    drunk = state["player_states"][pid]["drunk_level"]
+    if drunk == 0:
+        assert pid not in take["action"].get("changes", {}).get("players", {})
+    else:
+        assert take["action"]["changes"]["players"][pid]["drunk"] == [0, drunk]
+
+
 @then("the history should contain the completed turn's moves")
 def history_has_completed_turn_moves(ctx):
     """A draw and a take, plus an end-turn when drinking held the turn open."""

@@ -1045,6 +1045,9 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 .chalk-list li::marker { color: #aeb5aa; }
 .chalk-list li.is-mine { color: #ffe3b8; }
 .chalk-more { margin-top: 12px; }
+.chalk-list .chalk-changes { list-style: none; margin: 2px 0 2px; padding: 0; display: grid; gap: 1px; font-size: 0.86em; color: #c9cec6; }
+.chalk-list .chalk-changes li::marker { content: none; }
+.chalk-list li.is-mine .chalk-changes { color: #e8d6bb; }
 
 .extras-side { display: grid; gap: 22px; align-content: start; }
 
