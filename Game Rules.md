@@ -62,7 +62,7 @@ Your turn ends once you've taken your main action and have no free action left t
 - You can't pour if the bag, the display and the specials tray together hold fewer than you need.
 - When you've taken them all, your drunk level changes once for everything you drank. The gaps in the display stay empty until the next player's turn starts: they refill it from the bag then, so nobody sees what comes out before their own turn.
 
-**Specials** (bitters, cointreau, lemon, sugar, vermouth) are for cocktails. A glass with a special in it can only be sold as the cocktail it makes. You might drink one instead, so a rival doesn't get it or to claim a specialist card with it.
+**Specials** (bitters, cointreau, lemon, sugar, vermouth) are for cocktails. A glass with a special in it can only be sold as the cocktail it makes. You might drink one instead, so a rival doesn't get it.
 
 ## Serving: sell your glasses
 
@@ -145,7 +145,7 @@ A served order goes on the order discard pile and the next one is dealt. Each gl
 | Store (one per spirit) | 1 of that spirit | 1 | All of that spirit in your bladder moves onto the card. Pour stored spirits into a glass or drink them whenever you like on your turn (free); a wee doesn't flush them. |
 | Refresher (one per mixer) | 2 of that mixer | 1 | That mixer always sobers you up by 1, even when you drink spirits with it. |
 | Cup doubler (Bendy Straw, Cocktail Umbrella) | 3 of any one spirit | 2 | Put it on one of your glasses for good: drinks sold from it score double, except cocktails. |
-| Specialist (one per spirit) | 2 of that spirit, or 1 of its special (whisky: bitters, tequila: cointreau, vodka: vermouth, rum: sugar, gin: lemon) | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
+| Specialist (one per spirit) | 2 of that spirit | 2 | +2 on every drink with that spirit, except cocktails; added after doubling. |
 | Greedy Bartender | 3 rum | 2 | Taking ingredients is free. |
 | Entrepreneur | 3 vodka | 2 | Selling is free. |
 | Weak Bladder | 3 gin | 2 | Going for a wee is free. |
@@ -153,7 +153,7 @@ A served order goes on the order discard pile and the next one is dealt. Each gl
 
 **Free-action cards** (Greedy Bartender, Entrepreneur, Weak Bladder) all work the same way. With the card, that action is a free action: do it before or after your main action, but still only once a turn, so your main action can't be the same thing again. If you do it first, you can take a different main action too, or end your turn there.
 
-Specials never count toward a card's cost, except that one meets the cost of the specialist of its spirit.
+Specials never count toward a card's cost.
 
 ## Winning
 

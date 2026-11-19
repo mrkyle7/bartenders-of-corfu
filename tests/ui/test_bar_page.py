@@ -625,3 +625,56 @@ def test_bar_draw_again_puts_down_the_last_draw(
     after = _api_get(base_url, f"/v1/games/{new_game}", new_user["jwt"])["game_state"]
     assert after["ingredients_taken_this_turn"] == 1
     assert len(after["bag_draw_pending"]) == 1
+
+
+def _set_state(game_id, patch):
+    """Change the stored game state directly (the test server shares the db)."""
+    from uuid import UUID
+
+    from app.db import db
+
+    game = db.get_game(UUID(game_id))
+    patch(game.game_state)
+    db.update_game_state(UUID(game_id), game.game_state)
+
+
+def test_bar_win_screen_says_karaoke_and_who_was_out(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """A karaoke win says so, and a player who went to hospital is marked out."""
+    from uuid import UUID
+
+    _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    me = UUID(new_user["user"]["id"])
+    other = UUID(other_user_and_jwt["user"]["id"])
+
+    def patch(gs):
+        gs.player_states[me].karaoke_cards_claimed = 3
+        gs.player_states[other].status = "hospitalised"
+        gs.player_states[other].points = 31
+        gs.winner = me
+
+    _set_state(new_game, patch)
+    page.goto(f"{base_url}/bar?id={new_game}")
+    card = page.locator(".ending-card")
+    card.wait_for(state="visible", timeout=10000)
+    text = card.inner_text()
+    assert "You won!" in text
+    assert "sang three karaoke songs" in text
+    assert "Sang 3 songs" in text
+    assert "Out: went to hospital" in text
+
+
+def test_bar_win_screen_says_last_one_standing(
+    page, base_url, new_user, new_game, other_user_and_jwt
+):
+    """Everyone else gone: the win screen says last one standing."""
+    _started_game(base_url, new_user, new_game, other_user_and_jwt)
+    _api_post(base_url, f"/v1/games/{new_game}/actions/quit", other_user_and_jwt["jwt"])
+    page.goto(f"{base_url}/bar?id={new_game}")
+    card = page.locator(".ending-card")
+    card.wait_for(state="visible", timeout=10000)
+    text = card.inner_text()
+    assert "Last one standing" in text
+    assert "Left the game" in text
+    assert "karaoke" not in text

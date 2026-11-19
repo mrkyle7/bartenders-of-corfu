@@ -724,18 +724,10 @@ Feature: Game turn actions
     Then player 1's bladder should contain 2 ingredients
     And the bag should contain 0 more ingredients than before
 
-  Scenario: A specialist card can be claimed with its special instead
+  Scenario: A special in the bladder does not pay for a specialist card
     Given it is player 1's turn
     And a specialist card for VODKA is available in row 3
     And player 1's bladder has 1 VERMOUTH spirit
-    When player 1 claims that card
-    Then player 1 should have 2 points
-    And player 1's bladder should contain 1 ingredients
-
-  Scenario: The wrong special does not pay for a specialist card
-    Given it is player 1's turn
-    And a specialist card for VODKA is available in row 3
-    And player 1's bladder has 1 BITTERS spirit
     When player 1 tries to claim that card
     Then the action should be rejected with a 400 error
 

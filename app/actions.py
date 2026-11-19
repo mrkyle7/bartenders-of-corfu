@@ -32,7 +32,6 @@ from app.GameState import (
 )
 from app.Ingredient import (
     BOOZY_SPECIALS,
-    SPECIALIST_SPECIAL,
     Ingredient,
     is_special,
 )
@@ -644,10 +643,8 @@ def card_payment(
 
     The cost is only checked: claiming leaves it in the bladder. A karaoke
     song also needs drunk 3+. ``pay_with`` picks what meets the cost where
-    there's a choice:
-    the spirit for a cup doubler (any spirit with three will do without it),
-    and for a specialist either its spirit (two) or its special (one; the
-    special is used by default when held).
+    there's a choice: the spirit for a cup doubler (any spirit with three
+    will do without it). Specials never meet a card's cost.
 
     An ice card costs nothing from the bladder: it can be claimed the turn
     the player drinks a straight double (DrinkCup), so it pays [].
@@ -673,14 +670,7 @@ def card_payment(
     if ct == "refresher":
         return take(card.mixer_type, 2)
     if ct == "specialist":
-        special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
-        with_special = take(special.name, 1) if special else None
-        with_spirit = take(card.spirit_type, 2)
-        if pay_with and pay_with.upper() == (card.spirit_type or ""):
-            return with_spirit
-        if pay_with and special and pay_with.upper() == special.name:
-            return with_special
-        return with_special or with_spirit
+        return take(card.spirit_type, 2)
     if ct == "cup_doubler":
         if pay_with:
             return take(pay_with.upper(), 3)

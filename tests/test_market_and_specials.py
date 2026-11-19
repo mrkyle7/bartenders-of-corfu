@@ -625,10 +625,6 @@ def test_specials_never_pay_for_cards():
     ps.bladder = [Ingredient.LEMON, Ingredient.SUGAR, Ingredient.BITTERS]
     for row in gs.card_rows:
         for card in row.cards:
-            # A specialist takes one of its own special (sugar pays for the
-            # Rum Specialist); that's tested on its own. Nothing else does.
-            if card.card_type == "specialist":
-                continue
             assert not actions._can_afford(ps, card)
 
 
@@ -828,7 +824,7 @@ def test_four_players_trigger_the_last_round_at_thirty():
     assert new.last_round is True
 
 
-# ─── Boozy specials, paying for cards, specialists paid with a special ──────
+# ─── Boozy specials, paying for cards ───────────────────────────────────────
 
 
 def test_bitters_vermouth_and_cointreau_get_you_drunk():
@@ -915,21 +911,19 @@ def test_a_cup_doubler_remembers_which_glass_it_is_on():
         ("GIN", "LEMON"),
     ],
 )
-def test_a_specialist_can_be_paid_with_its_special(spirit, special):
+def test_a_special_does_not_pay_for_a_specialist(spirit, special):
     gs = _game()
     pid, ps = _me(gs)
     _ability(
         gs,
         Card(id="sp", card_type="specialist", name="Specialist", spirit_type=spirit),
     )
-    ps.bladder = [Ingredient[special]]
-    new, payload = claim_card(gs, pid, "sp")
-    assert new.player_states[pid].points == 2
-    assert new.player_states[pid].bladder == [Ingredient[special]]
-    assert payload["cost"] == [special]
+    ps.bladder = [Ingredient[special], Ingredient[spirit]]
+    with pytest.raises(GameException):
+        claim_card(gs, pid, "sp")
 
 
-def test_a_specialist_paid_with_spirits_when_you_say_so():
+def test_a_specialist_is_paid_with_two_of_its_spirit():
     gs = _game()
     pid, ps = _me(gs)
     _ability(
@@ -937,21 +931,9 @@ def test_a_specialist_paid_with_spirits_when_you_say_so():
         Card(id="sp", card_type="specialist", name="Rum Specialist", spirit_type="RUM"),
     )
     ps.bladder = [Ingredient.SUGAR, Ingredient.RUM, Ingredient.RUM]
-    new, payload = claim_card(gs, pid, "sp", spirit_type="RUM")
+    new, payload = claim_card(gs, pid, "sp")
     assert payload["cost"] == ["RUM", "RUM"]
     assert len(new.player_states[pid].bladder) == 3
-
-
-def test_the_wrong_special_does_not_pay_for_a_specialist():
-    gs = _game()
-    pid, ps = _me(gs)
-    _ability(
-        gs,
-        Card(id="sp", card_type="specialist", name="Rum Specialist", spirit_type="RUM"),
-    )
-    ps.bladder = [Ingredient.LEMON]
-    with pytest.raises(GameException):
-        claim_card(gs, pid, "sp")
 
 
 def test_karaoke_needs_drunk_three_and_two_spirits():

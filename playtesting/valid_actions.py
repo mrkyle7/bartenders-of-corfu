@@ -8,7 +8,7 @@ from itertools import combinations
 from uuid import UUID
 
 from app.GameState import GameState, drawable_in_bag
-from app.Ingredient import SPECIALIST_SPECIAL, Ingredient
+from app.Ingredient import Ingredient
 from app.PlayerState import PlayerState
 from app.actions import (
     CLAIM_CARD,
@@ -493,18 +493,16 @@ def _add_claim_card(gs: GameState, ps: PlayerState, result: list[Action]):
                     )
 
             elif ct == "specialist":
-                # Pay with 2 of its spirit, or 1 of its special (not store)
-                special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
-                for pay in (special.name if special else None, card.spirit_type):
-                    if pay and card_payment(ps, card, pay) is not None:
-                        result.append(
-                            Action(
-                                action_type="claim_card",
-                                params={"card_id": card.id, "spirit_type": pay},
-                                is_free=True,
-                                description=f"Claim specialist '{card.name}' paying {pay}",
-                            )
+                # 2 of its spirit in the bladder (not the store)
+                if card_payment(ps, card) is not None:
+                    result.append(
+                        Action(
+                            action_type="claim_card",
+                            params={"card_id": card.id},
+                            is_free=True,
+                            description=f"Claim specialist '{card.name}'",
                         )
+                    )
 
             elif ct == "free_action":
                 if card.spirit_type and _bladder_spirits(ps, card.spirit_type) >= 3:

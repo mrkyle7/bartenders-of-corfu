@@ -37,7 +37,6 @@ from app.GameState import GameState, drawable_in_bag
 from app.Ingredient import (
     BOOZY_SPECIALS,
     SPECIAL_INGREDIENTS,
-    SPECIALIST_SPECIAL,
     Ingredient,
     SpecialType,
     is_special,
@@ -1137,25 +1136,6 @@ def _in_drawn_order(
     return ordered
 
 
-def _specialist_unlock(gs: GameState, ps: PlayerState) -> Ingredient | None:
-    """A special on the tray that, drunk, would pay for a specialist card on
-    the table we don't hold yet (bitters → whisky specialist, and so on)."""
-    held = {
-        cd.get("spirit_type") for cd in ps.cards if cd.get("card_type") == "specialist"
-    }
-    in_bladder = set(ps.bladder)
-    for row in gs.card_rows:
-        for card in row.cards:
-            if card.card_type != "specialist" or card.spirit_type in held:
-                continue
-            special = SPECIALIST_SPECIAL.get(card.spirit_type or "")
-            if special and special in gs.specials_display and special not in in_bladder:
-                if special in BOOZY_SPECIALS and ps.drunk_level >= 3:
-                    continue  # not worth the drink this late
-                return special
-    return None
-
-
 def _safe_specials_take(
     gs: GameState, ps: PlayerState, valid_actions: list[Action], eager: bool = False
 ) -> Action | None:
@@ -1883,25 +1863,6 @@ class SpecialistBuilder(Strategy):
         held = self._held_specialist_types(ps)
         focus = self._best_spirit_type(gs, ps)
         focus_ing = _SPIRIT_MAP.get(focus) if focus else None
-
-        # One special pays for a specialist card: drink it off the tray
-        unlock = _specialist_unlock(gs, ps)
-        if unlock is not None:
-            return _smart_take_assignments(
-                gs,
-                ps,
-                count,
-                cups,
-                prefer_spirit=focus_ing,
-                prioritize_specials=True,
-                prefix=[
-                    {
-                        "ingredient": unlock.name,
-                        "source": "specials",
-                        "disposition": "drink",
-                    }
-                ],
-            )
 
         if held and focus_ing:
             return _smart_take_assignments(
@@ -2641,13 +2602,6 @@ class Mastermind(Strategy):
             if ci is not None:
                 return (9.0 + for_order(ci) + threat, "cup", ci)
             boozy = ing in BOOZY_SPECIALS
-            # Drunk, one special pays for a specialist card
-            if ing == _specialist_unlock(gs, ps):
-                return (
-                    12.0 - (3.0 + ps.drunk_level * 2.0 if boozy else 0),
-                    "drink",
-                    None,
-                )
             # Lemon and sugar sober like a mixer, and deny whoever needs them;
             # the boozy ones cost a drunk level like a spirit.
             if boozy:
