@@ -759,12 +759,14 @@ class Db:
         game_id: UUID,
         target_turn_number: int,
         proposed_by: UUID,
+        target_move_number: int | None = None,
     ) -> dict:
         """Create a new pending UndoRequest. Proposer implicitly votes agree."""
         record = {
             "id": str(uuid4()),
             "game_id": str(game_id),
             "target_turn_number": target_turn_number,
+            "target_move_number": target_move_number,
             "proposed_by": str(proposed_by),
             "votes": {str(proposed_by): "agree"},
             "status": "pending",
@@ -822,6 +824,41 @@ class Db:
             .execute()
         )
         return resp.data[0]["state_before"] if resp.data else None
+
+    def get_move_state_before(
+        self, game_id: UUID, turn_number: int, move_number: int
+    ) -> dict | None:
+        """Return the state_before of one move."""
+        resp = (
+            self.supabase.table("game_moves")
+            .select("state_before")
+            .eq("game_id", str(game_id))
+            .eq("turn_number", turn_number)
+            .eq("move_number", move_number)
+            .limit(1)
+            .execute()
+        )
+        return resp.data[0]["state_before"] if resp.data else None
+
+    def reject_pending_undo(self, game_id: UUID) -> None:
+        """Reject a game's pending undo request, if it has one."""
+        (
+            self.supabase.table("undo_requests")
+            .update({"status": "rejected"})
+            .eq("game_id", str(game_id))
+            .eq("status", "pending")
+            .execute()
+        )
+
+    def reject_undo(self, request_id: str) -> bool:
+        """Mark a pending undo request as rejected."""
+        resp = (
+            self.supabase.table("undo_requests")
+            .update({"status": "rejected"})
+            .eq("id", request_id)
+            .execute()
+        )
+        return len(resp.data) == 1
 
     def get_max_turn_number(self, game_id: UUID) -> int:
         """Return the highest turn_number recorded in game_moves for this game, or 0."""

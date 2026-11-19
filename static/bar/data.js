@@ -333,7 +333,11 @@ export function describeMove(move, nameOf) {
         case 'skip_turn': return `${who} had nothing they could do and passed`;
         case 'quit_game': return `${who} left the bar`;
         case 'cancel_game': return 'The game was called off';
-        case 'undo': return `${who} took back the last turn`;
+        case 'undo': {
+            if (a.target_move_number == null) return `${who} took back the last turn`;
+            const n = a.moves_taken_back ?? 1;
+            return n > 1 ? `${who} took back ${n} moves` : `${who} took back a move`;
+        }
         default: return `${who} made a move`;
     }
 }

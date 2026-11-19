@@ -175,6 +175,9 @@ def _advance_turn(gs: GameState) -> GameState:
     _reset_take_batch_state(gs)
     gs.main_action_taken_this_turn = False
     gs.free_actions_used_this_turn = []
+    # Draws replayed after an undo only last the turn: the refill below and
+    # the next player's draws are random again.
+    gs.bag_redraws = []
     for p in gs.player_states.values():
         p.drank_double_this_turn = False
 

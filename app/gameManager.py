@@ -1,12 +1,13 @@
 import logging
 from uuid import UUID
 
-from app import actions
-from app.bot_player import process_bot_turns
+from app import actions, undo
+from app.bot_player import get_bot_ids_for_game, process_bot_turns
 from app.db import db
 from app.game import Game, GameException, Status
 from app.game_modes import normalise_modes
 from app.GameState import GameState
+from app.Ingredient import Ingredient
 
 
 class GameManager:
@@ -203,6 +204,8 @@ class GameManager:
             state_before,
         )
         db.update_game_state(game.id, new_state)
+        # An undo asked for before this move would take back the wrong one
+        db.reject_pending_undo(game.id)
         # If the turn changed, check if the next player is a bot
         old_turn = game.game_state.player_turn
         new_turn = new_state.player_turn
@@ -398,17 +401,19 @@ class GameManager:
                 "An undo proposal is already pending for this game", status_code=409
             )
 
-        moves = db.get_game_moves(game.id)
-        if not moves:
+        bot_ids = get_bot_ids_for_game(game.players)
+        plan = undo.plan_undo(db.get_game_moves(game.id), {str(b) for b in bot_ids})
+        if plan is None:
             raise GameException("No moves to undo", status_code=409)
-
-        last_turn = moves[-1]["turn_number"]
-        undo_req = db.create_undo_request(game.id, last_turn, player_id)
+        target, _ = plan
+        undo_req = db.create_undo_request(
+            game.id,
+            target["turn_number"],
+            player_id,
+            target_move_number=target["move_number"],
+        )
 
         # Auto-vote agree for all bot players
-        from app.bot_player import get_bot_ids_for_game
-
-        bot_ids = get_bot_ids_for_game(game.players)
         for bot_id in bot_ids:
             if str(bot_id) == str(player_id):
                 continue  # proposer already voted
@@ -450,42 +455,63 @@ class GameManager:
                 if not ps.is_eliminated
             ]
             if all(votes.get(str(pid)) == "agree" for pid in active_players):
-                # Execute the undo
-                db.approve_undo(request_id, votes)
-                self._execute_undo(
-                    game,
-                    pending["target_turn_number"],
-                    UUID(pending["proposed_by"]),
-                )
+                self._execute_undo(game, pending, votes)
                 return {"status": "approved", "message": "Undo applied"}
 
         return {"status": updated["status"], "votes": updated.get("votes")}
 
-    def _execute_undo(self, game: Game, target_turn_number: int, proposed_by: UUID):
-        """Restore game state to just before the target turn.
+    def _execute_undo(self, game: Game, request: dict, votes: dict) -> None:
+        """Take back the move the request names, and any bot moves since.
 
-        Restores from the state_before of the first move of the target turn —
-        which is always a clean turn-start state (batch fields reset by _advance_turn).
-        Records an "undo" move, then sets turn_number to max_recorded + 1 so no
-        future move collides with existing records for the undone turn.
+        Restores the state_before of that move, with ``bag_redraws`` set so
+        blind bag draws made again this turn come out the same (see
+        app/undo.py). Records an "undo" move, then sets turn_number to
+        max_recorded + 1 so no future move collides with existing records.
+        If the game has moved on since the request (another move was made),
+        the request is rejected instead.
         """
-        state_dict = db.get_state_before_turn(game.id, target_turn_number)
+        bot_ids = get_bot_ids_for_game(game.players)
+        plan = undo.plan_undo(db.get_game_moves(game.id), {str(b) for b in bot_ids})
+        wanted = (request["target_turn_number"], request.get("target_move_number"))
+        if plan is None or (
+            wanted[1] is not None
+            and (plan[0]["turn_number"], plan[0]["move_number"]) != wanted
+        ):
+            db.reject_undo(request["id"])
+            raise GameException(
+                "The game has moved on since the undo was asked for",
+                status_code=409,
+            )
+        target, taken_back = plan
+        state_dict = db.get_move_state_before(
+            game.id, target["turn_number"], target["move_number"]
+        )
         if state_dict is None:
             raise GameException(
                 "Cannot restore state: snapshot not found", status_code=500
             )
+        db.approve_undo(request["id"], votes)
+        restored_state = GameState.from_dict(state_dict)
+        restored_state.bag_redraws = [
+            Ingredient[name]
+            for name in undo.redraws(taken_back, game.game_state.to_dict(), state_dict)
+        ]
         # Record the undo as its own move before restoring
-        current_max = db.get_max_turn_number(game.id)
-        undo_turn_number = current_max + 1
+        undo_turn_number = db.get_max_turn_number(game.id) + 1
         db.add_game_move(
             game.id,
             undo_turn_number,
             1,
-            proposed_by,
+            UUID(request["proposed_by"]),
             "undo",
-            {"target_turn_number": target_turn_number},
+            {
+                "target_turn_number": target["turn_number"],
+                "target_move_number": target["move_number"],
+                "target_player_id": str(target["player_id"]),
+                "target_action": (target.get("action") or {}).get("type"),
+                "moves_taken_back": len(taken_back),
+            },
             state_dict,
         )
-        restored_state = GameState.from_dict(state_dict)
         restored_state.turn_number = undo_turn_number + 1
         db.update_game_state(game.id, restored_state)
