@@ -1258,7 +1258,13 @@ button.mouth.is-target .lips { animation: lips-open 1.6s ease-in-out infinite; }
 .ending-card h2 { font: 800 30px/1.1 var(--display); }
 .standings { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .standings li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; background: rgba(0, 0, 0, 0.22); text-align: left; }
-.standings li span:nth-child(2) { flex: 1; font-weight: 600; }
+.standings li .standing-who { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.standing-name { font-weight: 600; }
+.standing-note { font: 600 14px/1.2 var(--ui); color: var(--whitewash); opacity: 0.85; }
+.standings li.is-winner { box-shadow: inset 0 0 0 2px var(--whitewash); }
+.standings li.is-out .standing-name { text-decoration: line-through; text-decoration-thickness: 2px; }
+.standings li.is-out .standing-note { color: #ffd2c2; opacity: 1; }
+.ending-how { margin: -6px 0 0; font: 600 17px/1.35 var(--ui); }
 .ending-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 
 /* ─── Smaller screens ─────────────────────────────────────────────────── */

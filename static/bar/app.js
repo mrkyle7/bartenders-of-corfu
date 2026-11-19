@@ -813,6 +813,7 @@ function turnbar() {
     } else if (state.winner) {
         tone = state.winner === me.id ? 'win' : 'wait';
         headline = state.winner === me.id ? 'You won!' : `${seatName(state.winner)} won the game`;
+        detail = winReason(state)?.text ?? '';
     } else if (game.status === 'ENDED') {
         headline = 'This game was called off';
     } else if (myTurn()) {
@@ -1965,6 +1966,39 @@ function housekeeping() {
 
 // ─── Game over ──────────────────────────────────────────────────────────────
 
+const songsSung = (ps) => ps.cards.filter((c) => c.card_type === 'karaoke').length;
+
+// Why a player is out of the game, or null if they're still in it.
+function outReason(ps) {
+    if (ps.status === 'hospitalised') return 'Out: went to hospital';
+    if (ps.status === 'wet') return 'Out: wet themselves';
+    if (ps.status === 'quit') return 'Left the game';
+    return null;
+}
+
+// How the game was won: three songs, last one standing, or on points.
+function winReason(state) {
+    if (!state.winner) return null;
+    const w = state.player_states[state.winner];
+    const you = state.winner === me.id;
+    if ((w.karaoke_cards_claimed ?? songsSung(w)) >= 3) {
+        return { kind: 'karaoke', text: `${you ? 'You' : seatName(state.winner)} sang three karaoke songs and won on the spot, whatever the points.` };
+    }
+    const others = Object.entries(state.player_states).filter(([pid]) => pid !== state.winner);
+    if (others.length && others.every(([, ps]) => ps.status !== 'active')) {
+        return { kind: 'standing', text: `Last one standing: ${you ? 'you were' : `${seatName(state.winner)} was`} the only bartender still in the game.` };
+    }
+    return { kind: 'points', text: 'Most points once the last round was played out.' };
+}
+
+function standingNote(pid, ps, state, how) {
+    const out = outReason(ps);
+    if (out) return out;
+    if (pid === state.winner && how?.kind === 'karaoke') return 'Sang 3 songs';
+    if (pid === state.winner && how?.kind === 'standing') return 'Last one standing';
+    return null;
+}
+
 function ending() {
     const box = $('ending');
     const state = gs();
@@ -1977,12 +2011,19 @@ function ending() {
     endingShown = true;
     const standings = seatOrder().map((pid) => ({ pid, ps: state.player_states[pid] }))
         .sort((a, b) => (b.pid === state.winner) - (a.pid === state.winner) || b.ps.points - a.ps.points);
-    box.replaceChildren(h('div.ending-card', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'endingTitle' },
+    const how = winReason(state);
+    box.replaceChildren(h('div.ending-card', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'endingTitle', 'aria-describedby': how ? 'endingHow' : null },
         h('h2', { id: 'endingTitle', text: state.winner ? (state.winner === me.id ? 'You won!' : `${seatName(state.winner)} won`) : 'Game called off' }),
-        h('ol.standings', {}, standings.map(({ pid, ps }) => h('li', { style: { '--seat': seatColour(pid) } },
-            h('span.pawn', { 'aria-hidden': 'true' }),
-            h('span', { text: pid === me.id ? `${seatName(pid)} (you)` : seatName(pid) }),
-            h('b', { text: plural(ps.points, 'point') })))),
+        how ? h('p.ending-how', { id: 'endingHow', cls: `how-${how.kind}`, text: how.text }) : null,
+        h('ol.standings', {}, standings.map(({ pid, ps }) => {
+            const note = standingNote(pid, ps, state, how);
+            return h('li', { style: { '--seat': seatColour(pid) }, cls: [pid === state.winner ? 'is-winner' : '', outReason(ps) ? 'is-out' : ''].join(' ').trim() },
+                h('span.pawn', { 'aria-hidden': 'true' }),
+                h('span.standing-who', {},
+                    h('span.standing-name', { text: pid === me.id ? `${seatName(pid)} (you)` : seatName(pid) }),
+                    note ? h('span.standing-note', { text: note }) : null),
+                h('b', { text: plural(ps.points, 'point') }));
+        })),
         h('div.ending-buttons', {},
             h('a.btn.go', { href: '/', text: 'Back to the games' }),
             h('button.btn', { type: 'button', onclick: () => { box.hidden = true; }, text: 'Look at the table' }))));
