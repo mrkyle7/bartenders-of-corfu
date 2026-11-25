@@ -1384,7 +1384,9 @@ def claim_card(
         ps.points += 1
 
     # Replace the claimed card's slot from the deck (if any cards remain)
+    shown_before = {c.id for c in target_row.cards}
     _replace_card(gs, target_row)
+    dealt = [c.name for c in target_row.cards if c.id not in shown_before]
 
     _check_victory(gs, player_id)
     is_free = _finish_turn_action(gs, player_id, "claim_card")
@@ -1397,6 +1399,8 @@ def claim_card(
         "is_karaoke": target_card.is_karaoke,
         "row_position": target_row.position,
         "is_free_action": is_free,
+        # What turned up on the display to fill the gap (for the move history)
+        "cards_dealt": dealt,
     }
     return gs, payload
 
@@ -1588,6 +1592,8 @@ def refresh_card_row(
         "row_position": row_position,
         "cards_removed": removed,
         "is_free_action": is_free,
+        # The fresh row now on display (for the move history)
+        "cards_dealt": [c.name for c in target_row.cards],
     }
     return gs, payload
 
