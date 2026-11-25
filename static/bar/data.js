@@ -318,15 +318,21 @@ export function describeMove(move, nameOf) {
         }
         case 'drink_cup': return `${who} downed a glass of ${list(a.ingredients)}`;
         case 'go_for_a_wee': return `${who} went for a wee`;
-        case 'claim_card': return `${who} claimed ${a.card_name ?? 'a card'}`;
+        case 'claim_card': {
+            const dealt = a.cards_dealt ?? [];
+            return `${who} claimed ${a.card_name ?? 'a card'}${dealt.length ? `. ${dealt.join(', ')} appeared in its place` : ''}`;
+        }
         case 'drink_stored_spirit': return `${who} drank ${a.count ?? 1} ${ING[a.spirit_type]?.label ?? 'spirit'} from their store`;
         case 'use_stored_spirit': return `${who} poured a stored ${ING[a.spirit_type]?.label ?? 'spirit'} into a glass`;
         case 'reroll_specials': {
             const got = (a.results ?? []).map((r) => (r ? (SPECIALS[r]?.label ?? r) : 'a blank'));
             return `${who} re-rolled and got ${got.join(', ') || 'nothing'}`;
         }
-        case 'refresh_card_row':
-            return a.row_position === 2 ? `${who} cleared the orders` : a.row_position === 3 ? `${who} swiped the ability cards` : `${who} cleared card row ${a.row_position}`;
+        case 'refresh_card_row': {
+            const what = a.row_position === 2 ? 'cleared the orders' : a.row_position === 3 ? 'swiped the ability cards' : `cleared card row ${a.row_position}`;
+            const dealt = a.cards_dealt ?? [];
+            return `${who} ${what}${dealt.length ? `. Now showing: ${dealt.join(', ')}` : ''}`;
+        }
         case 'end_turn': return `${who} ended their turn`;
         case 'skip_turn': return `${who} had nothing they could do and passed`;
         case 'quit_game': return `${who} left the bar`;

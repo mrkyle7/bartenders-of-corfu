@@ -268,7 +268,26 @@ async function refresh() {
     render();
 }
 
+// The display as the game began, for the top of the history.
+let openingDisplay = null;
+let openingFor = null;
+
+async function loadOpeningDisplay() {
+    if (openingFor === gameId) return;
+    openingFor = gameId;
+    try {
+        const { game_state: start } = await api.stateAtTurn(gameId, 0);
+        const rows = (start?.card_rows ?? []).filter((r) => r.position !== 1);
+        const named = (r) => (r.cards ?? []).map((c) => c.name || 'a card').join(', ');
+        const parts = rows.map((r) => `${r.position === 2 ? 'Orders' : r.position === 3 ? 'Abilities' : `Row ${r.position}`}: ${named(r)}`);
+        openingDisplay = parts.length ? `The bar opened. ${parts.join('. ')}` : null;
+    } catch {
+        openingFor = null; // try again next time
+    }
+}
+
 async function loadMoves(announce) {
+    loadOpeningDisplay().then(() => { if (openingDisplay) render({ force: true }); });
     try {
         const { moves: all } = await api.history(gameId);
         if (announce && moves.length) {
@@ -1919,6 +1938,8 @@ const RECENT_MOVES = 8;
 function chalkboard() {
     const all = moves.map((m, i) => ({ n: i + 1, text: describeMove(m, nameOf), mine: m.player_id === me.id })).reverse();
     const shown = ui.historyOpen ? all : all.slice(0, RECENT_MOVES);
+    // The opening display sits at the very start, shown once the history reaches it
+    if (openingDisplay && (ui.historyOpen || all.length <= RECENT_MOVES)) shown.push({ n: 0, text: openingDisplay, mine: false });
     return h('section.chalk', { 'aria-label': 'What happened' },
         h('h2.chalk-title', { text: 'What happened' }),
         shown.length
